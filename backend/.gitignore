@@ -1,0 +1,45 @@
+# Entorno virtual
+venv/
+env/
+.venv/
+
+# Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static/
+
+# Configuración / secretos
+.env
+.env.local
+*.sqlite3
+
+# Tests / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# IDEs / editores
+.vscode/
+.idea/
+*.iml
+
+# Sistema
+.DS_Store
+Thumbs.db
