@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import React from 'react'
 
 const HeroSection: React.FC = () => {
@@ -7,46 +8,52 @@ const HeroSection: React.FC = () => {
       <header className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:py-4">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
               <span>Lf</span>
             </div>
             <span className="text-lg font-semibold text-slate-900">Lifefit</span>
-          </div>
+          </Link>
 
           {/* Links desktop */}
           <nav className="hidden items-center gap-6 text-sm text-slate-600 md:flex">
-            <a href="/" className="hover:text-slate-900">
+            <Link href="/" className="hover:text-slate-900">
               Inicio
-            </a>
-            <a href="#nosotros" className="hover:text-slate-900">
+            </Link>
+            <Link href="/sobre-nosotros" className="hover:text-slate-900">
               Sobre nosotros
-            </a>
-            <a href="/funciones" className="hover:text-slate-900">
+            </Link>
+            <Link href="/funciones" className="hover:text-slate-900">
               Funciones
-            </a>
-            <a href="planes" className="hover:text-slate-900">
+            </Link>
+            <Link href="/planes" className="hover:text-slate-900">
               Planes
-            </a>
-            <a href="/testimonios" className="hover:text-slate-900">
+            </Link>
+            <Link href="/testimonios" className="hover:text-slate-900">
               Testimonios
-            </a>
-            <a href="/faq" className="hover:text-slate-900">
+            </Link>
+            <Link href="/faq" className="hover:text-slate-900">
               FAQ
-            </a>
-            <a href="#contacto" className="hover:text-slate-900">
+            </Link>
+            <Link href="/contacto" className="hover:text-slate-900">
               Contacto
-            </a>
+            </Link>
           </nav>
 
           {/* Auth buttons */}
           <div className="flex items-center gap-3">
-            <button className="hidden text-sm text-slate-600 hover:text-slate-900 md:inline-block">
+            <Link
+              href="/registrarse"
+              className="hidden text-sm text-slate-600 hover:text-slate-900 md:inline-block"
+            >
               Registrarse
-            </button>
-            <button className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-600">
+            </Link>
+            <Link
+              href="/ingresar"
+              className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-600"
+            >
               Ingresar
-            </button>
+            </Link>
           </div>
         </div>
       </header>
