@@ -3,6 +3,9 @@ Django==5.2.8
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
+django-environ==0.11.2
+social-auth-app-django==5.4.0
+requests==2.32.3
 psycopg2-binary==2.9.11
 PyJWT==2.10.1
 python-dotenv==1.2.1

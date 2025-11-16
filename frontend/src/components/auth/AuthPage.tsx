@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
+import { FormEvent, useState } from 'react'
 
 type AuthPageProps = {
   mode: 'login' | 'register'
@@ -52,9 +53,103 @@ const formCopy = {
 
 export default function AuthPage({ mode }: AuthPageProps) {
   const copy = formCopy[mode]
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+  const router = useRouter()
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formValues, setFormValues] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const persistSession = (payload: { access: string; refresh: string; user?: unknown }) => {
+    localStorage.setItem('lifefit_access_token', payload.access)
+    localStorage.setItem('lifefit_refresh_token', payload.refresh)
+    if (payload.user) {
+      localStorage.setItem('lifefit_user', JSON.stringify(payload.user))
+    }
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setFormError('')
+    setFieldErrors({})
+    setIsSubmitting(true)
+
+    try {
+      const endpoint = mode === 'login' ? '/api/auth/login/' : '/api/auth/register/'
+      const url = `${API_BASE_URL}${endpoint}`
+
+      let body: Record<string, unknown>
+      if (mode === 'login') {
+        body = {
+          email: formValues.email?.trim() ?? '',
+          password: formValues.password ?? '',
+        }
+      } else {
+        const fullName = (formValues.name ?? '').trim()
+        const [firstName, ...rest] = fullName.split(' ').filter(Boolean)
+        body = {
+          email: formValues.email?.trim() ?? '',
+          first_name: firstName || (formValues.email?.split('@')[0] ?? 'Usuario'),
+          last_name: rest.join(' ') || 'Lifefit',
+          password: formValues.password ?? '',
+          password2: formValues.password ?? '',
+          role: 'athlete',
+          gym: null,
+        }
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (data.email) {
+          setFieldErrors((prev) => ({ ...prev, email: Array.isArray(data.email) ? data.email.join(' ') : data.email }))
+        } else if (data.detail) {
+          const friendlyMessage =
+            data.detail === 'No active account found with the given credentials'
+              ? 'Correo o contraseña incorrectos.'
+              : data.detail
+          setFormError(friendlyMessage)
+        } else {
+          setFormError('No pudimos procesar tu solicitud. Intenta nuevamente.')
+        }
+        return
+      }
+
+      persistSession(data)
+      router.push('/resumen')
+    } catch (error) {
+      console.error(error)
+      setFormError('Ocurrió un error inesperado. Intenta nuevamente en unos minutos.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true)
+    try {
+      const params = new URLSearchParams({ next: '/resumen' })
+      const response = await fetch(`${API_BASE_URL}/api/auth/google/login/?${params.toString()}`)
+      const data = await response.json()
+      if (!response.ok || !data.authorization_url) {
+        throw new Error(data.detail || 'No pudimos conectarnos con Google.')
+      }
+      window.location.href = data.authorization_url
+    } catch (error) {
+      console.error(error)
+      alert('No pudimos iniciar sesión con Google. Inténtalo de nuevo en unos minutos.')
+    } finally {
+      setGoogleLoading(false)
+    }
   }
 
   return (
@@ -176,6 +271,47 @@ export default function AuthPage({ mode }: AuthPageProps) {
               <p className="text-sm text-slate-500">{copy.description}</p>
             </div>
 
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={googleLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-emerald-200 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="#4285F4"
+                    d="M23.04 12.261c0-.815-.066-1.411-.21-2.031H12.24v3.686h6.17c-.125.963-.8 2.414-2.3 3.386l-.02.13 3.338 2.587.231.023c2.133-1.97 3.381-4.865 3.381-7.781z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12.24 24c3.04 0 5.594-.977 7.458-2.649l-3.552-2.755c-.95.65-2.23 1.104-3.906 1.104-2.987 0-5.52-1.97-6.422-4.7l-.132.011-3.472 2.69-.045.12C2.973 21.865 7.25 24 12.24 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.818 14.999c-.238-.719-.375-1.49-.375-2.299 0-.808.137-1.58.362-2.298l-.006-.154-3.516-2.726-.115.053C1.447 9.332 1.04 10.622 1.04 11.999c0 1.377.407 2.667 1.127 3.724l3.65-2.724z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12.24 4.75c2.115 0 3.544.916 4.36 1.683l3.183-3.11C17.821 1.262 15.28 0 12.24 0 7.25 0 2.973 2.135.717 5.4l3.639 2.85c.915-2.73 3.448-4.5 6.884-4.5z"
+                  />
+                </svg>
+                {googleLoading ? 'Conectando...' : 'Continuar con Google'}
+              </button>
+
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                <span className="h-px flex-1 bg-slate-200" />
+                o continúa con tu email
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+            </div>
+
+            {formError && (
+              <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                {formError}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               {copy.fields.map((field) => (
                 <div key={field.id} className="space-y-1.5">
@@ -186,10 +322,19 @@ export default function AuthPage({ mode }: AuthPageProps) {
                     id={field.id}
                     name={field.id}
                     type={field.type}
-                    required
+                    required={!(mode === 'register' && field.id === 'gym')}
                     placeholder={field.placeholder}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    value={formValues[field.id] ?? ''}
+                    onChange={(event) =>
+                      setFormValues((prev) => ({
+                        ...prev,
+                        [field.id]: event.target.value,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
                   />
+                  {fieldErrors[field.id] && <p className="text-xs text-red-600">{fieldErrors[field.id]}</p>}
                 </div>
               ))}
 
@@ -210,9 +355,10 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
               <button
                 type="submit"
-                className="w-full rounded-2xl bg-emerald-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-600"
+                disabled={isSubmitting}
+                className="w-full rounded-2xl bg-emerald-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {copy.primaryCta}
+                {isSubmitting ? 'Procesando...' : copy.primaryCta}
               </button>
             </form>
 
