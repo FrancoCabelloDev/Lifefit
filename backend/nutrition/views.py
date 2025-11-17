@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework import permissions, viewsets
 from rest_framework.exceptions import PermissionDenied
 
@@ -13,6 +14,13 @@ from .serializers import (
 User = get_user_model()
 
 
+def global_or_user_gym_filter(user, gym_field="gym"):
+    filters = Q(**{f"{gym_field}__isnull": True})
+    if user.gym_id:
+        filters |= Q(**{f"{gym_field}_id": user.gym_id})
+    return filters
+
+
 class NutritionPlanViewSet(viewsets.ModelViewSet):
     serializer_class = NutritionPlanSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -22,11 +30,13 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
         queryset = NutritionPlan.objects.select_related("gym")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            return queryset.filter(gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE and user.gym_id:
-            return queryset.filter(gym_id=user.gym_id, status=NutritionPlan.Status.ACTIVE)
-        return queryset.none()
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(global_or_user_gym_filter(user))
+            return queryset.filter(gym__isnull=True)
+        if user.role == User.Role.ATHLETE:
+            return queryset.filter(global_or_user_gym_filter(user), status=NutritionPlan.Status.ACTIVE)
+        return queryset.filter(gym__isnull=True, status=NutritionPlan.Status.ACTIVE)
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -63,11 +73,16 @@ class NutritionMealViewSet(viewsets.ModelViewSet):
         queryset = NutritionMeal.objects.select_related("plan", "plan__gym")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            return queryset.filter(plan__gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE and user.gym_id:
-            return queryset.filter(plan__gym_id=user.gym_id, plan__status=NutritionPlan.Status.ACTIVE)
-        return queryset.none()
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(global_or_user_gym_filter(user, "plan__gym"))
+            return queryset.filter(plan__gym__isnull=True)
+        if user.role == User.Role.ATHLETE:
+            return queryset.filter(
+                global_or_user_gym_filter(user, "plan__gym"),
+                plan__status=NutritionPlan.Status.ACTIVE,
+            )
+        return queryset.filter(plan__gym__isnull=True, plan__status=NutritionPlan.Status.ACTIVE)
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -106,11 +121,16 @@ class NutritionItemViewSet(viewsets.ModelViewSet):
         queryset = NutritionItem.objects.select_related("meal", "meal__plan", "meal__plan__gym")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            return queryset.filter(meal__plan__gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE and user.gym_id:
-            return queryset.filter(meal__plan__gym_id=user.gym_id, meal__plan__status=NutritionPlan.Status.ACTIVE)
-        return queryset.none()
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(global_or_user_gym_filter(user, "meal__plan__gym"))
+            return queryset.filter(meal__plan__gym__isnull=True)
+        if user.role == User.Role.ATHLETE:
+            return queryset.filter(
+                global_or_user_gym_filter(user, "meal__plan__gym"),
+                meal__plan__status=NutritionPlan.Status.ACTIVE,
+            )
+        return queryset.filter(meal__plan__gym__isnull=True, meal__plan__status=NutritionPlan.Status.ACTIVE)
 
     def perform_create(self, serializer):
         user = self.request.user

@@ -45,7 +45,13 @@ class WorkoutRoutine(BaseModel):
         PUBLISHED = "published", "Published"
         ARCHIVED = "archived", "Archived"
 
-    gym = models.ForeignKey("gyms.Gym", related_name="routines", on_delete=models.CASCADE)
+    gym = models.ForeignKey(
+        "gyms.Gym",
+        related_name="routines",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=255)
     objective = models.TextField(blank=True)
     level = models.CharField(max_length=20, choices=Level.choices, default=Level.BEGINNER)

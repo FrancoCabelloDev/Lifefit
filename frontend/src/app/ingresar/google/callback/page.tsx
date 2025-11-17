@@ -5,6 +5,24 @@ import { useEffect, useRef, useState } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
+const sanitizeNextPath = (path?: string | null) => {
+  if (!path || typeof path !== 'string') return null
+  return path.startsWith('/') ? path : null
+}
+
+const resolveRedirectPath = (role?: string, requestedPath?: string | null) => {
+  const fallback = role === 'super_admin' ? '/admin' : '/resumen'
+  const sanitized = sanitizeNextPath(requestedPath)
+  if (!sanitized) return fallback
+  if (role === 'super_admin' && sanitized === '/resumen') {
+    return fallback
+  }
+  if (role !== 'super_admin' && sanitized.startsWith('/admin')) {
+    return fallback
+  }
+  return sanitized
+}
+
 export default function GoogleCallbackPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -17,7 +35,7 @@ export default function GoogleCallbackPage() {
 
     const accessToken = searchParams.get('access')
     const refreshToken = searchParams.get('refresh')
-    const nextPath = searchParams.get('next') ?? '/resumen'
+    const requestedNextPath = sanitizeNextPath(searchParams.get('next'))
 
     if (!accessToken || !refreshToken) {
       setStatusMessage('No recibimos los tokens necesarios. Intenta iniciar sesión de nuevo.')
@@ -44,8 +62,8 @@ export default function GoogleCallbackPage() {
         }
         const user = await response.json()
         localStorage.setItem('lifefit_user', JSON.stringify(user))
-        const safeNext = nextPath.startsWith('/') ? nextPath : '/resumen'
-        router.replace(safeNext)
+        const destination = resolveRedirectPath(user?.role, requestedNextPath)
+        router.replace(destination)
       } catch (error) {
         console.error(error)
         setStatusMessage('Ocurrió un error cargando tu cuenta. Intenta de nuevo desde /ingresar.')

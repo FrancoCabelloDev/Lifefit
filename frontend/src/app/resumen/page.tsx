@@ -77,7 +77,7 @@ export default function ResumenPage() {
             Lf
           </div>
           <p className="text-lg font-semibold text-slate-900">Sincronizando tu cuenta</p>
-          <p className="mt-2 text-sm text-slate-500">Obteniendo tu progreso y tus métricas...</p>
+          <p className="mt-2 text-sm text-slate-500">Obteniendo tu progreso y tus metricas...</p>
         </div>
       </div>
     )
@@ -107,9 +107,9 @@ export default function ResumenPage() {
               <div>
                 <p className="text-xs uppercase text-emerald-600">Hola de nuevo</p>
                 <h1 className="text-2xl font-semibold text-slate-900">
-                  {user.first_name}, tu progreso está en marcha
+                  {user.first_name}, tu progreso esta en marcha
                 </h1>
-                <p className="text-sm text-slate-500">Mantén tu racha de entrenamiento y desbloquea nuevas insignias.</p>
+                <p className="text-sm text-slate-500">Manten tu racha de entrenamiento y desbloquea nuevas insignias.</p>
               </div>
               <div className="flex gap-3">
                 {quickStats.map((stat) => (
@@ -125,7 +125,7 @@ export default function ResumenPage() {
           <section className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-3xl bg-white p-6 shadow-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">Próxima rutina recomendada</h2>
+                <h2 className="text-lg font-semibold text-slate-900">Proxima rutina recomendada</h2>
                 <span className="text-xs text-slate-500">{nextRoutine ? nextRoutine.duration_minutes + ' min' : 'Pendiente'}</span>
               </div>
               {nextRoutine ? (
@@ -134,19 +134,19 @@ export default function ResumenPage() {
                   <ul className="space-y-2">
                     {nextRoutine.routine_exercises?.map((step) => (
                       <li key={step.id} className="rounded-2xl bg-slate-50 px-4 py-2 text-sm text-slate-700">
-                        #{step.order} {step.exercise_detail?.name} — {step.sets}x{step.reps}
+                        #{step.order} {step.exercise_detail?.name} - {step.sets}x{step.reps}
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : (
-                <p className="mt-4 text-sm text-slate-500">Tu coach todavía no ha publicado rutinas.</p>
+                <p className="mt-4 text-sm text-slate-500">Todavia no hay rutinas disponibles para ti.</p>
               )}
             </div>
 
             <div className="rounded-3xl bg-white p-6 shadow-lg">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">Últimas sesiones registradas</h2>
+                <h2 className="text-lg font-semibold text-slate-900">Ultimas sesiones registradas</h2>
                 <span className="text-xs text-slate-500">{latestSessions.length} sesiones</span>
               </div>
               <ul className="mt-4 space-y-3">
@@ -155,12 +155,12 @@ export default function ResumenPage() {
                     <li key={session.id} className="rounded-2xl border border-slate-100 px-4 py-3 text-sm">
                       <p className="font-semibold text-slate-900">{new Date(session.performed_at).toLocaleString()}</p>
                       <p className="text-xs text-slate-500">
-                        Completado: {session.completion_percentage}% — {session.duration_minutes} min — {session.status}
+                        Completado: {session.completion_percentage}% - {session.duration_minutes} min - {session.status}
                       </p>
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-500">Registra tu primera sesión desde el panel de rutinas.</p>
+                  <p className="text-sm text-slate-500">Registra tu primera sesion desde el panel de rutinas.</p>
                 )}
               </ul>
             </div>
@@ -169,13 +169,13 @@ export default function ResumenPage() {
           <section className="rounded-3xl bg-white p-6 shadow-lg">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">Estado general</h2>
-              <span className="text-xs text-slate-500">Actualizado al día de hoy</span>
+              <span className="text-xs text-slate-500">Actualizado al dia de hoy</span>
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-100 p-4">
                 <p className="text-xs uppercase text-slate-400">Rutinas activas</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-900">{routines.length}</p>
-                <p className="text-xs text-slate-500">Publicadas por tu gym</p>
+                <p className="text-xs text-slate-500">Disponibles para ti</p>
               </div>
               <div className="rounded-2xl border border-slate-100 p-4">
                 <p className="text-xs uppercase text-slate-400">Sesiones registradas</p>
@@ -183,9 +183,9 @@ export default function ResumenPage() {
                 <p className="text-xs text-slate-500">Historial reciente</p>
               </div>
               <div className="rounded-2xl border border-slate-100 p-4">
-                <p className="text-xs uppercase text-slate-400">Próxima acción</p>
+                <p className="text-xs uppercase text-slate-400">Proxima accion</p>
                 <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {nextRoutine ? `Completar ${nextRoutine.name}` : 'Contacta a tu coach'}
+                  {nextRoutine ? `Completar ${nextRoutine.name}` : 'Explora las rutinas disponibles'}
                 </p>
               </div>
             </div>

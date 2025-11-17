@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework import filters, permissions, viewsets
 from rest_framework.exceptions import PermissionDenied
 
@@ -70,16 +71,24 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "objective", "level"]
 
+    def _global_or_user_gym_filter(self, user):
+        filters = Q(gym__isnull=True)
+        if user.gym_id:
+            filters |= Q(gym_id=user.gym_id)
+        return filters
+
     def get_queryset(self):
         user = self.request.user
         queryset = WorkoutRoutine.objects.select_related("gym", "created_by")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            return queryset.filter(gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE and user.gym_id:
-            return queryset.filter(gym_id=user.gym_id, status=WorkoutRoutine.Status.PUBLISHED)
-        return queryset.none()
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(self._global_or_user_gym_filter(user))
+            return queryset.filter(gym__isnull=True)
+        if user.role == User.Role.ATHLETE:
+            return queryset.filter(self._global_or_user_gym_filter(user), status=WorkoutRoutine.Status.PUBLISHED)
+        return queryset.filter(gym__isnull=True, status=WorkoutRoutine.Status.PUBLISHED)
 
     def perform_create(self, serializer):
         user = self.request.user

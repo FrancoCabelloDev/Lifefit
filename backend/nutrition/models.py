@@ -10,7 +10,13 @@ class NutritionPlan(BaseModel):
         ACTIVE = "active", "Activo"
         ARCHIVED = "archived", "Archivado"
 
-    gym = models.ForeignKey("gyms.Gym", related_name="nutrition_plans", on_delete=models.CASCADE)
+    gym = models.ForeignKey(
+        "gyms.Gym",
+        related_name="nutrition_plans",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     calories_per_day = models.PositiveIntegerField(default=2000)

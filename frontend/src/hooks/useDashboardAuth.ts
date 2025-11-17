@@ -13,7 +13,7 @@ export type DashboardUser = {
   puntos: number
   nivel: number
   role: string
-  gym?: string
+  gym?: string | number | null
   is_google_account?: boolean
 }
 

@@ -10,36 +10,50 @@ type NutritionAssignment = {
   id: string
   status: string
   compliance_percentage: string
-  plan_detail?: {
+  plan_detail?: NutritionPlan
+}
+
+type NutritionPlan = {
+  id: string
+  gym: string | number | null
+  name: string
+  description: string
+  calories_per_day: number
+  macros?: Record<string, number | string>
+  meals?: Array<{
+    id: string
+    order: number
     name: string
-    description: string
-    calories_per_day: number
-    macros?: Record<string, number>
-    meals?: Array<{
-      id: string
-      order: number
-      name: string
-      meal_time: string
-      items?: Array<{ id: string; food: string; portion: string }>
-    }>
-  }
+    meal_time: string
+    items?: Array<{ id: string; food: string; portion: string }>
+  }>
 }
 
 export default function NutricionPage() {
   const { user, token, loading: authLoading } = useDashboardAuth()
   const [assignments, setAssignments] = useState<NutritionAssignment[]>([])
+  const [plans, setPlans] = useState<NutritionPlan[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!token) return
-    const fetchAssignments = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/nutrition/assignments/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (response.ok) {
-          const data = await response.json()
+        const [assignmentsResponse, plansResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/nutrition/assignments/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_BASE_URL}/api/nutrition/plans/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ])
+        if (assignmentsResponse.ok) {
+          const data = await assignmentsResponse.json()
           setAssignments(Array.isArray(data) ? data : data.results ?? [])
+        }
+        if (plansResponse.ok) {
+          const data = await plansResponse.json()
+          setPlans(Array.isArray(data) ? data : data.results ?? [])
         }
       } catch (error) {
         console.error(error)
@@ -47,20 +61,24 @@ export default function NutricionPage() {
         setLoading(false)
       }
     }
-    fetchAssignments()
+    fetchData()
   }, [token])
 
   if (authLoading || loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
-          <p className="text-sm text-slate-500">Cargando planes de nutrición...</p>
+          <p className="text-sm text-slate-500">Cargando planes de nutricion...</p>
         </div>
       </div>
     )
   }
 
   const activePlan = assignments[0]
+  const userGymId = user.gym === null || user.gym === undefined || user.gym === '' ? null : user.gym
+  const hasGymSpecificPlans =
+    userGymId !== null && plans.some((plan) => plan.gym !== null && String(plan.gym) === String(userGymId))
+  const showGymEmptyMessage = userGymId !== null && !hasGymSpecificPlans && plans.length > 0
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6">
@@ -69,9 +87,11 @@ export default function NutricionPage() {
 
         <main className="flex-1 space-y-6">
           <header className="rounded-3xl bg-white p-6 shadow-lg">
-            <p className="text-xs uppercase text-emerald-600">Nutrición personalizada</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Plan asignado por tu coach</h1>
-            <p className="text-sm text-slate-500">Sigue tus comidas para mejorar tu rendimiento.</p>
+            <p className="text-xs uppercase text-emerald-600">Nutricion personalizada</p>
+            <h1 className="text-2xl font-semibold text-slate-900">Planes disponibles para ti</h1>
+            <p className="text-sm text-slate-500">
+              Accede al catalogo global de Lifefit y a los planes creados por tu gimnasio.
+            </p>
           </header>
 
           {activePlan && activePlan.plan_detail ? (
@@ -82,7 +102,7 @@ export default function NutricionPage() {
                   <p className="text-sm text-slate-500">{activePlan.plan_detail.description}</p>
                 </div>
                 <div className="text-right text-sm">
-                  <p className="font-semibold text-emerald-600">{activePlan.plan_detail.calories_per_day} kcal/día</p>
+                  <p className="font-semibold text-emerald-600">{activePlan.plan_detail.calories_per_day} kcal/dia</p>
                   <p className="text-xs text-slate-500">Cumplimiento {activePlan.compliance_percentage}%</p>
                 </div>
               </div>
@@ -96,7 +116,7 @@ export default function NutricionPage() {
                     <ul className="mt-2 space-y-1 text-sm text-slate-600">
                       {meal.items?.map((item) => (
                         <li key={item.id}>
-                          {item.food} — <span className="text-xs text-slate-500">{item.portion}</span>
+                          {item.food} - <span className="text-xs text-slate-500">{item.portion}</span>
                         </li>
                       ))}
                     </ul>
@@ -106,9 +126,55 @@ export default function NutricionPage() {
             </section>
           ) : (
             <section className="rounded-3xl bg-white p-6 text-sm text-slate-500 shadow-lg">
-              No tienes planes asignados todavía.
+              No tienes un plan personalizado asignado todavia.
             </section>
           )}
+
+          <section className="rounded-3xl bg-white p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Planes disponibles</h2>
+              <span className="text-xs text-slate-500">{plans.length} planes</span>
+            </div>
+            <div className="mt-4 grid gap-4">
+              {showGymEmptyMessage && (
+                <p className="text-xs text-slate-400">
+                  Tu gym aun no ha publicado planes propios. Explora los planes globales de Lifefit disponibles para ti.
+                </p>
+              )}
+              {plans.length ? (
+                plans.map((plan) => {
+                  const macroEntries = Object.entries(plan.macros ?? {})
+                  return (
+                    <div key={plan.id} className="rounded-2xl border border-slate-100 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{plan.name}</p>
+                          <p className="text-xs text-slate-500">{plan.description}</p>
+                        </div>
+                        <span className="text-xs text-emerald-600">{plan.calories_per_day} kcal/dia</span>
+                      </div>
+                      {macroEntries.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                          {macroEntries.map(([macro, value]) => (
+                            <span key={macro} className="rounded-full bg-slate-100 px-3 py-1">
+                              {macro}: {value}g
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="mt-3 text-xs text-slate-400">{plan.gym ? 'Plan de tu gym' : 'Plan global Lifefit'}</p>
+                    </div>
+                  )
+                })
+              ) : (
+                <p className="text-sm text-slate-500">
+                  {userGymId !== null
+                    ? 'Aun no hay planes disponibles para tu cuenta.'
+                    : 'Aun no hay planes globales disponibles.'}
+                </p>
+              )}
+            </div>
+          </section>
         </main>
       </div>
     </div>

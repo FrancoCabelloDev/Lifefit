@@ -8,6 +8,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8
 
 type Challenge = {
   id: string
+  gym: string | number | null
   name: string
   description: string
   type: string
@@ -81,13 +82,17 @@ export default function RetosPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
-          <p className="text-sm text-slate-500">Cargando información de retos...</p>
+          <p className="text-sm text-slate-500">Cargando informacion de retos...</p>
         </div>
       </div>
     )
   }
 
   const userParticipation = Object.fromEntries(participations.map((p) => [p.challenge, p]))
+  const userGymId = user.gym === null || user.gym === undefined || user.gym === '' ? null : user.gym
+  const hasGymSpecificChallenges =
+    userGymId !== null && challenges.some((challenge) => challenge.gym !== null && String(challenge.gym) === String(userGymId))
+  const showGymEmptyMessage = userGymId !== null && !hasGymSpecificChallenges && challenges.length > 0
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6">
@@ -97,9 +102,9 @@ export default function RetosPage() {
         <main className="flex-1 space-y-6">
           <header className="rounded-3xl bg-white p-6 shadow-lg">
             <p className="text-xs uppercase text-emerald-600">Retos activos</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Gamificación y motivación</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Gamificacion y motivacion</h1>
             <p className="text-sm text-slate-500">
-              Únete a los desafíos de tu gimnasio para sumar puntos y subir en el ranking.
+              Unete a los desafios globales de Lifefit o de tu gimnasio para sumar puntos y subir en el ranking.
             </p>
           </header>
 
@@ -109,6 +114,11 @@ export default function RetosPage() {
               <span className="text-xs text-slate-500">{challenges.length} retos</span>
             </div>
             <div className="mt-4 grid gap-4">
+              {showGymEmptyMessage && (
+                <p className="text-xs text-slate-400">
+                  Tu gym aun no ha publicado retos propios. Mientras tanto, explora los retos globales de Lifefit.
+                </p>
+              )}
               {challenges.map((challenge) => {
                 const progress = userParticipation[challenge.id]?.progress ?? 0
                 return (
@@ -127,7 +137,13 @@ export default function RetosPage() {
                   </div>
                 )
               })}
-              {!challenges.length && <p className="text-sm text-slate-500">Tu gym aún no ha publicado retos.</p>}
+              {!challenges.length && (
+                <p className="text-sm text-slate-500">
+                  {userGymId !== null
+                    ? 'Aun no hay retos disponibles para tu cuenta.'
+                    : 'Aun no hay retos globales disponibles.'}
+                </p>
+              )}
             </div>
           </section>
 
@@ -148,7 +164,7 @@ export default function RetosPage() {
                   <div className="text-sm font-semibold text-emerald-600">{entry.total_points} pts</div>
                 </li>
               ))}
-              {!leaderboard.length && <p className="text-sm text-slate-500">Aún no hay ranking disponible.</p>}
+              {!leaderboard.length && <p className="text-sm text-slate-500">Aun no hay ranking disponible.</p>}
             </ul>
           </section>
         </main>

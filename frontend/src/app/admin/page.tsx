@@ -1,5 +1,7 @@
 'use client'
 
+import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import { useDashboardAuth } from '@/hooks/useDashboardAuth'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -34,7 +36,7 @@ type Exercise = {
 
 export default function AdminPage() {
   const router = useRouter()
-  const [token, setToken] = useState<string | null>(null)
+  const { user, token, loading: authLoading } = useDashboardAuth()
   const [gyms, setGyms] = useState<Gym[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [routines, setRoutines] = useState<Routine[]>([])
@@ -73,7 +75,7 @@ export default function AdminPage() {
     objective: '',
     level: 'beginner',
     duration_minutes: 30,
-    status: 'draft',
+    status: 'published',
   })
 
   const [routineExerciseForm, setRoutineExerciseForm] = useState({
@@ -84,11 +86,23 @@ export default function AdminPage() {
     reps: 10,
     rest_seconds: 60,
   })
+  const [challengeForm, setChallengeForm] = useState({
+    gym: '',
+    name: '',
+    description: '',
+    type: 'workouts',
+    start_date: '',
+    end_date: '',
+    reward_points: 100,
+    goal_value: 10,
+    status: 'active',
+  })
   const [nutritionPlanForm, setNutritionPlanForm] = useState({
     gym: '',
     name: '',
     description: '',
     calories_per_day: 2000,
+    status: 'active',
   })
   const [subscriptionPlanForm, setSubscriptionPlanForm] = useState({
     name: '',
@@ -97,6 +111,9 @@ export default function AdminPage() {
     currency: 'USD',
     billing_cycle: 'monthly',
   })
+
+  const baseFieldClass =
+    'w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 placeholder:text-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100'
 
   const authHeaders = useMemo(() => {
     if (!token) return {}
@@ -107,27 +124,15 @@ export default function AdminPage() {
   }, [token])
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('lifefit_access_token')
-    const storedUser = localStorage.getItem('lifefit_user')
-    if (!storedToken || !storedUser) {
-      router.replace('/ingresar')
-      return
+    if (authLoading) return
+    if (!user) return
+    if (user.role !== 'super_admin') {
+      router.replace('/resumen')
     }
-    try {
-      const parsed = JSON.parse(storedUser)
-      if (parsed.role !== 'super_admin') {
-        router.replace('/resumen')
-        return
-      }
-    } catch {
-      router.replace('/ingresar')
-      return
-    }
-    setToken(storedToken)
-  }, [router])
+  }, [authLoading, user, router])
 
   useEffect(() => {
-    if (!token) return
+    if (!token || user?.role !== 'super_admin') return
     const fetchData = async () => {
       try {
         setLoading(true)
@@ -156,7 +161,7 @@ export default function AdminPage() {
       }
     }
     fetchData()
-  }, [token])
+  }, [token, user?.role])
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>, url: string, payload: unknown, reset: () => void) => {
     event.preventDefault()
@@ -189,43 +194,64 @@ export default function AdminPage() {
     }
   }
 
-  if (!token) return null
+  if (authLoading || !user || !token) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
+          <p className="text-sm text-slate-500">Cargando panel administrativo...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (user.role !== 'super_admin') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
+          <p className="text-sm text-slate-500">Redirigiendo a tu panel personal...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-8 text-center">
-          <p className="text-xs uppercase text-emerald-600 tracking-widest">Panel administrativo</p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">Configura gimnasios, sucursales y rutinas</h1>
-          <p className="mt-1 text-sm text-slate-500">Los cambios impactan en lo que ven los atletas dentro de Lifefit.</p>
-        </header>
+    <div className="min-h-screen bg-slate-50 px-4 py-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row">
+        <DashboardSidebar user={user} active="/admin" />
 
-        {error && <div className="mb-6 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-        {loading && (
-          <div className="mb-6 rounded-2xl bg-white p-4 text-sm text-slate-500 shadow">
-            Cargando datos iniciales...
-          </div>
-        )}
+        <main className="flex-1 space-y-6">
+          <header className="rounded-3xl bg-white p-6 text-center shadow-lg">
+            <p className="text-xs uppercase text-emerald-600 tracking-widest">Panel administrativo</p>
+            <h1 className="mt-2 text-3xl font-bold text-slate-900">Configura gimnasios, sucursales y rutinas</h1>
+            <p className="mt-1 text-sm text-slate-500">Los cambios impactan en lo que ven los atletas dentro de Lifefit.</p>
+          </header>
 
-        <section className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl bg-white p-6 shadow-lg">
-            <h2 className="text-lg font-semibold text-slate-900">Crear gimnasio</h2>
-            <form
-              className="mt-4 space-y-3"
-              onSubmit={(event) =>
-                handleFormSubmit(event, `${API_BASE_URL}/api/gyms/gyms/`, gymForm, () =>
-                  setGymForm({
-                    name: '',
-                    slug: '',
-                    description: '',
-                    location: '',
-                    brand_color: '#10b981',
-                    website: '',
-                    contact_email: '',
-                  }),
-                )
-              }
-            >
+          {error && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+          {loading && (
+            <div className="rounded-2xl bg-white p-4 text-sm text-slate-500 shadow">
+              Cargando datos iniciales...
+            </div>
+          )}
+
+          <section className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-3xl bg-white p-6 shadow-lg">
+              <h2 className="text-lg font-semibold text-slate-900">Crear gimnasio</h2>
+              <form
+                className="mt-4 space-y-3"
+                onSubmit={(event) =>
+                  handleFormSubmit(event, `${API_BASE_URL}/api/gyms/gyms/`, gymForm, () =>
+                    setGymForm({
+                      name: '',
+                      slug: '',
+                      description: '',
+                      location: '',
+                      brand_color: '#10b981',
+                      website: '',
+                      contact_email: '',
+                    }),
+                  )
+                }
+              >
               {[
                 { id: 'name', label: 'Nombre' },
                 { id: 'slug', label: 'Slug' },
@@ -240,7 +266,7 @@ export default function AdminPage() {
                     type="text"
                     value={(gymForm as Record<string, string>)[field.id]}
                     required={field.id === 'name' || field.id === 'slug'}
-                    className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    className={`mt-1 ${baseFieldClass}`}
                     onChange={(event) =>
                       setGymForm((prev) => ({
                         ...prev,
@@ -276,7 +302,7 @@ export default function AdminPage() {
                 required
                 value={branchForm.gym}
                 onChange={(event) => setBranchForm((prev) => ({ ...prev, gym: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               >
                 <option value="">Selecciona un gimnasio</option>
                 {gyms.map((gym) => (
@@ -297,7 +323,7 @@ export default function AdminPage() {
                     type="text"
                     required
                     value={(branchForm as Record<string, string>)[field.id]}
-                    className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    className={`mt-1 ${baseFieldClass}`}
                     onChange={(event) =>
                       setBranchForm((prev) => ({
                         ...prev,
@@ -329,7 +355,7 @@ export default function AdminPage() {
                 required
                 value={exerciseForm.gym}
                 onChange={(event) => setExerciseForm((prev) => ({ ...prev, gym: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               >
                 <option value="">Selecciona un gimnasio</option>
                 {gyms.map((gym) => (
@@ -345,13 +371,13 @@ export default function AdminPage() {
                   required
                   value={exerciseForm.name}
                   onChange={(event) => setExerciseForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
               <select
                 value={exerciseForm.category}
                 onChange={(event) => setExerciseForm((prev) => ({ ...prev, category: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               >
                 <option value="strength">Fuerza</option>
                 <option value="cardio">Cardio</option>
@@ -365,7 +391,7 @@ export default function AdminPage() {
                   type="text"
                   value={exerciseForm.equipment}
                   onChange={(event) => setExerciseForm((prev) => ({ ...prev, equipment: event.target.value }))}
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
               <div>
@@ -374,7 +400,7 @@ export default function AdminPage() {
                   type="text"
                   value={exerciseForm.muscle_group}
                   onChange={(event) => setExerciseForm((prev) => ({ ...prev, muscle_group: event.target.value }))}
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
               <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
@@ -388,18 +414,28 @@ export default function AdminPage() {
             <form
               className="mt-4 space-y-3"
               onSubmit={(event) =>
-                handleFormSubmit(event, `${API_BASE_URL}/api/workouts/routines/`, routineForm, () =>
-                  setRoutineForm({ gym: '', name: '', objective: '', level: 'beginner', duration_minutes: 30, status: 'draft' }),
+                handleFormSubmit(
+                  event,
+                  `${API_BASE_URL}/api/workouts/routines/`,
+                  { ...routineForm, gym: routineForm.gym || null },
+                  () =>
+                    setRoutineForm({
+                      gym: '',
+                      name: '',
+                      objective: '',
+                      level: 'beginner',
+                      duration_minutes: 30,
+                      status: 'published',
+                    }),
                 )
               }
             >
               <select
-                required
                 value={routineForm.gym}
                 onChange={(event) => setRoutineForm((prev) => ({ ...prev, gym: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               >
-                <option value="">Selecciona un gimnasio</option>
+                <option value="">Contenido global (sin gym)</option>
                 {gyms.map((gym) => (
                   <option key={gym.id} value={gym.id}>
                     {gym.name}
@@ -413,7 +449,7 @@ export default function AdminPage() {
                   required
                   value={routineForm.name}
                   onChange={(event) => setRoutineForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
               <div>
@@ -421,14 +457,14 @@ export default function AdminPage() {
                 <textarea
                   value={routineForm.objective}
                   onChange={(event) => setRoutineForm((prev) => ({ ...prev, objective: event.target.value }))}
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
               <div className="flex gap-3">
                 <select
                   value={routineForm.level}
                   onChange={(event) => setRoutineForm((prev) => ({ ...prev, level: event.target.value }))}
-                  className="flex-1 rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`flex-1 ${baseFieldClass}`}
                 >
                   <option value="beginner">Principiante</option>
                   <option value="intermediate">Intermedio</option>
@@ -437,7 +473,7 @@ export default function AdminPage() {
                 <select
                   value={routineForm.status}
                   onChange={(event) => setRoutineForm((prev) => ({ ...prev, status: event.target.value }))}
-                  className="flex-1 rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`flex-1 ${baseFieldClass}`}
                 >
                   <option value="draft">Borrador</option>
                   <option value="published">Publicado</option>
@@ -452,7 +488,7 @@ export default function AdminPage() {
                   max={180}
                   value={routineForm.duration_minutes}
                   onChange={(event) => setRoutineForm((prev) => ({ ...prev, duration_minutes: Number(event.target.value) }))}
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                  className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
               <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
@@ -476,7 +512,7 @@ export default function AdminPage() {
               required
               value={routineExerciseForm.routine}
               onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, routine: event.target.value }))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+              className={baseFieldClass}
             >
               <option value="">Selecciona rutina</option>
               {routines.map((routine) => (
@@ -489,7 +525,7 @@ export default function AdminPage() {
               required
               value={routineExerciseForm.exercise}
               onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, exercise: event.target.value }))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+              className={baseFieldClass}
             >
               <option value="">Selecciona ejercicio</option>
               {exercises.map((exercise) => (
@@ -498,41 +534,183 @@ export default function AdminPage() {
                 </option>
               ))}
             </select>
-            <input
-              type="number"
-              min={1}
-              placeholder="Orden"
-              value={routineExerciseForm.order}
-              onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, order: Number(event.target.value) }))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
-            />
-            <input
-              type="number"
-              min={1}
-              placeholder="Sets"
-              value={routineExerciseForm.sets}
-              onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, sets: Number(event.target.value) }))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
-            />
-            <input
-              type="number"
-              min={1}
-              placeholder="Repeticiones"
-              value={routineExerciseForm.reps}
-              onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, reps: Number(event.target.value) }))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
-            />
-            <input
-              type="number"
-              min={15}
-              placeholder="Descanso (segundos)"
-              value={routineExerciseForm.rest_seconds}
-              onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, rest_seconds: Number(event.target.value) }))}
-              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
-            />
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Orden en la rutina</label>
+              <input
+                type="number"
+                min={1}
+                placeholder="1"
+                value={routineExerciseForm.order}
+                onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, order: Number(event.target.value) }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Sets</label>
+              <input
+                type="number"
+                min={1}
+                placeholder="3"
+                value={routineExerciseForm.sets}
+                onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, sets: Number(event.target.value) }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Repeticiones por set</label>
+              <input
+                type="number"
+                min={1}
+                placeholder="10"
+                value={routineExerciseForm.reps}
+                onChange={(event) => setRoutineExerciseForm((prev) => ({ ...prev, reps: Number(event.target.value) }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Descanso (segundos)</label>
+              <input
+                type="number"
+                min={15}
+                placeholder="60"
+                value={routineExerciseForm.rest_seconds}
+                onChange={(event) =>
+                  setRoutineExerciseForm((prev) => ({ ...prev, rest_seconds: Number(event.target.value) }))
+                }
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
             <button type="submit" className="md:col-span-2 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
               Añadir a rutina
             </button>
+          </form>
+        </section>
+
+        <section className="mt-6 rounded-3xl bg-white p-6 shadow-lg">
+          <h2 className="text-lg font-semibold text-slate-900">Crear reto</h2>
+          <form
+            className="mt-4 grid gap-4 md:grid-cols-2"
+            onSubmit={(event) =>
+              handleFormSubmit(
+                event,
+                `${API_BASE_URL}/api/challenges/challenges/`,
+                { ...challengeForm, gym: challengeForm.gym || null },
+                () =>
+                  setChallengeForm({
+                    gym: '',
+                    name: '',
+                    description: '',
+                    type: 'workouts',
+                    start_date: '',
+                    end_date: '',
+                    reward_points: 100,
+                    goal_value: 10,
+                    status: 'active',
+                  }),
+              )
+            }
+          >
+            <div className="md:col-span-2 grid gap-3 md:grid-cols-2">
+              <select
+                value={challengeForm.gym}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, gym: event.target.value }))}
+                className={baseFieldClass}
+              >
+                <option value="">Contenido global (sin gym)</option>
+                {gyms.map((gym) => (
+                  <option key={gym.id} value={gym.id}>
+                    {gym.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={challengeForm.type}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, type: event.target.value }))}
+                className={baseFieldClass}
+              >
+                <option value="attendance">Asistencia</option>
+                <option value="distance">Distancia</option>
+                <option value="workouts">Entrenamientos</option>
+                <option value="nutrition">Nutrición</option>
+                <option value="mixed">Mixto</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Nombre</label>
+              <input
+                type="text"
+                required
+                value={challengeForm.name}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, name: event.target.value }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Descripción</label>
+              <textarea
+                value={challengeForm.description}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, description: event.target.value }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Fecha inicio</label>
+              <input
+                type="date"
+                required
+                value={challengeForm.start_date}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, start_date: event.target.value }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Fecha fin</label>
+              <input
+                type="date"
+                required
+                value={challengeForm.end_date}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, end_date: event.target.value }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Puntos</label>
+              <input
+                type="number"
+                min={10}
+                value={challengeForm.reward_points}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, reward_points: Number(event.target.value) }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Meta</label>
+              <input
+                type="number"
+                min={1}
+                value={challengeForm.goal_value}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, goal_value: Number(event.target.value) }))}
+                className={`mt-1 ${baseFieldClass}`}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs font-semibold text-slate-600">Estado</label>
+              <select
+                value={challengeForm.status}
+                onChange={(event) => setChallengeForm((prev) => ({ ...prev, status: event.target.value }))}
+                className={`mt-1 ${baseFieldClass}`}
+              >
+                <option value="active">Activo</option>
+                <option value="draft">Borrador</option>
+                <option value="completed">Completado</option>
+                <option value="archived">Archivado</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
+                Guardar reto
+              </button>
+            </div>
           </form>
         </section>
 
@@ -542,18 +720,21 @@ export default function AdminPage() {
             <form
               className="mt-4 space-y-3"
               onSubmit={(event) =>
-                handleFormSubmit(event, `${API_BASE_URL}/api/nutrition/plans/`, nutritionPlanForm, () =>
-                  setNutritionPlanForm({ gym: '', name: '', description: '', calories_per_day: 2000 }),
+                handleFormSubmit(
+                  event,
+                  `${API_BASE_URL}/api/nutrition/plans/`,
+                  { ...nutritionPlanForm, gym: nutritionPlanForm.gym || null },
+                  () =>
+                    setNutritionPlanForm({ gym: '', name: '', description: '', calories_per_day: 2000, status: 'active' }),
                 )
               }
             >
               <select
-                required
                 value={nutritionPlanForm.gym}
                 onChange={(event) => setNutritionPlanForm((prev) => ({ ...prev, gym: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               >
-                <option value="">Selecciona gym</option>
+                <option value="">Contenido global (sin gym)</option>
                 {gyms.map((gym) => (
                   <option key={gym.id} value={gym.id}>
                     {gym.name}
@@ -566,13 +747,13 @@ export default function AdminPage() {
                 required
                 value={nutritionPlanForm.name}
                 onChange={(event) => setNutritionPlanForm((prev) => ({ ...prev, name: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               />
               <textarea
                 placeholder="Descripción"
                 value={nutritionPlanForm.description}
                 onChange={(event) => setNutritionPlanForm((prev) => ({ ...prev, description: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               />
               <input
                 type="number"
@@ -581,8 +762,17 @@ export default function AdminPage() {
                 placeholder="Calorías/día"
                 value={nutritionPlanForm.calories_per_day}
                 onChange={(event) => setNutritionPlanForm((prev) => ({ ...prev, calories_per_day: Number(event.target.value) }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               />
+              <select
+                value={nutritionPlanForm.status}
+                onChange={(event) => setNutritionPlanForm((prev) => ({ ...prev, status: event.target.value }))}
+                className={baseFieldClass}
+              >
+                <option value="active">Activo</option>
+                <option value="draft">Borrador</option>
+                <option value="archived">Archivado</option>
+              </select>
               <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
                 Guardar plan
               </button>
@@ -605,7 +795,7 @@ export default function AdminPage() {
                 required
                 value={subscriptionPlanForm.name}
                 onChange={(event) => setSubscriptionPlanForm((prev) => ({ ...prev, name: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               />
               <input
                 type="number"
@@ -614,12 +804,12 @@ export default function AdminPage() {
                 placeholder="Precio"
                 value={subscriptionPlanForm.price}
                 onChange={(event) => setSubscriptionPlanForm((prev) => ({ ...prev, price: Number(event.target.value) }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               />
               <select
                 value={subscriptionPlanForm.billing_cycle}
                 onChange={(event) => setSubscriptionPlanForm((prev) => ({ ...prev, billing_cycle: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               >
                 <option value="monthly">Mensual</option>
                 <option value="annual">Anual</option>
@@ -629,7 +819,7 @@ export default function AdminPage() {
                 placeholder="Descripción"
                 value={subscriptionPlanForm.description}
                 onChange={(event) => setSubscriptionPlanForm((prev) => ({ ...prev, description: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+                className={baseFieldClass}
               />
               <button type="submit" className="w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white">
                 Guardar plan de suscripción
@@ -637,7 +827,8 @@ export default function AdminPage() {
             </form>
           </div>
         </section>
-      </div>
+      </main>
     </div>
+  </div>
   )
 }

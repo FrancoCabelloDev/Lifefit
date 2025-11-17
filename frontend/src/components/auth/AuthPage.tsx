@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 
 type AuthPageProps = {
@@ -51,22 +51,54 @@ const formCopy = {
   },
 }
 
+const sanitizeNextPath = (path?: string | null) => {
+  if (!path || typeof path !== 'string') return null
+  return path.startsWith('/') ? path : null
+}
+
+const resolveRedirectPath = (role?: string, requestedPath?: string | null) => {
+  const fallback = role === 'super_admin' ? '/admin' : '/resumen'
+  const sanitized = sanitizeNextPath(requestedPath)
+  if (!sanitized) return fallback
+  if (role === 'super_admin' && sanitized === '/resumen') {
+    return fallback
+  }
+  if (role !== 'super_admin' && sanitized.startsWith('/admin')) {
+    return fallback
+  }
+  return sanitized
+}
+
 export default function AuthPage({ mode }: AuthPageProps) {
   const copy = formCopy[mode]
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const requestedNextPath = sanitizeNextPath(searchParams?.get('next'))
   const [googleLoading, setGoogleLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
-  const persistSession = (payload: { access: string; refresh: string; user?: unknown }) => {
+  const persistTokens = (payload: { access: string; refresh: string }) => {
     localStorage.setItem('lifefit_access_token', payload.access)
     localStorage.setItem('lifefit_refresh_token', payload.refresh)
-    if (payload.user) {
-      localStorage.setItem('lifefit_user', JSON.stringify(payload.user))
+  }
+
+  const fetchProfileAndPersist = async (accessToken: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/auth/me/`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: 'no-store',
+    })
+    if (!response.ok) {
+      throw new Error('No pudimos obtener tu perfil.')
     }
+    const profile = await response.json()
+    localStorage.setItem('lifefit_user', JSON.stringify(profile))
+    return profile
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -124,8 +156,14 @@ export default function AuthPage({ mode }: AuthPageProps) {
         return
       }
 
-      persistSession(data)
-      router.push('/resumen')
+      if (!data.access || !data.refresh) {
+        throw new Error('No recibimos credenciales válidas.')
+      }
+
+      persistTokens({ access: data.access, refresh: data.refresh })
+      const profile = await fetchProfileAndPersist(data.access)
+      const destination = resolveRedirectPath(profile?.role, requestedNextPath)
+      router.push(destination)
     } catch (error) {
       console.error(error)
       setFormError('Ocurrió un error inesperado. Intenta nuevamente en unos minutos.')
@@ -137,7 +175,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
     try {
-      const params = new URLSearchParams({ next: '/resumen' })
+      const params = new URLSearchParams({ next: requestedNextPath ?? '/resumen' })
       const response = await fetch(`${API_BASE_URL}/api/auth/google/login/?${params.toString()}`)
       const data = await response.json()
       if (!response.ok || !data.authorization_url) {

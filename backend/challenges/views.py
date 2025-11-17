@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -29,16 +30,24 @@ class ChallengeViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "description", "type", "status"]
 
+    def _global_or_user_gym_filter(self, user):
+        filters = Q(gym__isnull=True)
+        if user.gym_id:
+            filters |= Q(gym_id=user.gym_id)
+        return filters
+
     def get_queryset(self):
         user = self.request.user
         queryset = Challenge.objects.select_related("gym")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            return queryset.filter(gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE and user.gym_id:
-            return queryset.filter(gym_id=user.gym_id, status=Challenge.Status.ACTIVE)
-        return queryset.none()
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(self._global_or_user_gym_filter(user))
+            return queryset.filter(gym__isnull=True)
+        if user.role == User.Role.ATHLETE:
+            return queryset.filter(self._global_or_user_gym_filter(user), status=Challenge.Status.ACTIVE)
+        return queryset.filter(gym__isnull=True, status=Challenge.Status.ACTIVE)
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -77,7 +86,7 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             target_user = User.objects.get(pk=target_user_id)
         else:
             target_user = user
-            if target_user.gym_id != challenge.gym_id:
+            if challenge.gym_id and target_user.gym_id != challenge.gym_id:
                 raise PermissionDenied("No perteneces a este gimnasio.")
 
         participation, created = ChallengeParticipation.objects.get_or_create(
@@ -111,7 +120,7 @@ class ChallengeParticipationViewSet(viewsets.ModelViewSet):
             return
         if user.role == User.Role.ATHLETE:
             challenge = serializer.validated_data["challenge"]
-            if challenge.gym_id != user.gym_id:
+            if challenge.gym_id and challenge.gym_id != user.gym_id:
                 raise PermissionDenied("No puedes unirte a retos de otro gym.")
             serializer.save(user=user)
             return

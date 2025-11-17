@@ -1,11 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 type UserProps = {
   first_name: string
   last_name: string
   email: string
+  role?: string | null
 }
 
 type SidebarProps = {
@@ -13,7 +15,7 @@ type SidebarProps = {
   active: string
 }
 
-const routes = [
+const baseRoutes = [
   { href: '/resumen', label: 'Resumen' },
   { href: '/retos', label: 'Retos' },
   { href: '/ranking', label: 'Ranking' },
@@ -24,6 +26,16 @@ const routes = [
 ]
 
 export default function DashboardSidebar({ user, active }: SidebarProps) {
+  const router = useRouter()
+  const routes = user.role === 'super_admin' ? [...baseRoutes, { href: '/admin', label: 'Admin' }] : baseRoutes
+
+  const handleLogout = () => {
+    localStorage.removeItem('lifefit_access_token')
+    localStorage.removeItem('lifefit_refresh_token')
+    localStorage.removeItem('lifefit_user')
+    router.replace('/ingresar')
+  }
+
   return (
     <aside className="lg:w-64">
       <div className="rounded-3xl bg-white p-6 shadow-lg">
@@ -33,6 +45,12 @@ export default function DashboardSidebar({ user, active }: SidebarProps) {
             {user.first_name} {user.last_name}
           </p>
           <p className="text-xs text-slate-500">{user.email}</p>
+          <button
+            onClick={handleLogout}
+            className="mt-3 w-full rounded-2xl border border-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500 hover:text-white"
+          >
+            Cerrar sesion
+          </button>
         </div>
         <nav className="space-y-2 text-sm">
           {routes.map(({ href, label, disabled }) => {
