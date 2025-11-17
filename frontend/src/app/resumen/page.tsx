@@ -1,6 +1,6 @@
 'use client'
 
-import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import DashboardPage from '@/components/dashboard/DashboardPage'
 import { useDashboardAuth } from '@/hooks/useDashboardAuth'
 import { useEffect, useState } from 'react'
 
@@ -28,6 +28,7 @@ type WorkoutSession = {
   duration_minutes: number
   status: string
   routine?: string
+  points_awarded?: number
 }
 
 export default function ResumenPage() {
@@ -69,23 +70,11 @@ export default function ResumenPage() {
     fetchData()
   }, [token])
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-600">
-            Lf
-          </div>
-          <p className="text-lg font-semibold text-slate-900">Sincronizando tu cuenta</p>
-          <p className="mt-2 text-sm text-slate-500">Obteniendo tu progreso y tus metricas...</p>
-        </div>
-      </div>
-    )
+  if (!user) {
+    return <DashboardPage user={user} active="/resumen" loading loadingLabel="Sincronizando tu cuenta..." />
   }
 
-  if (!user) {
-    return null
-  }
+  const loadingState = authLoading || loading
 
   const quickStats = [
     { label: 'Nivel', value: user.nivel },
@@ -97,11 +86,8 @@ export default function ResumenPage() {
   const latestSessions = sessions.slice(0, 3)
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row">
-        <DashboardSidebar user={user} active="/resumen" />
-
-        <main className="flex-1 space-y-6">
+    <DashboardPage user={user} active="/resumen" loading={loadingState} loadingLabel="Sincronizando tu cuenta...">
+        <>
           <header className="rounded-3xl bg-white p-6 shadow-lg">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -156,6 +142,7 @@ export default function ResumenPage() {
                       <p className="font-semibold text-slate-900">{new Date(session.performed_at).toLocaleString()}</p>
                       <p className="text-xs text-slate-500">
                         Completado: {session.completion_percentage}% - {session.duration_minutes} min - {session.status}
+                        {session.points_awarded ? ` - ${session.points_awarded} pts` : ''}
                       </p>
                     </li>
                   ))
@@ -190,8 +177,7 @@ export default function ResumenPage() {
               </div>
             </div>
           </section>
-        </main>
-      </div>
-    </div>
+        </>
+    </DashboardPage>
   )
 }

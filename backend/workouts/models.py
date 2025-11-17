@@ -57,6 +57,7 @@ class WorkoutRoutine(BaseModel):
     level = models.CharField(max_length=20, choices=Level.choices, default=Level.BEGINNER)
     duration_minutes = models.PositiveIntegerField(default=30)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    points_reward = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="created_routines",
@@ -99,7 +100,13 @@ class WorkoutSession(BaseModel):
         SKIPPED = "skipped", "Skipped"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="workout_sessions", on_delete=models.CASCADE)
-    gym = models.ForeignKey("gyms.Gym", related_name="sessions", on_delete=models.CASCADE)
+    gym = models.ForeignKey(
+        "gyms.Gym",
+        related_name="sessions",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
     routine = models.ForeignKey(
         WorkoutRoutine,
         related_name="sessions",
@@ -113,6 +120,7 @@ class WorkoutSession(BaseModel):
     completion_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
+    points_awarded = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["-performed_at"]

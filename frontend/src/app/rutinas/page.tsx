@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import DashboardPage from '@/components/dashboard/DashboardPage'
 import { useDashboardAuth } from '@/hooks/useDashboardAuth'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -26,6 +26,8 @@ type Routine = {
   level: string
   status: string
   duration_minutes: number
+  completed_by_me?: boolean
+  points_reward?: number
   routine_exercises?: RoutineExercise[]
 }
 
@@ -44,12 +46,14 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 export default function RutinasPage() {
-  const { user, token, loading: authLoading } = useDashboardAuth()
+  const { user, token, loading: authLoading, setUser } = useDashboardAuth()
   const [routines, setRoutines] = useState<Routine[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState('todas')
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null)
   const [exerciseProgress, setExerciseProgress] = useState<Record<string, boolean>>({})
+  const [completionStatus, setCompletionStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
+  const [completionMessage, setCompletionMessage] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -73,6 +77,8 @@ export default function RutinasPage() {
 
   const handleOpenRoutine = (routine: Routine) => {
     setSelectedRoutine(routine)
+    setCompletionStatus('idle')
+    setCompletionMessage(routine.completed_by_me ? 'Ya registraste esta rutina anteriormente.' : '')
     const initial: Record<string, boolean> = {}
     routine.routine_exercises
       ?.sort((a, b) => a.order - b.order)
@@ -85,6 +91,8 @@ export default function RutinasPage() {
   const handleCloseRoutine = () => {
     setSelectedRoutine(null)
     setExerciseProgress({})
+    setCompletionStatus('idle')
+    setCompletionMessage('')
   }
 
   const toggleExerciseProgress = (exerciseId: string) => {
@@ -115,15 +123,11 @@ export default function RutinasPage() {
     )
   }, [activeCategory, routines])
 
-  if (authLoading || loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
-          <p className="text-sm text-slate-500">Cargando rutinas...</p>
-        </div>
-      </div>
-    )
+  if (!user) {
+    return <DashboardPage user={user} active="/rutinas" loading loadingLabel="Cargando rutinas..." />
   }
+
+  const loadingState = authLoading || loading
 
   const hasGymSpecificRoutines =
     userGymId !== null && routines.some((routine) => routine.gym !== null && String(routine.gym) === String(userGymId))
@@ -135,11 +139,64 @@ export default function RutinasPage() {
     </span>
   )
 
+  const totalExercises = selectedRoutine?.routine_exercises?.length ?? 0
+  const completedExercises = Object.values(exerciseProgress).filter(Boolean).length
+  const isRoutineCompleted =
+    !!selectedRoutine &&
+    (selectedRoutine.completed_by_me ||
+      (totalExercises > 0 && completedExercises === totalExercises && totalExercises === Object.keys(exerciseProgress).length))
+
+  const handleRegisterCompletion = async () => {
+    if (!selectedRoutine || !token || completionStatus === 'saving' || completionStatus === 'success') return
+    setCompletionStatus('saving')
+    setCompletionMessage('')
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/workouts/sessions/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          routine: selectedRoutine.id,
+          performed_at: new Date().toISOString(),
+          duration_minutes: selectedRoutine.duration_minutes,
+          completion_percentage: 100,
+          status: 'completed',
+        }),
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'No pudimos registrar la rutina.')
+      }
+      const reward = selectedRoutine.points_reward ?? 0
+      setCompletionStatus('success')
+      setCompletionMessage(
+        reward > 0
+          ? `Has ganado ${reward} puntos. Buen trabajo!`
+          : 'Rutina registrada en tu historial. Sigue asi!',
+      )
+      if (reward > 0 && setUser) {
+        setUser((prev) => {
+          if (!prev) return prev
+          const updated = { ...prev, puntos: prev.puntos + reward }
+          localStorage.setItem('lifefit_user', JSON.stringify(updated))
+          return updated
+        })
+      }
+      setRoutines((prev) =>
+        prev.map((routine) => (routine.id === selectedRoutine.id ? { ...routine, completed_by_me: true } : routine)),
+      )
+      setSelectedRoutine((prev) => (prev ? { ...prev, completed_by_me: true } : prev))
+    } catch (error) {
+      setCompletionStatus('error')
+      setCompletionMessage(error instanceof Error ? error.message : 'No pudimos registrar la rutina.')
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row">
-        <DashboardSidebar user={user} active="/rutinas" />
-        <main className="flex-1 space-y-6">
+    <DashboardPage user={user} active="/rutinas" loading={loadingState} loadingLabel="Cargando rutinas...">
+        <>
           <header className="rounded-3xl bg-white p-6 shadow-lg">
             <p className="text-xs uppercase text-emerald-600">Rutinas</p>
             <h1 className="text-2xl font-semibold text-slate-900">Entrena con rutinas personalizadas</h1>
@@ -189,14 +246,18 @@ export default function RutinasPage() {
                         <div>
                           <p className="text-base font-semibold text-slate-900">{routine.name}</p>
                           <p className="text-sm text-slate-500">{routine.objective}</p>
+                          {routine.completed_by_me && (
+                            <p className="mt-1 text-xs font-semibold text-emerald-600">Rutina completada ??</p>
+                          )}
                         </div>
                         <span className="text-xs text-slate-400">
                           {routine.gym ? 'Plan de tu gym' : 'Plan global Lifefit'}
                         </span>
                       </div>
                       <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
-                        <span>⏱️ {routine.duration_minutes} min</span>
-                        <span>🏋🏻 {exerciseCount} ejercicios</span>
+                        <span>?? {routine.duration_minutes} min</span>
+                        <span>???? {exerciseCount} ejercicios</span>
+                        {routine.points_reward ? <span>? {routine.points_reward} pts</span> : null}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {renderBadge(levelLabel, 'bg-amber-500', `${routine.id}-level`)}
@@ -218,9 +279,11 @@ export default function RutinasPage() {
                       </div>
                       <button
                         onClick={() => handleOpenRoutine(routine)}
-                        className="mt-4 w-full rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                        className={`mt-4 w-full rounded-2xl py-2 text-sm font-semibold text-white transition ${
+                          routine.completed_by_me ? 'bg-emerald-600' : 'bg-emerald-500 hover:bg-emerald-600'
+                        }`}
                       >
-                        Iniciar
+                        {routine.completed_by_me ? 'Ver rutina (completada)' : 'Iniciar'}
                       </button>
                     </div>
                   )
@@ -244,18 +307,21 @@ export default function RutinasPage() {
                     <p className="text-xs uppercase text-emerald-600">Rutina en curso</p>
                     <h3 className="text-xl font-semibold text-slate-900">{selectedRoutine.name}</h3>
                     <p className="text-sm text-slate-500">{selectedRoutine.objective}</p>
+                    {selectedRoutine.points_reward ? (
+                      <p className="text-xs font-semibold text-emerald-600">Valor: {selectedRoutine.points_reward} pts</p>
+                    ) : null}
                   </div>
                   <button
                     onClick={handleCloseRoutine}
                     className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
                   >
-                    Cerrar ✕
+                    Cerrar ?
                   </button>
                 </div>
                 <div className="mt-4">
                   {(() => {
-                    const total = selectedRoutine.routine_exercises?.length ?? 0
-                    const completed = Object.values(exerciseProgress).filter(Boolean).length
+                    const total = totalExercises
+                    const completed = completedExercises
                     const percentage = total ? Math.round((completed / total) * 100) : 0
                     return (
                       <div>
@@ -274,13 +340,13 @@ export default function RutinasPage() {
                 </div>
                 <div className="mt-4 flex items-center gap-4 rounded-2xl border border-slate-100 px-4 py-3 text-sm text-slate-600">
                   <div className="flex items-center gap-2">
-                    <span>⏱️</span>
+                    <span>??</span>
                     <span>00:00</span>
                   </div>
                   <div className="flex gap-2 text-xs">
-                    <button className="rounded-full border border-slate-200 px-3 py-1">▶️</button>
-                    <button className="rounded-full border border-slate-200 px-3 py-1">⏸️</button>
-                    <button className="rounded-full border border-slate-200 px-3 py-1">⏹️</button>
+                    <button className="rounded-full border border-slate-200 px-3 py-1">??</button>
+                    <button className="rounded-full border border-slate-200 px-3 py-1">??</button>
+                    <button className="rounded-full border border-slate-200 px-3 py-1">??</button>
                   </div>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -302,7 +368,7 @@ export default function RutinasPage() {
                               {exercise.sets} series x {exercise.reps} repeticiones · Descanso {exercise.rest_seconds} seg
                             </p>
                           </div>
-                          <span className="text-lg">{completed ? '✔️' : '○'}</span>
+                          <span className="text-lg">{completed ? '??' : '?'}</span>
                         </button>
                       )
                     })}
@@ -310,12 +376,51 @@ export default function RutinasPage() {
                     <p className="text-sm text-slate-500">Aún no se han agregado ejercicios a esta rutina.</p>
                   )}
                 </div>
+                {isRoutineCompleted && (
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                    {completionStatus === 'success' ? (
+                      <>
+                        <p className="text-base font-semibold text-emerald-700">Rutina completada</p>
+                        <p className="text-sm text-emerald-700">
+                          {completionMessage ||
+                            (selectedRoutine.points_reward
+                              ? `Has ganado ${selectedRoutine.points_reward} puntos.`
+                              : 'Rutina registrada.')}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-emerald-700">
+                          {selectedRoutine.completed_by_me
+                            ? 'Ya registraste esta rutina. Si la repetiste hoy, vuelve a registrarla para sumar de nuevo.'
+                            : selectedRoutine.points_reward && selectedRoutine.points_reward > 0
+                              ? `Marca como completada para ganar ${selectedRoutine.points_reward} puntos.`
+                              : 'Marca como completada para registrar tu progreso.'}
+                        </p>
+                        <button
+                          onClick={handleRegisterCompletion}
+                          disabled={completionStatus === 'saving'}
+                          className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60"
+                        >
+                          {completionStatus === 'saving'
+                            ? 'Guardando...'
+                            : selectedRoutine.completed_by_me
+                              ? 'Registrar nuevamente'
+                              : 'Registrar rutina completada'}
+                        </button>
+                        {completionStatus === 'error' && (
+                          <p className="mt-2 text-xs text-red-600">{completionMessage}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
-        </main>
-      </div>
-    </div>
+        </>
+      </DashboardPage>
   )
 }
+
 

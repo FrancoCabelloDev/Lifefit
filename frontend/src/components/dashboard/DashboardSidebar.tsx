@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { AUTH_EVENT } from '@/hooks/useDashboardAuth'
 
 type UserProps = {
   first_name: string
@@ -33,6 +34,9 @@ export default function DashboardSidebar({ user, active }: SidebarProps) {
     localStorage.removeItem('lifefit_access_token')
     localStorage.removeItem('lifefit_refresh_token')
     localStorage.removeItem('lifefit_user')
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(AUTH_EVENT))
+    }
     router.replace('/ingresar')
   }
 

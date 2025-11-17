@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { FormEvent, useState } from 'react'
+import { AUTH_EVENT } from '@/hooks/useDashboardAuth'
 
 type AuthPageProps = {
   mode: 'login' | 'register'
@@ -81,9 +82,16 @@ export default function AuthPage({ mode }: AuthPageProps) {
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
+  const notifyAuthUpdate = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(AUTH_EVENT))
+    }
+  }
+
   const persistTokens = (payload: { access: string; refresh: string }) => {
     localStorage.setItem('lifefit_access_token', payload.access)
     localStorage.setItem('lifefit_refresh_token', payload.refresh)
+    notifyAuthUpdate()
   }
 
   const fetchProfileAndPersist = async (accessToken: string) => {
@@ -98,6 +106,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
     }
     const profile = await response.json()
     localStorage.setItem('lifefit_user', JSON.stringify(profile))
+    notifyAuthUpdate()
     return profile
   }
 

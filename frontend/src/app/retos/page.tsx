@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 
-import DashboardSidebar from '@/components/dashboard/DashboardSidebar'
+import DashboardPage from '@/components/dashboard/DashboardPage'
 import { useDashboardAuth } from '@/hooks/useDashboardAuth'
 import { useEffect, useState } from 'react'
 
@@ -78,15 +78,11 @@ export default function RetosPage() {
     fetchData()
   }, [token])
 
-  if (authLoading || loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
-          <p className="text-sm text-slate-500">Cargando informacion de retos...</p>
-        </div>
-      </div>
-    )
+  if (!user) {
+    return <DashboardPage user={user} active="/retos" loading loadingLabel="Cargando tus retos..." />
   }
+
+  const loadingState = authLoading || loading
 
   const userParticipation = Object.fromEntries(participations.map((p) => [p.challenge, p]))
   const userGymId = user.gym === null || user.gym === undefined || user.gym === '' ? null : user.gym
@@ -95,11 +91,8 @@ export default function RetosPage() {
   const showGymEmptyMessage = userGymId !== null && !hasGymSpecificChallenges && challenges.length > 0
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row">
-        <DashboardSidebar user={user} active="/retos" />
-
-        <main className="flex-1 space-y-6">
+    <DashboardPage user={user} active="/retos" loading={loadingState} loadingLabel="Cargando tus retos...">
+        <>
           <header className="rounded-3xl bg-white p-6 shadow-lg">
             <p className="text-xs uppercase text-emerald-600">Retos activos</p>
             <h1 className="text-2xl font-semibold text-slate-900">Gamificacion y motivacion</h1>
@@ -167,8 +160,8 @@ export default function RetosPage() {
               {!leaderboard.length && <p className="text-sm text-slate-500">Aun no hay ranking disponible.</p>}
             </ul>
           </section>
-        </main>
-      </div>
-    </div>
+        </>
+      </DashboardPage>
   )
 }
+

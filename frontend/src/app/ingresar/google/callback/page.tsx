@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { AUTH_EVENT } from '@/hooks/useDashboardAuth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -42,9 +43,14 @@ export default function GoogleCallbackPage() {
       return
     }
 
+    const notifyAuthUpdate = () => {
+      window.dispatchEvent(new Event(AUTH_EVENT))
+    }
+
     const persistTokens = () => {
       localStorage.setItem('lifefit_access_token', accessToken)
       localStorage.setItem('lifefit_refresh_token', refreshToken)
+      notifyAuthUpdate()
     }
 
     const fetchProfile = async () => {
@@ -62,6 +68,7 @@ export default function GoogleCallbackPage() {
         }
         const user = await response.json()
         localStorage.setItem('lifefit_user', JSON.stringify(user))
+        notifyAuthUpdate()
         const destination = resolveRedirectPath(user?.role, requestedNextPath)
         router.replace(destination)
       } catch (error) {

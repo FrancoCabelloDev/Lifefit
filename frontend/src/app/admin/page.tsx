@@ -24,6 +24,7 @@ type Routine = {
   status: string
   level: string
   gym: string
+  points_reward?: number
 }
 
 type Exercise = {
@@ -76,6 +77,7 @@ export default function AdminPage() {
     level: 'beginner',
     duration_minutes: 30,
     status: 'published',
+    points_reward: 0,
   })
 
   const [routineExerciseForm, setRoutineExerciseForm] = useState({
@@ -346,18 +348,20 @@ export default function AdminPage() {
             <form
               className="mt-4 space-y-3"
               onSubmit={(event) =>
-                handleFormSubmit(event, `${API_BASE_URL}/api/workouts/exercises/`, exerciseForm, () =>
-                  setExerciseForm({ gym: '', name: '', category: 'strength', equipment: '', muscle_group: '' }),
+                handleFormSubmit(
+                  event,
+                  `${API_BASE_URL}/api/workouts/exercises/`,
+                  { ...exerciseForm, gym: exerciseForm.gym || null },
+                  () => setExerciseForm({ gym: '', name: '', category: 'strength', equipment: '', muscle_group: '' }),
                 )
               }
             >
               <select
-                required
                 value={exerciseForm.gym}
                 onChange={(event) => setExerciseForm((prev) => ({ ...prev, gym: event.target.value }))}
                 className={baseFieldClass}
               >
-                <option value="">Selecciona un gimnasio</option>
+                <option value="">Contenido global (sin gym)</option>
                 {gyms.map((gym) => (
                   <option key={gym.id} value={gym.id}>
                     {gym.name}
@@ -426,6 +430,7 @@ export default function AdminPage() {
                       level: 'beginner',
                       duration_minutes: 30,
                       status: 'published',
+                      points_reward: 0,
                     }),
                 )
               }
@@ -488,6 +493,16 @@ export default function AdminPage() {
                   max={180}
                   value={routineForm.duration_minutes}
                   onChange={(event) => setRoutineForm((prev) => ({ ...prev, duration_minutes: Number(event.target.value) }))}
+                  className={`mt-1 ${baseFieldClass}`}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Puntos por completar</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={routineForm.points_reward}
+                  onChange={(event) => setRoutineForm((prev) => ({ ...prev, points_reward: Number(event.target.value) }))}
                   className={`mt-1 ${baseFieldClass}`}
                 />
               </div>
