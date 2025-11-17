@@ -19,9 +19,9 @@ Despues de clonar veras principalmente las carpetas `backend/` y `frontend/`.
 ## 3. Crear la base de datos en PostgreSQL
 1. Abre `psql` (con un usuario con privilegios) y ejecuta:
    ```sql
-   CREATE DATABASE lifefit;
+   CREATE DATABASE lifefit_db;
    CREATE USER lifefit_user WITH PASSWORD 'cambia_esta_clave';
-   GRANT ALL PRIVILEGES ON DATABASE lifefit TO lifefit_user;
+   GRANT ALL PRIVILEGES ON DATABASE lifefit_db TO lifefit_user;
    ```
 2. Si usas Docker puedes levantar un contenedor de PostgreSQL con las mismas credenciales; solo ajusta `DB_HOST` y `DB_PORT` al exponerlo.
 
@@ -34,7 +34,7 @@ DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 FRONTEND_URL=http://localhost:3000
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 DB_ENGINE=django.db.backends.postgresql
-DB_NAME=lifefit
+DB_NAME=lifefit_db
 DB_USER=lifefit_user
 DB_PASSWORD=cambia_esta_clave
 DB_HOST=localhost
