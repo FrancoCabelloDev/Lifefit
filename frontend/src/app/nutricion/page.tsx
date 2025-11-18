@@ -2,7 +2,7 @@
 
 import DashboardPage from '@/components/dashboard/DashboardPage'
 import { useDashboardAuth } from '@/hooks/useDashboardAuth'
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -34,26 +34,45 @@ export default function NutricionPage() {
   const [assignments, setAssignments] = useState<NutritionAssignment[]>([])
   const [plans, setPlans] = useState<NutritionPlan[]>([])
   const [loading, setLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<NutritionPlan | null>(null)
+  const [planForm, setPlanForm] = useState({
+    name: '',
+    description: '',
+    calories_per_day: 2000,
+    status: 'draft',
+  })
+  const [formError, setFormError] = useState('')
+  const [formSaving, setFormSaving] = useState(false)
+
+  const fetchPlans = async () => {
+    if (!token) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/nutrition/plans/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPlans(Array.isArray(data) ? data : data.results ?? [])
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
 
   useEffect(() => {
     if (!token) return
     const fetchData = async () => {
       try {
-        const [assignmentsResponse, plansResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/nutrition/assignments/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${API_BASE_URL}/api/nutrition/plans/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ])
+        const assignmentsResponse = await fetch(`${API_BASE_URL}/api/nutrition/assignments/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        
+        await fetchPlans()
+        
         if (assignmentsResponse.ok) {
           const data = await assignmentsResponse.json()
           setAssignments(Array.isArray(data) ? data : data.results ?? [])
-        }
-        if (plansResponse.ok) {
-          const data = await plansResponse.json()
-          setPlans(Array.isArray(data) ? data : data.results ?? [])
         }
       } catch (error) {
         console.error(error)
@@ -76,15 +95,101 @@ export default function NutricionPage() {
     userGymId !== null && plans.some((plan) => plan.gym !== null && String(plan.gym) === String(userGymId))
   const showGymEmptyMessage = userGymId !== null && !hasGymSpecificPlans && plans.length > 0
 
+  const canManagePlans = user?.role && ['super_admin', 'gym_admin', 'coach'].includes(user.role)
+
+  const handleCreatePlan = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!token) return
+    setFormSaving(true)
+    setFormError('')
+    try {
+      const url = editingPlan
+        ? `${API_BASE_URL}/api/nutrition/plans/${editingPlan.id}/`
+        : `${API_BASE_URL}/api/nutrition/plans/`
+      const method = editingPlan ? 'PATCH' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(planForm),
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'No pudimos guardar el plan.')
+      }
+      setShowCreateModal(false)
+      setEditingPlan(null)
+      setPlanForm({ name: '', description: '', calories_per_day: 2000, status: 'draft' })
+      fetchPlans()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Ocurrió un error inesperado.')
+    } finally {
+      setFormSaving(false)
+    }
+  }
+
+  const handleEditPlan = (plan: NutritionPlan) => {
+    setEditingPlan(plan)
+    setPlanForm({
+      name: plan.name,
+      description: plan.description,
+      calories_per_day: plan.calories_per_day,
+      status: 'active',
+    })
+    setShowCreateModal(true)
+    setFormError('')
+  }
+
+  const handleDeletePlan = async (planId: string) => {
+    if (!token) return
+    if (!confirm('¿Estás seguro de eliminar este plan?')) return
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/nutrition/plans/${planId}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'No pudimos eliminar el plan.')
+      }
+      fetchPlans()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Ocurrió un error al eliminar.')
+    }
+  }
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false)
+    setEditingPlan(null)
+    setPlanForm({ name: '', description: '', calories_per_day: 2000, status: 'draft' })
+    setFormError('')
+  }
+
   return (
     <DashboardPage user={user} active="/nutricion" loading={loadingState} loadingLabel="Cargando planes de nutrición...">
         <>
           <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
-            <p className="text-xs uppercase text-emerald-600">Nutricion personalizada</p>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Planes disponibles para ti</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-300">
-              Accede al catalogo global de Lifefit y a los planes creados por tu gimnasio.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase text-emerald-600">Nutricion personalizada</p>
+                <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Planes disponibles para ti</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-300">
+                  Accede al catalogo global de Lifefit y a los planes creados por tu gimnasio.
+                </p>
+              </div>
+              {canManagePlans && (
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                >
+                  + Agregar plan
+                </button>
+              )}
+            </div>
           </header>
 
           {activePlan && activePlan.plan_detail ? (
@@ -139,12 +244,38 @@ export default function NutricionPage() {
                   const macroEntries = Object.entries(plan.macros ?? {})
                   return (
                     <div key={plan.id} className="rounded-2xl border border-slate-100 p-4 transition-colors dark:border-slate-800">
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
                           <p className="text-sm font-semibold text-slate-900 dark:text-white">{plan.name}</p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">{plan.description}</p>
                         </div>
-                        <span className="text-xs text-emerald-400">{plan.calories_per_day} kcal/dia</span>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="text-xs text-emerald-400">{plan.calories_per_day} kcal/dia</span>
+                          {canManagePlans && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEditPlan(plan)
+                                }}
+                                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                                title="Editar plan"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeletePlan(plan.id)
+                                }}
+                                className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                                title="Eliminar plan"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       {macroEntries.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-300">
@@ -168,6 +299,95 @@ export default function NutricionPage() {
               )}
             </div>
           </section>
+
+          {showCreateModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+              <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase text-emerald-600">{editingPlan ? 'Editar plan' : 'Nuevo plan'}</p>
+                    <h3 className="text-xl font-semibold text-slate-900">
+                      {editingPlan ? 'Modifica los datos del plan' : 'Crea un nuevo plan de nutrición'}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={handleCloseModal}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
+                  >
+                    Cerrar ✕
+                  </button>
+                </div>
+                <form onSubmit={handleCreatePlan} className="mt-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                    <input
+                      type="text"
+                      required
+                      value={planForm.name}
+                      onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      placeholder="Ej: Plan balanceado 2000 kcal"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Descripción</label>
+                    <textarea
+                      required
+                      value={planForm.description}
+                      onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      placeholder="Ej: Plan equilibrado para mantener peso"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Calorías/día</label>
+                      <input
+                        type="number"
+                        required
+                        min="500"
+                        value={planForm.calories_per_day}
+                        onChange={(e) => setPlanForm({ ...planForm, calories_per_day: parseInt(e.target.value) || 2000 })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Estado</label>
+                      <select
+                        value={planForm.status}
+                        onChange={(e) => setPlanForm({ ...planForm, status: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      >
+                        <option value="draft">Borrador</option>
+                        <option value="active">Activo</option>
+                        <option value="archived">Archivado</option>
+                      </select>
+                    </div>
+                  </div>
+                  {formError && (
+                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{formError}</p>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={formSaving}
+                      className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                    >
+                      {formSaving ? 'Guardando...' : editingPlan ? 'Guardar cambios' : 'Crear plan'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </>
     </DashboardPage>
   )

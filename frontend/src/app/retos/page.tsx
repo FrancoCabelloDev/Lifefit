@@ -2,7 +2,7 @@
 
 import DashboardPage from '@/components/dashboard/DashboardPage'
 import { useDashboardAuth } from '@/hooks/useDashboardAuth'
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -15,6 +15,7 @@ type Challenge = {
   start_date: string
   end_date: string
   reward_points: number
+  goal_value: number
   status: string
 }
 
@@ -39,15 +40,41 @@ export default function RetosPage() {
   const [participations, setParticipations] = useState<Participation[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null)
+  const [challengeForm, setChallengeForm] = useState({
+    name: '',
+    description: '',
+    type: 'workouts',
+    start_date: '',
+    end_date: '',
+    reward_points: 100,
+    goal_value: 10,
+    status: 'draft',
+  })
+  const [formError, setFormError] = useState('')
+  const [formSaving, setFormSaving] = useState(false)
+
+  const fetchChallenges = async () => {
+    if (!token) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/challenges/challenges/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setChallenges(Array.isArray(data) ? data : data.results ?? [])
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
 
   useEffect(() => {
     if (!token) return
     const fetchData = async () => {
       try {
-        const [challengesRes, participationRes, leaderboardRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/challenges/challenges/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [participationRes, leaderboardRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/challenges/participations/`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
@@ -56,10 +83,8 @@ export default function RetosPage() {
           }),
         ])
 
-        if (challengesRes.ok) {
-          const data = await challengesRes.json()
-          setChallenges(Array.isArray(data) ? data : data.results ?? [])
-        }
+        await fetchChallenges()
+
         if (participationRes.ok) {
           const data = await participationRes.json()
           setParticipations(Array.isArray(data) ? data : data.results ?? [])
@@ -90,15 +115,123 @@ export default function RetosPage() {
     userGymId !== null && challenges.some((challenge) => challenge.gym !== null && String(challenge.gym) === String(userGymId))
   const showGymEmptyMessage = userGymId !== null && !hasGymSpecificChallenges && challenges.length > 0
 
+  const canManageChallenges = user?.role && ['super_admin', 'gym_admin', 'coach'].includes(user.role)
+
+  const handleCreateChallenge = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!token) return
+    setFormSaving(true)
+    setFormError('')
+    try {
+      const url = editingChallenge
+        ? `${API_BASE_URL}/api/challenges/challenges/${editingChallenge.id}/`
+        : `${API_BASE_URL}/api/challenges/challenges/`
+      const method = editingChallenge ? 'PATCH' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(challengeForm),
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'No pudimos guardar el reto.')
+      }
+      setShowCreateModal(false)
+      setEditingChallenge(null)
+      setChallengeForm({
+        name: '',
+        description: '',
+        type: 'workouts',
+        start_date: '',
+        end_date: '',
+        reward_points: 100,
+        goal_value: 10,
+        status: 'draft',
+      })
+      fetchChallenges()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Ocurrió un error inesperado.')
+    } finally {
+      setFormSaving(false)
+    }
+  }
+
+  const handleEditChallenge = (challenge: Challenge) => {
+    setEditingChallenge(challenge)
+    setChallengeForm({
+      name: challenge.name,
+      description: challenge.description,
+      type: challenge.type,
+      start_date: challenge.start_date,
+      end_date: challenge.end_date,
+      reward_points: challenge.reward_points,
+      goal_value: challenge.goal_value || 10,
+      status: challenge.status,
+    })
+    setShowCreateModal(true)
+    setFormError('')
+  }
+
+  const handleDeleteChallenge = async (challengeId: string) => {
+    if (!token) return
+    if (!confirm('¿Estás seguro de eliminar este reto?')) return
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/challenges/challenges/${challengeId}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'No pudimos eliminar el reto.')
+      }
+      fetchChallenges()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Ocurrió un error al eliminar.')
+    }
+  }
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false)
+    setEditingChallenge(null)
+    setChallengeForm({
+      name: '',
+      description: '',
+      type: 'workouts',
+      start_date: '',
+      end_date: '',
+      reward_points: 100,
+      goal_value: 10,
+      status: 'draft',
+    })
+    setFormError('')
+  }
+
   return (
     <DashboardPage user={user} active="/retos" loading={loadingState} loadingLabel="Cargando tus retos...">
         <>
           <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
-            <p className="text-xs uppercase text-emerald-600">Retos activos</p>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Gamificacion y motivacion</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-300">
-              Unete a los desafios globales de Lifefit o de tu gimnasio para sumar puntos y subir en el ranking.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase text-emerald-600">Retos activos</p>
+                <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Gamificacion y motivacion</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-300">
+                  Unete a los desafios globales de Lifefit o de tu gimnasio para sumar puntos y subir en el ranking.
+                </p>
+              </div>
+              {canManageChallenges && (
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                >
+                  + Agregar reto
+                </button>
+              )}
+            </div>
           </header>
 
           <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
@@ -116,12 +249,38 @@ export default function RetosPage() {
                 const progress = userParticipation[challenge.id]?.progress ?? 0
                 return (
                   <div key={challenge.id} className="rounded-2xl border border-slate-100 p-4 transition-colors dark:border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
                         <p className="text-sm font-semibold text-slate-900 dark:text-white">{challenge.name}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">{challenge.description}</p>
                       </div>
-                      <span className="text-xs text-emerald-400">{challenge.reward_points} pts</span>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="text-xs text-emerald-400">{challenge.reward_points} pts</span>
+                        {canManageChallenges && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditChallenge(challenge)
+                              }}
+                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                              title="Editar reto"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteChallenge(challenge.id)
+                              }}
+                              className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                              title="Eliminar reto"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
                       <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
@@ -140,26 +299,144 @@ export default function RetosPage() {
             </div>
           </section>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Ranking</h2>
-              <span className="text-xs text-slate-500 dark:text-slate-300">Top 20</span>
-            </div>
-            <ul className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
-              {leaderboard.map((entry, index) => (
-                <li key={entry.id} className="flex items-center justify-between py-3">
+          {showCreateModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+              <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                      #{index + 1} {entry.user_detail?.email ?? 'Atleta'}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Nivel {entry.level}</p>
+                    <p className="text-xs uppercase text-emerald-600">{editingChallenge ? 'Editar reto' : 'Nuevo reto'}</p>
+                    <h3 className="text-xl font-semibold text-slate-900">
+                      {editingChallenge ? 'Modifica los datos del reto' : 'Crea un nuevo reto'}
+                    </h3>
                   </div>
-                  <div className="text-sm font-semibold text-emerald-400">{entry.total_points} pts</div>
-                </li>
-              ))}
-              {!leaderboard.length && <p className="text-sm text-slate-500 dark:text-slate-400">Aun no hay ranking disponible.</p>}
-            </ul>
-          </section>
+                  <button
+                    onClick={handleCloseModal}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
+                  >
+                    Cerrar ✕
+                  </button>
+                </div>
+                <form onSubmit={handleCreateChallenge} className="mt-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                    <input
+                      type="text"
+                      required
+                      value={challengeForm.name}
+                      onChange={(e) => setChallengeForm({ ...challengeForm, name: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      placeholder="Ej: Ganar proteína"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Descripción</label>
+                    <textarea
+                      required
+                      value={challengeForm.description}
+                      onChange={(e) => setChallengeForm({ ...challengeForm, description: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      placeholder="Ej: Consumir durante 10 días 80 gramos de proteína animal"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Tipo</label>
+                      <select
+                        value={challengeForm.type}
+                        onChange={(e) => setChallengeForm({ ...challengeForm, type: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      >
+                        <option value="workouts">Entrenamientos</option>
+                        <option value="attendance">Asistencia</option>
+                        <option value="distance">Distancia</option>
+                        <option value="nutrition">Nutrición</option>
+                        <option value="mixed">Mixto</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Estado</label>
+                      <select
+                        value={challengeForm.status}
+                        onChange={(e) => setChallengeForm({ ...challengeForm, status: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      >
+                        <option value="draft">Borrador</option>
+                        <option value="active">Activo</option>
+                        <option value="completed">Completado</option>
+                        <option value="archived">Archivado</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Fecha inicio</label>
+                      <input
+                        type="date"
+                        required
+                        value={challengeForm.start_date}
+                        onChange={(e) => setChallengeForm({ ...challengeForm, start_date: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Fecha fin</label>
+                      <input
+                        type="date"
+                        required
+                        value={challengeForm.end_date}
+                        onChange={(e) => setChallengeForm({ ...challengeForm, end_date: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Puntos de recompensa</label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        value={challengeForm.reward_points}
+                        onChange={(e) => setChallengeForm({ ...challengeForm, reward_points: parseInt(e.target.value) || 0 })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">Meta (valor)</label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={challengeForm.goal_value}
+                        onChange={(e) => setChallengeForm({ ...challengeForm, goal_value: parseInt(e.target.value) || 10 })}
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  {formError && (
+                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{formError}</p>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={formSaving}
+                      className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                    >
+                      {formSaving ? 'Guardando...' : editingChallenge ? 'Guardar cambios' : 'Crear reto'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </>
       </DashboardPage>
   )
