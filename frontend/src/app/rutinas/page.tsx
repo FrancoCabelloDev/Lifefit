@@ -200,7 +200,7 @@ export default function RutinasPage() {
           <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <p className="text-xs uppercase text-emerald-600">Rutinas</p>
             <h1 className="text-2xl font-semibold text-slate-900">Entrena con rutinas personalizadas</h1>
-            <p className="text-sm text-slate-500">Accede al catÃ¡logo global de Lifefit y a los planes creados por tu gym.</p>
+            <p className="text-sm text-slate-500">Accede al catálogo global de Lifefit y a los planes creados por tu gym.</p>
           </header>
 
           <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
@@ -224,7 +224,7 @@ export default function RutinasPage() {
 
             {showGymEmptyMessage && (
               <p className="mb-4 text-xs text-slate-400">
-                Tu gym aÃºn no ha publicado rutinas propias. EstÃ¡s viendo las rutinas globales de Lifefit.
+                Tu gym aún no ha publicado rutinas propias. Estás viendo las rutinas globales de Lifefit.
               </p>
             )}
 
@@ -292,9 +292,9 @@ export default function RutinasPage() {
                 <p className="text-sm text-slate-500">
                   {activeCategory === 'todas'
                     ? userGymId !== null
-                      ? 'AÃºn no hay rutinas disponibles para tu cuenta.'
-                      : 'AÃºn no hay rutinas globales disponibles.'
-                    : 'No hay rutinas en esta categorÃ­a.'}
+                      ? 'Aún no hay rutinas disponibles para tu cuenta.'
+                      : 'Aún no hay rutinas globales disponibles.'
+                    : 'No hay rutinas en esta categoría.'}
                 </p>
               )}
             </div>

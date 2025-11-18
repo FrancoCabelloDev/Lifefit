@@ -117,8 +117,8 @@ export default function AdminPage() {
   const baseFieldClass =
     'w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 placeholder:text-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100'
 
-  const authHeaders = useMemo(() => {
-    if (!token) return {}
+  const authHeaders = useMemo<HeadersInit | undefined>(() => {
+    if (!token) return undefined
     return {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',

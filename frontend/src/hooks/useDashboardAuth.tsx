@@ -44,12 +44,15 @@ const readStoredToken = () => {
 }
 
 export function DashboardAuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<DashboardUser | null>(() => readStoredUser())
-  const [token, setToken] = useState<string | null>(() => readStoredToken())
+  const [user, setUser] = useState<DashboardUser | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  const [hydrated, setHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    setToken(readStoredToken())
+    setUser(readStoredUser())
+    setHydrated(true)
 
     const syncFromStorage = () => {
       setToken(readStoredToken())
@@ -57,7 +60,6 @@ export function DashboardAuthProvider({ children }: { children: React.ReactNode 
     }
 
     window.addEventListener(AUTH_EVENT, syncFromStorage)
-    syncFromStorage()
 
     return () => {
       window.removeEventListener(AUTH_EVENT, syncFromStorage)
@@ -65,6 +67,7 @@ export function DashboardAuthProvider({ children }: { children: React.ReactNode 
   }, [])
 
   useEffect(() => {
+    if (!hydrated) return
     if (!token) {
       setLoading(false)
       return

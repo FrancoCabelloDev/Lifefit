@@ -1,0 +1,165 @@
+Pasos para poblar rutinas globales en Lifefit
+============================================
+
+Los bloques están listos para copiar/pegar en psql u otro cliente. Reemplaza `<UUID_SUPER_ADMIN>` por el id real de tu super admin.
+
+1. Obtener el UUID del super admin
+   ```sql
+   SELECT id, email
+   FROM accounts_user
+   WHERE email = 'admin@lifefit.com';
+   ```
+
+2. Habilitar `pgcrypto` (una sola vez)
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS pgcrypto;
+   ```
+
+3. Crear ejercicios base (insertar todos los que faltan)
+   ```sql
+   INSERT INTO workouts_exercise (
+     id, gym_id, name, category, equipment, muscle_group, description, media_url, created_at, updated_at
+   )
+   VALUES
+     (gen_random_uuid(), NULL, 'Jumping Jacks', 'cardio', '', 'Full body', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Sentadilla air squat', 'strength', '', 'Piernas', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Flexiones inclinadas', 'strength', '', 'Pecho', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Plancha', 'mobility', '', 'Core', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Mountain Climbers', 'cardio', '', 'Core', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Burpee', 'hiit', '', 'Full body', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Kettlebell Swing', 'strength', 'Kettlebell', 'Posterior', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Battle Rope', 'cardio', 'Battle rope', 'Full body', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Sprint en cinta', 'cardio', 'Cinta', 'Full body', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Box Jump', 'hiit', 'Cajón', 'Piernas', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Russian Twist', 'strength', '', 'Abdomen', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Sentadilla frontal', 'strength', 'Barra', 'Piernas', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Peso muerto rumano', 'strength', 'Barra', 'Posterior', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Press de banca', 'strength', 'Barra', 'Pecho', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Remo con barra', 'strength', 'Barra', 'Espalda', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Farmer Walk', 'strength', 'Mancuernas', 'Grip', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Caminata inclinada', 'cardio', 'Cinta', 'Piernas', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Remo cardio', 'cardio', 'Remo', 'Full body', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Bicicleta indoor', 'cardio', 'Bici', 'Piernas', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Saltar soga', 'cardio', 'Soga', 'Full body', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Dead Bug', 'mobility', '', 'Core', '', '', NOW(), NOW()),
+     (gen_random_uuid(), NULL, 'Elevaciones de piernas', 'strength', '', 'Abdomen', '', '', NOW(), NOW())
+   ON CONFLICT (gym_id, name) DO NOTHING;
+   ```
+
+4. Crear rutinas globales (con puntos y estado publicado)
+   ```sql
+   WITH setup AS (
+     SELECT
+       '<UUID_SUPER_ADMIN>'::uuid AS creator_id,
+       NULL::uuid AS global_gym
+   )
+   INSERT INTO workouts_workoutroutine (
+     id, gym_id, name, objective, level, duration_minutes,
+     status, points_reward, created_by_id, is_public, notes, created_at, updated_at
+   )
+   VALUES
+     (gen_random_uuid(), (SELECT global_gym FROM setup),
+      'Full Body Express','Rutina rápida para todo el cuerpo','intermediate',45,'published',250,
+      (SELECT creator_id FROM setup),TRUE,'Fuerza + core',NOW(),NOW()),
+     (gen_random_uuid(), (SELECT global_gym FROM setup),
+      'HIIT Metabólico 30','Bloques intensos para maximizar calorías','advanced',30,'published',300,
+      (SELECT creator_id FROM setup),TRUE,'HIIT + finisher',NOW(),NOW()),
+     (gen_random_uuid(), (SELECT global_gym FROM setup),
+      'Fuerza Progresiva','Trabajo de fuerza compuesta','intermediate',50,'published',320,
+      (SELECT creator_id FROM setup),TRUE,'5x5 y accesorios',NOW(),NOW()),
+     (gen_random_uuid(), (SELECT global_gym FROM setup),
+      'Cardio Burn 45','Circuito cardio continuo para principiantes','beginner',45,'published',220,
+      (SELECT creator_id FROM setup),TRUE,'Cardio continuo',NOW(),NOW())
+   ON CONFLICT (name) DO NOTHING;
+   ```
+
+5. (Opcional) Limpiar ejercicios previos
+   ```sql
+   DELETE FROM workouts_routineexercise
+   WHERE routine_id IN (
+     SELECT id FROM workouts_workoutroutine
+     WHERE name IN ('Full Body Express','HIIT Metabólico 30','Fuerza Progresiva','Cardio Burn 45')
+   );
+   ```
+
+6. Insertar ejercicios en cada rutina
+   ```sql
+   WITH routine_lookup AS (
+     SELECT id, name
+     FROM workouts_workoutroutine
+     WHERE name IN ('Full Body Express','HIIT Metabólico 30','Fuerza Progresiva','Cardio Burn 45')
+   ),
+   exercise_map AS (
+     SELECT name, id
+     FROM workouts_exercise
+     WHERE name IN (
+       'Jumping Jacks','Sentadilla air squat','Flexiones inclinadas','Plancha','Mountain Climbers',
+       'Burpee','Kettlebell Swing','Battle Rope','Sprint en cinta','Box Jump','Russian Twist',
+       'Sentadilla frontal','Peso muerto rumano','Press de banca','Remo con barra','Farmer Walk',
+       'Caminata inclinada','Remo cardio','Bicicleta indoor','Saltar soga','Dead Bug','Elevaciones de piernas'
+     )
+   ),
+   data AS (
+     SELECT
+       routine_name::text,
+       exercise_name::text,
+       ord::int,
+       sets::int,
+       reps::int,
+       rest::int,
+       tempo::text,
+       weight_kg::numeric
+     FROM (VALUES
+       ('Full Body Express','Jumping Jacks',1,3,40,20,'AMRAP',NULL),
+       ('Full Body Express','Sentadilla air squat',2,4,15,60,'3010',NULL),
+       ('Full Body Express','Flexiones inclinadas',3,4,12,60,'2010',NULL),
+       ('Full Body Express','Plancha',4,3,45,30,'ISO',NULL),
+       ('Full Body Express','Mountain Climbers',5,3,30,30,'AFAP',NULL),
+       ('HIIT Metabólico 30','Burpee',1,3,40,20,'AFAP',NULL),
+       ('HIIT Metabólico 30','Kettlebell Swing',2,3,15,20,'AFAP',NULL),
+       ('HIIT Metabólico 30','Battle Rope',3,3,40,20,'AFAP',NULL),
+       ('HIIT Metabólico 30','Sprint en cinta',4,2,30,30,'AFAP',NULL),
+       ('HIIT Metabólico 30','Box Jump',5,2,15,45,'AFAP',NULL),
+       ('HIIT Metabólico 30','Russian Twist',6,3,20,30,'2010',NULL),
+       ('Fuerza Progresiva','Sentadilla frontal',1,5,5,120,'3010',NULL),
+       ('Fuerza Progresiva','Peso muerto rumano',2,4,8,90,'2110',NULL),
+       ('Fuerza Progresiva','Press de banca',3,5,5,120,'3010',NULL),
+       ('Fuerza Progresiva','Remo con barra',4,4,8,90,'2110',NULL),
+       ('Fuerza Progresiva','Farmer Walk',5,4,30,60,'WALK',NULL),
+       ('Cardio Burn 45','Caminata inclinada',1,3,8,0,'RPE6',NULL),
+       ('Cardio Burn 45','Remo cardio',2,3,6,0,'RPE7',NULL),
+       ('Cardio Burn 45','Bicicleta indoor',3,3,6,0,'RPE7',NULL),
+       ('Cardio Burn 45','Saltar soga',4,3,120,60,'AFAP',NULL),
+       ('Cardio Burn 45','Dead Bug',5,3,12,30,'2111',NULL),
+       ('Cardio Burn 45','Elevaciones de piernas',6,3,12,30,'2111',NULL)
+     ) AS t(routine_name, exercise_name, ord, sets, reps, rest, tempo, weight_kg)
+   )
+   INSERT INTO workouts_routineexercise (
+     id, routine_id, exercise_id, "order", sets, reps, rest_seconds, tempo, weight_kg, created_at, updated_at
+   )
+   SELECT
+     gen_random_uuid(),
+     rl.id,
+     em.id,
+     d.ord,
+     d.sets,
+     d.reps,
+     d.rest,
+     d.tempo,
+     d.weight_kg,
+     NOW(),
+     NOW()
+   FROM data d
+   JOIN routine_lookup rl ON rl.name = d.routine_name
+   JOIN exercise_map em ON em.name = d.exercise_name;
+   ```
+
+7. Verificar que todo quedó cargado
+   ```sql
+   SELECT r.name, COUNT(re.id) AS ejercicios
+   FROM workouts_workoutroutine r
+   LEFT JOIN workouts_routineexercise re ON re.routine_id = r.id
+   WHERE r.name IN ('Full Body Express','HIIT Metabólico 30','Fuerza Progresiva','Cardio Burn 45')
+   GROUP BY r.name;
+   ```
+   Finalmente, recarga `/rutinas` en la app para ver los planes y puntos reflejados.
