@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
-type Theme = 'light' | 'dark'
+export type Theme = 'light' | 'dark'
 
 type ThemeContextValue = {
   theme: Theme
@@ -13,25 +13,31 @@ type ThemeContextValue = {
 const STORAGE_KEY = 'lifefit_theme'
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
-const getPreferredTheme = (): Theme => {
-  if (typeof window === 'undefined') return 'light'
-  const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null
-  if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+const persistTheme = (value: Theme) => {
+  if (typeof document === 'undefined') return
+  try {
+    window.localStorage.setItem(STORAGE_KEY, value)
+  } catch (error) {
+    console.error(error)
+  }
+  document.cookie = `${STORAGE_KEY}=${value}; path=/; max-age=31536000`
+  const root = document.documentElement
+  root.classList.remove('light', 'dark')
+  root.classList.add(value === 'dark' ? 'dark' : 'light')
+  root.dataset.theme = value
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() =>
-    typeof document !== 'undefined' ? (document.documentElement.classList.contains('dark') ? 'dark' : 'light') : 'light',
-  )
+export function ThemeProvider({ children, initialTheme = 'light' }: { children: React.ReactNode; initialTheme?: Theme }) {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+    }
+    return initialTheme
+  })
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(STORAGE_KEY, theme)
-    const root = document.documentElement
-    root.classList.remove('light', 'dark')
-    root.classList.add(theme === 'dark' ? 'dark' : 'light')
-    root.dataset.theme = theme
+    persistTheme(theme)
   }, [theme])
 
   const setTheme = (value: Theme) => {

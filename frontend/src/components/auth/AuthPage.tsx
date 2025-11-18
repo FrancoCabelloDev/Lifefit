@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 import { AUTH_EVENT } from '@/hooks/useDashboardAuth'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import { useTheme } from '@/hooks/useTheme'
 
 type AuthPageProps = {
   mode: 'login' | 'register'
@@ -83,9 +82,6 @@ export default function AuthPage({ mode }: AuthPageProps) {
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
-
   const notifyAuthUpdate = () => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event(AUTH_EVENT))
@@ -204,19 +200,19 @@ export default function AuthPage({ mode }: AuthPageProps) {
   }
 
   return (
-    <div className={`min-h-screen transition-colors ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
       <header
-        className={`border-b backdrop-blur-md transition-colors ${isDark ? 'border-slate-800 bg-slate-950/70' : 'border-slate-100 bg-white/80'}`}
+        className="border-b border-slate-100 bg-white/80 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-950/70"
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:py-5">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
               <span>Lf</span>
             </div>
-            <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Lifefit</span>
+            <span className="text-lg font-semibold text-slate-900 dark:text-white">Lifefit</span>
           </Link>
 
-          <nav className={`hidden items-center gap-6 text-sm md:flex ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <nav className="hidden items-center gap-6 text-sm text-slate-600 transition-colors dark:text-slate-300 md:flex">
             <Link href="/" className="transition-colors hover:text-emerald-400">
               Inicio
             </Link>
@@ -243,7 +239,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
           <div className="flex items-center gap-3">
             <Link
               href="/registrarse"
-              className={`hidden text-sm md:inline-block ${isDark ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+              className="hidden text-sm text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-200 dark:hover:text-white md:inline-block"
             >
               Registrarse
             </Link>
@@ -260,20 +256,16 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 lg:flex-row lg:items-center lg:py-16">
         <div className="flex-1 space-y-6">
-          <div
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-medium ${
-              isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-50 text-emerald-700'
-            }`}
-          >
+          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             Disponible para gimnasios y atletas
           </div>
 
           <div className="space-y-3">
-            <h1 className={`text-3xl font-bold tracking-tight md:text-4xl ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white md:text-4xl">
               Entrena. Gana puntos. Sube de nivel.
             </h1>
-            <p className={`max-w-xl text-sm md:text-base ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300 md:text-base">
               Gestiona retos, ranking e insignias en un solo lugar. Las cuentas de acceso
               dan seguimiento al progreso de atletas, entrenadores y gimnasios.
             </p>
@@ -295,7 +287,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
             </div>
           </div>
 
-          <ul className={`space-y-2 text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+          <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
             {benefits.map((benefit) => (
               <li key={benefit} className="flex items-center gap-2">
                 <span className="h-5 w-5 rounded-full border border-emerald-500/30 bg-emerald-50 text-center text-xs font-medium text-emerald-600">
@@ -306,7 +298,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
             ))}
           </ul>
 
-          <div className={`flex flex-wrap gap-8 text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+          <div className="flex flex-wrap gap-8 text-sm text-slate-700 dark:text-slate-200">
             {stats.map((stat) => (
               <div key={stat.label}>
                 <div className="text-base font-semibold">{stat.value}</div>
@@ -325,8 +317,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
               <p className="text-xs font-medium uppercase text-emerald-600">
                 {mode === 'login' ? 'Bienvenido de vuelta' : 'Comencemos'}
               </p>
-              <h2 className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{copy.title}</h2>
-              <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{copy.description}</p>
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{copy.title}</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{copy.description}</p>
             </div>
 
             <div className="space-y-3">

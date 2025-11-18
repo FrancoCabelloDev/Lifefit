@@ -1,27 +1,19 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import { useTheme } from '@/hooks/useTheme'
 
 export default function HeroSection() {
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
-
   return (
     <>
-      <header
-        className={`sticky top-0 z-20 border-b backdrop-blur-md transition-colors ${
-          isDark ? 'border-slate-800 bg-slate-950/70' : 'border-slate-100 bg-white/80'
-        }`}
-      >
+      <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/80 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-950/70">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:py-4">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">Lf</div>
-            <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Lifefit</span>
+            <span className="text-lg font-semibold text-slate-900 dark:text-white">Lifefit</span>
           </Link>
 
-          <nav className={`hidden items-center gap-6 text-sm md:flex ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <nav className="hidden items-center gap-6 text-sm text-slate-600 transition-colors dark:text-slate-300 md:flex">
             {[
               { href: '/', label: 'Inicio' },
               { href: '/sobre-nosotros', label: 'Sobre nosotros' },
@@ -41,7 +33,7 @@ export default function HeroSection() {
             <ThemeToggle variant="icon" />
             <Link
               href="/registrarse"
-              className={`hidden text-sm md:inline-block ${isDark ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+              className="hidden text-sm text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-200 dark:hover:text-white md:inline-block"
             >
               Registrarse
             </Link>
@@ -57,26 +49,20 @@ export default function HeroSection() {
 
       <section
         id="inicio"
-        className={`mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 transition-colors md:flex-row md:items-center md:py-16 ${
-          isDark ? 'text-slate-100' : 'text-slate-900'
-        }`}
+        className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 text-slate-900 transition-colors dark:text-slate-100 md:flex-row md:items-center md:py-16"
       >
         <div className="flex-1 space-y-6">
-          <div
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-              isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-50 text-emerald-700'
-            }`}
-          >
+          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
             <span className="h-2 w-2 rounded-full bg-emerald-500" /> Disponible para gimnasios y atletas
           </div>
 
           <div className="space-y-3">
-            <h1 className={`text-3xl font-bold tracking-tight md:text-4xl lg:text-5xl ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white md:text-4xl lg:text-5xl">
               Entrena. Gana puntos.
               <br />
               Sube de nivel.
             </h1>
-            <p className={`max-w-xl text-sm md:text-base ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300 md:text-base">
               Lifefit te motiva con retos, ranking e insignias. Administra rutinas y nutrición en un solo lugar para mantener tu
               compromiso al máximo.
             </p>
@@ -84,20 +70,14 @@ export default function HeroSection() {
 
           <div className="flex flex-wrap items-center gap-3">
             <button className="flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-white shadow-md hover:bg-emerald-600">
-              🚀 Probar demo
+              ¿Listo? Probar demo
             </button>
-            <button
-              className={`flex items-center gap-2 rounded-full border px-5 py-2 text-sm font-medium transition ${
-                isDark
-                  ? 'border-slate-700 text-slate-200 hover:bg-slate-800'
-                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              Ver funciones ▶️
+            <button className="flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+              Ver funciones →
             </button>
           </div>
 
-          <div className={`flex flex-wrap gap-8 text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+          <div className="flex flex-wrap gap-8 text-sm text-slate-700 dark:text-slate-200">
             {[
               { label: 'Adherencia', value: '+30%' },
               { label: 'Abandono', value: '-20%' },
@@ -112,13 +92,9 @@ export default function HeroSection() {
         </div>
 
         <div className="flex-1">
-          <div
-            className={`relative mx-auto max-w-md rounded-3xl p-4 shadow-xl transition-colors md:p-5 ${
-              isDark ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-900'
-            }`}
-          >
+          <div className="relative mx-auto max-w-md rounded-3xl bg-white p-4 text-slate-900 shadow-xl transition-colors dark:bg-slate-800 dark:text-slate-100 md:p-5">
             <div className="absolute -right-4 -top-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-400 text-2xl shadow-lg">
-              🏅
+              ⭐
             </div>
 
             <div className="rounded-2xl bg-emerald-500 px-4 py-4 text-white shadow-inner">
@@ -127,7 +103,7 @@ export default function HeroSection() {
                   <div className="text-sm">Nivel 12</div>
                   <div className="text-lg font-semibold">2,450 puntos</div>
                 </div>
-                <div className="text-xs opacity-90">🔥 650 / 1000 XP</div>
+                <div className="text-xs opacity-90">↑ 650 / 1000 XP</div>
               </div>
               <div className="mt-3 h-2 w-full rounded-full bg-emerald-700/40">
                 <div className="h-2 w-2/3 rounded-full bg-white" />
@@ -135,18 +111,13 @@ export default function HeroSection() {
               <p className="mt-1 text-xs text-emerald-50">650 / 1000 XP para nivel 13</p>
             </div>
 
-            <div className={`mt-4 grid grid-cols-3 gap-3 text-xs ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+            <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-slate-700 dark:text-slate-200">
               {[
                 { icon: '🏆', label: 'Retos', value: '8' },
-                { icon: '💪', label: 'Rutinas', value: '24' },
-                { icon: '📊', label: 'Ranking', value: '#12' },
+                { icon: '📝', label: 'Rutinas', value: '24' },
+                { icon: '🏅', label: 'Ranking', value: '#12' },
               ].map((item) => (
-                <div
-                  key={item.label}
-                  className={`rounded-2xl border p-3 ${
-                    isDark ? 'border-slate-700 bg-slate-900/30' : 'border-slate-100 bg-slate-50'
-                  }`}
-                >
+                <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/30">
                   <div className="text-lg">{item.icon}</div>
                   <div className="mt-1 text-[11px] text-slate-500">{item.label}</div>
                   <div className="text-sm font-semibold">{item.value}</div>
@@ -154,13 +125,13 @@ export default function HeroSection() {
               ))}
             </div>
 
-            <div className={`mt-5 space-y-3 text-xs ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+            <div className="mt-5 space-y-3 text-xs text-slate-700 dark:text-slate-200">
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span>Entrenamientos esta semana</span>
                   <span className="font-semibold">4/5</span>
                 </div>
-                <div className={`h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
+                <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700">
                   <div className="h-2 w-4/5 rounded-full bg-emerald-500" />
                 </div>
               </div>
@@ -169,7 +140,7 @@ export default function HeroSection() {
                   <span>Cumplimiento nutrición</span>
                   <span className="font-semibold">85%</span>
                 </div>
-                <div className={`h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
+                <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700">
                   <div className="h-2 w-[85%] rounded-full bg-indigo-500" />
                 </div>
               </div>
