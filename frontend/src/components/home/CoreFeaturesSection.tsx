@@ -1,66 +1,41 @@
+'use client'
+
 import React from 'react'
+import { useTheme } from '@/hooks/useTheme'
+
+const features = [
+  { icon: '🏆', title: 'Motivación continua', desc: 'Retos, medallas e insignias que mantienen tu compromiso activo.' },
+  { icon: '📋', title: 'Rutinas guiadas', desc: 'Checklist interactivo y temporizador para cada ejercicio.' },
+  { icon: '🥗', title: 'Plan nutricional', desc: 'Macros diarios y seguimiento de cumplimiento con recordatorios.' },
+  { icon: '📊', title: 'Ranking competitivo', desc: 'Ranking por gimnasio y nivel global para medir tu progreso.' },
+]
 
 const CoreFeaturesSection: React.FC = () => {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+  const sectionClasses = `border-t py-12 md:py-16 transition-colors ${isDark ? 'bg-slate-900 text-slate-100 border-slate-800' : 'bg-white text-slate-900 border-slate-100'}`
+  const cardClasses = isDark
+    ? 'rounded-2xl border border-slate-700 bg-slate-800 p-5'
+    : 'rounded-2xl border border-slate-100 bg-slate-50 p-5'
+
   return (
-    <section
-      id="funciones"
-      className="bg-white py-12 md:py-16 border-t border-slate-100"
-    >
+    <section id="funciones" className={sectionClasses}>
       <div className="mx-auto max-w-6xl px-4">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold text-slate-900 md:text-3xl">
-            Todo lo que necesitas para alcanzar tus metas
-          </h2>
-          <p className="mt-2 text-sm text-slate-600 md:text-base max-w-2xl mx-auto">
-            Lifefit combina gamificación, seguimiento y comunidad para mantener tu
-            motivación en máximo nivel.
+          <h2 className="text-2xl font-semibold md:text-3xl">Todo lo que necesitas para alcanzar tus metas</h2>
+          <p className={`mt-2 mx-auto max-w-2xl text-sm md:text-base ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            Lifefit combina gamificación, seguimiento y comunidad para mantener tu motivación en máximo nivel.
           </p>
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <div className="mb-3 text-2xl">🏆</div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              Motivación continua
-            </h3>
-            <p className="mt-2 text-xs text-slate-600">
-              Gamificación real con retos semanales, medallas e insignias que
-              mantienen tu compromiso activo.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <div className="mb-3 text-2xl">📋</div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              Rutinas guiadas
-            </h3>
-            <p className="mt-2 text-xs text-slate-600">
-              Rutinas con checklist interactivo y temporizador para seguir cada
-              ejercicio paso a paso.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <div className="mb-3 text-2xl">🍏</div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              Plan nutricional
-            </h3>
-            <p className="mt-2 text-xs text-slate-600">
-              Plan diario con macros y seguimiento de cumplimiento para alinear tu
-              alimentación con tus metas.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <div className="mb-3 text-2xl">📊</div>
-            <h3 className="text-sm font-semibold text-slate-900">
-              Ranking competitivo
-            </h3>
-            <p className="mt-2 text-xs text-slate-600">
-              Ranking por gimnasio y por semana para competir sanamente con otros
-              atletas y mantenerte motivado.
-            </p>
-          </div>
+          {features.map(({ icon, title, desc }) => (
+            <div key={title} className={cardClasses}>
+              <div className="mb-3 text-2xl">{icon}</div>
+              <h3 className="text-sm font-semibold">{title}</h3>
+              <p className={`mt-2 text-xs md:text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

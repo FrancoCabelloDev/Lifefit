@@ -56,60 +56,43 @@ const FeaturedFunctionsSection: React.FC = () => {
   return (
     <section
       id="funciones"
-      className="bg-slate-50 py-14 md:py-20 border-t border-slate-100"
+      className="border-t border-slate-100 bg-slate-50 py-14 text-slate-900 transition-colors dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 md:py-20"
     >
       <div className="mx-auto max-w-6xl px-4">
-        {/* Título */}
-        <div className="text-center mb-8 md:mb-10">
-          <h2 className="text-2xl md:text-3xl font-semibold text-slate-900">
-            Funciones destacadas
-          </h2>
-          <p className="mt-2 text-sm md:text-base text-slate-600 max-w-2xl mx-auto">
-            Tanto para usuarios finales como para administradores, Lifefit ofrece
-            herramientas completas.
+        <div className="mb-8 text-center md:mb-10">
+          <h2 className="text-2xl font-semibold md:text-3xl">Funciones destacadas</h2>
+          <p className="mt-2 mx-auto max-w-2xl text-sm text-slate-600 dark:text-slate-300 md:text-base">
+            Tanto para usuarios finales como para administradores, Lifefit ofrece herramientas completas.
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex rounded-full bg-slate-100 p-1 text-sm">
-            <button
-              className={`px-4 py-1.5 rounded-full ${
-                tab === 'usuario'
-                  ? 'bg-white shadow-sm text-slate-900'
-                  : 'text-slate-500'
-              }`}
-              onClick={() => setTab('usuario')}
-            >
-              Usuario
-            </button>
-            <button
-              className={`px-4 py-1.5 rounded-full ${
-                tab === 'admin'
-                  ? 'bg-white shadow-sm text-slate-900'
-                  : 'text-slate-500'
-              }`}
-              onClick={() => setTab('admin')}
-            >
-              Administrador
-            </button>
+        <div className="mb-8 flex justify-center">
+          <div className="inline-flex rounded-full bg-slate-100 p-1 text-sm dark:bg-slate-800">
+            {(['usuario', 'admin'] as const).map((option) => (
+              <button
+                key={option}
+                className={`px-4 py-1.5 rounded-full transition ${
+                  tab === option
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+                onClick={() => setTab(option)}
+              >
+                {option === 'usuario' ? 'Usuario' : 'Administrador'}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Grid de funciones */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="rounded-3xl border border-slate-100 bg-white shadow-sm p-5 flex flex-col"
+              className="flex flex-col rounded-3xl border border-slate-100 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900"
             >
-              <div className="mb-4 h-28 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100" />
-              <h3 className="text-sm font-semibold text-slate-900">
-                {feature.title}
-              </h3>
-              <p className="mt-2 text-xs md:text-sm text-slate-600">
-                {feature.description}
-              </p>
+              <div className="mb-4 h-28 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700" />
+              <h3 className="text-sm font-semibold">{feature.title}</h3>
+              <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 md:text-sm">{feature.description}</p>
             </div>
           ))}
         </div>

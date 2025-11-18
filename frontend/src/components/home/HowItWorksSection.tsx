@@ -25,45 +25,45 @@ const HowItWorksSection: React.FC = () => {
   return (
     <section
       id="como-funciona"
-      className="bg-slate-50 py-14 md:py-20 border-t border-slate-100"
+      className="border-t border-slate-100 bg-slate-50 py-14 text-slate-900 transition-colors dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 md:py-20"
     >
       <div className="mx-auto max-w-6xl px-4">
         {/* Título y descripción */}
-        <div className="text-center mb-10 md:mb-14">
-          <h2 className="text-2xl md:text-3xl font-semibold text-slate-900">
+        <div className="mb-10 text-center md:mb-14">
+          <h2 className="text-2xl font-semibold md:text-3xl">
             Cómo funciona Lifefit
           </h2>
-          <p className="mt-2 text-sm md:text-base text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 md:text-base">
             En 3 simples pasos estarás listo para comenzar tu transformación gamificada.
           </p>
         </div>
 
         <div className="relative">
           {/* Línea central que conecta las tarjetas (solo en desktop) */}
-          <div className="pointer-events-none absolute inset-x-10 top-10 hidden h-px bg-emerald-100 md:block" />
+          <div className="pointer-events-none absolute inset-x-10 top-10 hidden h-px bg-emerald-100 dark:bg-emerald-500/30 md:block" />
 
           <div className="grid gap-6 md:grid-cols-3">
             {steps.map((step) => (
               <div
                 key={step.number}
-                className="relative rounded-3xl bg-white border border-slate-100 shadow-sm px-6 py-7 flex flex-col items-center text-center"
+                className="relative flex flex-col items-center rounded-3xl border border-slate-100 bg-white px-6 py-7 text-center shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900"
               >
                 {/* Número de paso */}
-                <div className="absolute -top-4 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-slate-50 text-[11px] font-semibold text-slate-400 border border-slate-200">
+                <div className="absolute -top-4 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   {step.number}
                 </div>
 
                 {/* Icono placeholder verde */}
-                <div className="mb-4 mt-2 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white text-xl">
+                <div className="mb-4 mt-2 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-xl text-white">
                   {step.number === '01' && '👤'}
                   {step.number === '02' && '🎯'}
                   {step.number === '03' && '📈'}
                 </div>
 
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold">
                   {step.title}
                 </h3>
-                <p className="mt-2 text-xs md:text-sm text-slate-600 max-w-xs">
+                <p className="mt-2 max-w-xs text-xs text-slate-600 dark:text-slate-400 md:text-sm">
                   {step.description}
                 </p>
               </div>

@@ -56,27 +56,27 @@ export default function SeguridadPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg">
-          <p className="text-sm text-slate-500">Cargando seguridad...</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-lg dark:bg-slate-900 dark:text-slate-100">
+          <p className="text-sm text-slate-500 dark:text-slate-300">Cargando seguridad...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 transition-colors dark:bg-slate-950">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row">
         <DashboardSidebar user={user} active="/seguridad" />
 
         <main className="flex-1 space-y-6">
-          <header className="rounded-3xl bg-white p-6 shadow-lg">
+          <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <p className="text-xs uppercase text-emerald-600">Seguridad</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Protege tu cuenta</h1>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Protege tu cuenta</h1>
             <p className="text-sm text-slate-500">Actualiza tu contraseña o desconecta proveedores externos.</p>
           </header>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
+          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <h2 className="text-lg font-semibold text-slate-900">Cambiar contraseña</h2>
             <form className="mt-4 space-y-3" onSubmit={handlePasswordChange}>
               <input
@@ -84,7 +84,7 @@ export default function SeguridadPage() {
                 placeholder="Contraseña actual"
                 value={passwordForm.old_password}
                 onChange={(event) => setPasswordForm((prev) => ({ ...prev, old_password: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 required
               />
               <input
@@ -92,7 +92,7 @@ export default function SeguridadPage() {
                 placeholder="Nueva contraseña"
                 value={passwordForm.new_password}
                 onChange={(event) => setPasswordForm((prev) => ({ ...prev, new_password: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 required
               />
               <button
@@ -101,23 +101,23 @@ export default function SeguridadPage() {
               >
                 Actualizar contraseña
               </button>
-              {passwordMessage && <p className="text-center text-xs text-slate-500">{passwordMessage}</p>}
+              {passwordMessage && <p className="text-center text-xs text-slate-500 dark:text-slate-400">{passwordMessage}</p>}
             </form>
           </section>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
-            <h2 className="text-lg font-semibold text-slate-900">Conexiones</h2>
+          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Conexiones</h2>
             <p className="text-sm text-slate-500">
               {user.is_google_account ? 'Tu cuenta está vinculada con Google.' : 'Google no está vinculado actualmente.'}
             </p>
             <button
               onClick={handleDisconnectGoogle}
               disabled={!user.is_google_account}
-              className="mt-4 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-4 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-200 dark:border-slate-700 dark:text-slate-100 dark:hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Desvincular Google
             </button>
-            {googleMessage && <p className="mt-2 text-xs text-slate-500">{googleMessage}</p>}
+            {googleMessage && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{googleMessage}</p>}
           </section>
         </main>
       </div>

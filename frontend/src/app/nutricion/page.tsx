@@ -79,37 +79,37 @@ export default function NutricionPage() {
   return (
     <DashboardPage user={user} active="/nutricion" loading={loadingState} loadingLabel="Cargando planes de nutrición...">
         <>
-          <header className="rounded-3xl bg-white p-6 shadow-lg">
+          <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <p className="text-xs uppercase text-emerald-600">Nutricion personalizada</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Planes disponibles para ti</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Planes disponibles para ti</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-300">
               Accede al catalogo global de Lifefit y a los planes creados por tu gimnasio.
             </p>
           </header>
 
           {activePlan && activePlan.plan_detail ? (
-            <section className="rounded-3xl bg-white p-6 shadow-lg">
+            <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">{activePlan.plan_detail.name}</h2>
-                  <p className="text-sm text-slate-500">{activePlan.plan_detail.description}</p>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{activePlan.plan_detail.name}</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{activePlan.plan_detail.description}</p>
                 </div>
                 <div className="text-right text-sm">
-                  <p className="font-semibold text-emerald-600">{activePlan.plan_detail.calories_per_day} kcal/dia</p>
-                  <p className="text-xs text-slate-500">Cumplimiento {activePlan.compliance_percentage}%</p>
+                  <p className="font-semibold text-emerald-400">{activePlan.plan_detail.calories_per_day} kcal/dia</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Cumplimiento {activePlan.compliance_percentage}%</p>
                 </div>
               </div>
               <div className="mt-4 grid gap-4">
                 {activePlan.plan_detail.meals?.map((meal) => (
-                  <div key={meal.id} className="rounded-2xl border border-slate-100 p-4">
-                    <p className="text-sm font-semibold text-slate-900">
+                  <div key={meal.id} className="rounded-2xl border border-slate-100 p-4 transition-colors dark:border-slate-800">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
                       #{meal.order} {meal.name}
                     </p>
-                    <p className="text-xs text-slate-500 capitalize">{meal.meal_time}</p>
-                    <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                    <p className="text-xs text-slate-500 capitalize dark:text-slate-400">{meal.meal_time}</p>
+                    <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
                       {meal.items?.map((item) => (
                         <li key={item.id}>
-                          {item.food} - <span className="text-xs text-slate-500">{item.portion}</span>
+                          {item.food} - <span className="text-xs text-slate-500 dark:text-slate-400">{item.portion}</span>
                         </li>
                       ))}
                     </ul>
@@ -118,19 +118,19 @@ export default function NutricionPage() {
               </div>
             </section>
           ) : (
-            <section className="rounded-3xl bg-white p-6 text-sm text-slate-500 shadow-lg">
+            <section className="rounded-3xl bg-white p-6 text-sm text-slate-500 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-300">
               No tienes un plan personalizado asignado todavia.
             </section>
           )}
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
+          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Planes disponibles</h2>
-              <span className="text-xs text-slate-500">{plans.length} planes</span>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Planes disponibles</h2>
+              <span className="text-xs text-slate-500 dark:text-slate-300">{plans.length} planes</span>
             </div>
             <div className="mt-4 grid gap-4">
               {showGymEmptyMessage && (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 dark:text-slate-500">
                   Tu gym aun no ha publicado planes propios. Explora los planes globales de Lifefit disponibles para ti.
                 </p>
               )}
@@ -138,29 +138,29 @@ export default function NutricionPage() {
                 plans.map((plan) => {
                   const macroEntries = Object.entries(plan.macros ?? {})
                   return (
-                    <div key={plan.id} className="rounded-2xl border border-slate-100 p-4">
+                    <div key={plan.id} className="rounded-2xl border border-slate-100 p-4 transition-colors dark:border-slate-800">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">{plan.name}</p>
-                          <p className="text-xs text-slate-500">{plan.description}</p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">{plan.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{plan.description}</p>
                         </div>
-                        <span className="text-xs text-emerald-600">{plan.calories_per_day} kcal/dia</span>
+                        <span className="text-xs text-emerald-400">{plan.calories_per_day} kcal/dia</span>
                       </div>
                       {macroEntries.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-300">
                           {macroEntries.map(([macro, value]) => (
-                            <span key={macro} className="rounded-full bg-slate-100 px-3 py-1">
+                            <span key={macro} className="rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">
                               {macro}: {value}g
                             </span>
                           ))}
                         </div>
                       )}
-                      <p className="mt-3 text-xs text-slate-400">{plan.gym ? 'Plan de tu gym' : 'Plan global Lifefit'}</p>
+                      <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{plan.gym ? 'Plan de tu gym' : 'Plan global Lifefit'}</p>
                     </div>
                   )
                 })
               ) : (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {userGymId !== null
                     ? 'Aun no hay planes disponibles para tu cuenta.'
                     : 'Aun no hay planes globales disponibles.'}

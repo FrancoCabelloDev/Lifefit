@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 import { AUTH_EVENT } from '@/hooks/useDashboardAuth'
+import ThemeToggle from '@/components/ui/ThemeToggle'
+import { useTheme } from '@/hooks/useTheme'
 
 type AuthPageProps = {
   mode: 'login' | 'register'
@@ -81,6 +83,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
 
   const notifyAuthUpdate = () => {
     if (typeof window !== 'undefined') {
@@ -200,36 +204,38 @@ export default function AuthPage({ mode }: AuthPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white/80 backdrop-blur-md">
+    <div className={`min-h-screen transition-colors ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+      <header
+        className={`border-b backdrop-blur-md transition-colors ${isDark ? 'border-slate-800 bg-slate-950/70' : 'border-slate-100 bg-white/80'}`}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:py-5">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
               <span>Lf</span>
             </div>
-            <span className="text-lg font-semibold text-slate-900">Lifefit</span>
+            <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Lifefit</span>
           </Link>
 
-          <nav className="hidden items-center gap-6 text-sm text-slate-600 md:flex">
-            <Link href="/" className="hover:text-slate-900">
+          <nav className={`hidden items-center gap-6 text-sm md:flex ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <Link href="/" className="transition-colors hover:text-emerald-400">
               Inicio
             </Link>
-            <Link href="/sobre-nosotros" className="hover:text-slate-900">
+            <Link href="/sobre-nosotros" className="transition-colors hover:text-emerald-400">
               Sobre nosotros
             </Link>
-            <Link href="/funciones" className="hover:text-slate-900">
+            <Link href="/funciones" className="transition-colors hover:text-emerald-400">
               Funciones
             </Link>
-            <Link href="/planes" className="hover:text-slate-900">
+            <Link href="/planes" className="transition-colors hover:text-emerald-400">
               Planes
             </Link>
-            <Link href="/testimonios" className="hover:text-slate-900">
+            <Link href="/testimonios" className="transition-colors hover:text-emerald-400">
               Testimonios
             </Link>
-            <Link href="/faq" className="hover:text-slate-900">
+            <Link href="/faq" className="transition-colors hover:text-emerald-400">
               FAQ
             </Link>
-            <Link href="/contacto" className="hover:text-slate-900">
+            <Link href="/contacto" className="transition-colors hover:text-emerald-400">
               Contacto
             </Link>
           </nav>
@@ -237,10 +243,11 @@ export default function AuthPage({ mode }: AuthPageProps) {
           <div className="flex items-center gap-3">
             <Link
               href="/registrarse"
-              className="hidden text-sm text-slate-600 hover:text-slate-900 md:inline-block"
+              className={`hidden text-sm md:inline-block ${isDark ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Registrarse
             </Link>
+            <ThemeToggle variant="icon" />
             <Link
               href="/ingresar"
               className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-600"
@@ -253,38 +260,42 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 lg:flex-row lg:items-center lg:py-16">
         <div className="flex-1 space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1 text-xs font-medium text-emerald-700">
+          <div
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-1 text-xs font-medium ${
+              isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             Disponible para gimnasios y atletas
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+            <h1 className={`text-3xl font-bold tracking-tight md:text-4xl ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Entrena. Gana puntos. Sube de nivel.
             </h1>
-            <p className="max-w-xl text-sm text-slate-600 md:text-base">
+            <p className={`max-w-xl text-sm md:text-base ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
               Gestiona retos, ranking e insignias en un solo lugar. Las cuentas de acceso
               dan seguimiento al progreso de atletas, entrenadores y gimnasios.
             </p>
           </div>
 
-          <div className="grid gap-3 rounded-3xl bg-white p-5 shadow-lg sm:grid-cols-3">
+          <div className="grid gap-3 rounded-3xl bg-white p-5 shadow-lg dark:bg-slate-900 sm:grid-cols-3">
             <div className="sm:col-span-2">
               <div className="text-xs text-slate-500">Nivel actual</div>
-              <div className="text-lg font-semibold text-slate-900">Nivel 12 · 2,450 pts</div>
-              <div className="mt-3 h-2 rounded-full bg-emerald-100">
+              <div className="text-lg font-semibold text-slate-900 dark:text-white">Nivel 12 · 2,450 pts</div>
+              <div className="mt-3 h-2 rounded-full bg-emerald-100 dark:bg-emerald-500/30">
                 <div className="h-2 w-2/3 rounded-full bg-emerald-500" />
               </div>
               <div className="mt-2 text-xs text-slate-500">650 / 1000 XP para nivel 13</div>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
-              <div className="text-xs uppercase text-slate-500">Retos activos</div>
+            <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              <div className="text-xs uppercase text-slate-500 dark:text-slate-400">Retos activos</div>
               <div className="text-2xl font-semibold text-emerald-600">8</div>
-              <p className="text-xs text-slate-500">Promedio semanal</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Promedio semanal</p>
             </div>
           </div>
 
-          <ul className="space-y-2 text-sm text-slate-700">
+          <ul className={`space-y-2 text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
             {benefits.map((benefit) => (
               <li key={benefit} className="flex items-center gap-2">
                 <span className="h-5 w-5 rounded-full border border-emerald-500/30 bg-emerald-50 text-center text-xs font-medium text-emerald-600">
@@ -295,7 +306,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
             ))}
           </ul>
 
-          <div className="flex flex-wrap gap-8 text-sm text-slate-700">
+          <div className={`flex flex-wrap gap-8 text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
             {stats.map((stat) => (
               <div key={stat.label}>
                 <div className="text-base font-semibold">{stat.value}</div>
@@ -306,7 +317,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
         </div>
 
         <div className="flex-1">
-          <div className="relative rounded-3xl bg-white p-6 shadow-2xl md:p-8">
+          <div className="relative rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 md:p-8">
             <div className="absolute -right-4 -top-4 hidden h-12 w-12 items-center justify-center rounded-full bg-amber-400 text-2xl shadow-lg sm:flex">
               🏆
             </div>
@@ -314,8 +325,8 @@ export default function AuthPage({ mode }: AuthPageProps) {
               <p className="text-xs font-medium uppercase text-emerald-600">
                 {mode === 'login' ? 'Bienvenido de vuelta' : 'Comencemos'}
               </p>
-              <h2 className="text-2xl font-semibold text-slate-900">{copy.title}</h2>
-              <p className="text-sm text-slate-500">{copy.description}</p>
+              <h2 className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{copy.title}</h2>
+              <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{copy.description}</p>
             </div>
 
             <div className="space-y-3">
@@ -347,14 +358,14 @@ export default function AuthPage({ mode }: AuthPageProps) {
               </button>
 
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
-                <span className="h-px flex-1 bg-slate-200" />
+                <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                 o continúa con tu email
-                <span className="h-px flex-1 bg-slate-200" />
+                <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
               </div>
             </div>
 
             {formError && (
-              <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-500/20 dark:text-red-200">
                 {formError}
               </div>
             )}
@@ -362,7 +373,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
             <form onSubmit={handleSubmit} className="space-y-4">
               {copy.fields.map((field) => (
                 <div key={field.id} className="space-y-1.5">
-                  <label htmlFor={field.id} className="text-sm font-medium text-slate-700">
+                  <label htmlFor={field.id} className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     {field.label}
                   </label>
                   <input
@@ -379,14 +390,14 @@ export default function AuthPage({ mode }: AuthPageProps) {
                       }))
                     }
                     disabled={isSubmitting}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-800/70"
                   />
                   {fieldErrors[field.id] && <p className="text-xs text-red-600">{fieldErrors[field.id]}</p>}
                 </div>
               ))}
 
               {mode === 'login' && (
-                <div className="flex items-center justify-between text-sm text-slate-600">
+                <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -409,7 +420,7 @@ export default function AuthPage({ mode }: AuthPageProps) {
               </button>
             </form>
 
-            <p className="mt-4 text-center text-sm text-slate-600">
+            <p className="mt-4 text-center text-sm text-slate-600 dark:text-slate-300">
               {copy.helper}{' '}
               <Link href={copy.helperHref} className="font-semibold text-emerald-600 hover:text-emerald-700">
                 {copy.helperCta}

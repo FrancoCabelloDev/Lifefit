@@ -2,7 +2,7 @@ import React from 'react'
 
 const GymsSection: React.FC = () => {
   return (
-    <section className="bg-emerald-50/60 py-14 md:py-20">
+    <section className="bg-emerald-50/60 py-14 text-slate-900 transition-colors dark:bg-[#0b1323] dark:text-slate-100 md:py-20">
       <div className="mx-auto max-w-6xl px-4">
         {/* Título */}
         <div className="text-center mb-10">
@@ -17,7 +17,7 @@ const GymsSection: React.FC = () => {
 
         {/* KPIs */}
         <div className="grid gap-4 md:grid-cols-3 mb-8">
-          <div className="rounded-2xl bg-white border border-emerald-100 p-5 text-center">
+          <div className="rounded-2xl border border-emerald-100 bg-white p-5 text-center dark:border-emerald-500/30 dark:bg-slate-900">
             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mx-auto">
               📈
             </div>
@@ -26,14 +26,14 @@ const GymsSection: React.FC = () => {
               Adherencia de miembros
             </p>
           </div>
-          <div className="rounded-2xl bg-white border border-emerald-100 p-5 text-center">
+          <div className="rounded-2xl border border-emerald-100 bg-white p-5 text-center dark:border-emerald-500/30 dark:bg-slate-900">
             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mx-auto">
               📉
             </div>
             <div className="text-lg font-semibold text-slate-900">-20%</div>
             <p className="text-xs md:text-sm text-slate-600">Tasa de abandono</p>
           </div>
-          <div className="rounded-2xl bg-white border border-emerald-100 p-5 text-center">
+          <div className="rounded-2xl border border-emerald-100 bg-white p-5 text-center dark:border-emerald-500/30 dark:bg-slate-900">
             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mx-auto">
               ⭐
             </div>
@@ -43,12 +43,12 @@ const GymsSection: React.FC = () => {
         </div>
 
         {/* Bloque grande */}
-        <div className="grid gap-6 md:grid-cols-3 items-stretch">
-          <div className="md:col-span-2 rounded-3xl bg-white border border-emerald-100 p-6 md:p-8">
-            <h3 className="text-sm md:text-base font-semibold text-slate-900 mb-4">
+        <div className="grid items-stretch gap-6 md:grid-cols-3">
+          <div className="md:col-span-2 rounded-3xl border border-emerald-100 bg-white p-6 dark:border-emerald-500/30 dark:bg-slate-900 md:p-8">
+            <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100 md:text-base">
               Potencia tu gimnasio con datos
             </h3>
-            <ul className="space-y-2 text-xs md:text-sm text-slate-700">
+            <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 md:text-sm">
               <li>• Panel de control completo para gestionar usuarios y métricas.</li>
               <li>• Sistema de retos y gamificación personalizable por marca.</li>
               <li>• Reportes de cumplimiento y engagement detallados.</li>
@@ -57,12 +57,12 @@ const GymsSection: React.FC = () => {
             </ul>
           </div>
 
-          <div className="rounded-3xl bg-emerald-100 p-6 md:p-8 flex flex-col justify-between">
+          <div className="flex flex-col justify-between rounded-3xl bg-emerald-100 p-6 text-slate-900 dark:bg-emerald-500/10 dark:text-slate-100 md:p-8">
             <div>
               <p className="text-sm font-semibold text-slate-900 mb-1">
                 ¿Quieres transformar tu gimnasio?
               </p>
-              <p className="text-xs md:text-sm text-slate-700">
+              <p className="text-xs text-slate-700 dark:text-slate-200 md:text-sm">
                 Agenda una demo personalizada con nuestro equipo.
               </p>
             </div>
@@ -70,7 +70,7 @@ const GymsSection: React.FC = () => {
               <button className="w-full rounded-full bg-emerald-500 py-2 text-sm font-medium text-white hover:bg-emerald-600">
                 Hablar con ventas
               </button>
-              <p className="text-[11px] text-slate-600 text-center">
+              <p className="text-center text-[11px] text-slate-600 dark:text-slate-300">
                 Respuesta en menos de 24 horas
               </p>
             </div>

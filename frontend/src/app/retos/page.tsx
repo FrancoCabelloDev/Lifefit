@@ -93,45 +93,45 @@ export default function RetosPage() {
   return (
     <DashboardPage user={user} active="/retos" loading={loadingState} loadingLabel="Cargando tus retos...">
         <>
-          <header className="rounded-3xl bg-white p-6 shadow-lg">
+          <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <p className="text-xs uppercase text-emerald-600">Retos activos</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Gamificacion y motivacion</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Gamificacion y motivacion</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-300">
               Unete a los desafios globales de Lifefit o de tu gimnasio para sumar puntos y subir en el ranking.
             </p>
           </header>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
+          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Retos disponibles</h2>
-              <span className="text-xs text-slate-500">{challenges.length} retos</span>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Retos disponibles</h2>
+              <span className="text-xs text-slate-500 dark:text-slate-300">{challenges.length} retos</span>
             </div>
             <div className="mt-4 grid gap-4">
               {showGymEmptyMessage && (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 dark:text-slate-500">
                   Tu gym aun no ha publicado retos propios. Mientras tanto, explora los retos globales de Lifefit.
                 </p>
               )}
               {challenges.map((challenge) => {
                 const progress = userParticipation[challenge.id]?.progress ?? 0
                 return (
-                  <div key={challenge.id} className="rounded-2xl border border-slate-100 p-4">
+                  <div key={challenge.id} className="rounded-2xl border border-slate-100 p-4 transition-colors dark:border-slate-800">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{challenge.name}</p>
-                        <p className="text-xs text-slate-500">{challenge.description}</p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{challenge.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{challenge.description}</p>
                       </div>
-                      <span className="text-xs text-emerald-600">{challenge.reward_points} pts</span>
+                      <span className="text-xs text-emerald-400">{challenge.reward_points} pts</span>
                     </div>
-                    <div className="mt-3 h-2 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(progress, 100)}%` }} />
+                    <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">Progreso: {progress}%</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Progreso: {progress}%</p>
                   </div>
                 )
               })}
               {!challenges.length && (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {userGymId !== null
                     ? 'Aun no hay retos disponibles para tu cuenta.'
                     : 'Aun no hay retos globales disponibles.'}
@@ -140,24 +140,24 @@ export default function RetosPage() {
             </div>
           </section>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
+          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Ranking</h2>
-              <span className="text-xs text-slate-500">Top 20</span>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Ranking</h2>
+              <span className="text-xs text-slate-500 dark:text-slate-300">Top 20</span>
             </div>
-            <ul className="mt-4 divide-y divide-slate-100">
+            <ul className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
               {leaderboard.map((entry, index) => (
                 <li key={entry.id} className="flex items-center justify-between py-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
                       #{index + 1} {entry.user_detail?.email ?? 'Atleta'}
                     </p>
-                    <p className="text-xs text-slate-500">Nivel {entry.level}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Nivel {entry.level}</p>
                   </div>
-                  <div className="text-sm font-semibold text-emerald-600">{entry.total_points} pts</div>
+                  <div className="text-sm font-semibold text-emerald-400">{entry.total_points} pts</div>
                 </li>
               ))}
-              {!leaderboard.length && <p className="text-sm text-slate-500">Aun no hay ranking disponible.</p>}
+              {!leaderboard.length && <p className="text-sm text-slate-500 dark:text-slate-400">Aun no hay ranking disponible.</p>}
             </ul>
           </section>
         </>

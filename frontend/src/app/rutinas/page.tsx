@@ -197,13 +197,13 @@ export default function RutinasPage() {
   return (
     <DashboardPage user={user} active="/rutinas" loading={loadingState} loadingLabel="Cargando rutinas...">
         <>
-          <header className="rounded-3xl bg-white p-6 shadow-lg">
+          <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <p className="text-xs uppercase text-emerald-600">Rutinas</p>
             <h1 className="text-2xl font-semibold text-slate-900">Entrena con rutinas personalizadas</h1>
             <p className="text-sm text-slate-500">Accede al catÃ¡logo global de Lifefit y a los planes creados por tu gym.</p>
           </header>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
+          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
             <div className="mb-6 flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
               {categories.map((category) => {
                 const label = category === 'todas' ? 'Todas' : CATEGORY_LABELS[category] ?? category
@@ -213,7 +213,7 @@ export default function RutinasPage() {
                     key={category}
                     onClick={() => setActiveCategory(category)}
                     className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold transition ${
-                      isActive ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      isActive ? 'bg-white text-emerald-600 shadow-sm dark:bg-slate-800 dark:text-emerald-300' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
                     }`}
                   >
                     {label}
@@ -301,7 +301,7 @@ export default function RutinasPage() {
           </section>
           {selectedRoutine && (
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 px-4">
-              <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+              <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs uppercase text-emerald-600">Rutina en curso</p>

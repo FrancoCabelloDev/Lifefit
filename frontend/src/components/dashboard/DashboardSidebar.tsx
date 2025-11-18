@@ -42,13 +42,13 @@ export default function DashboardSidebar({ user, active }: SidebarProps) {
 
   return (
     <aside className="lg:w-64">
-      <div className="rounded-3xl bg-white p-6 shadow-lg">
-        <div className="mb-4 rounded-2xl bg-emerald-100 p-4 text-center">
+      <div className="rounded-3xl bg-white p-6 shadow-lg dark:bg-slate-900 dark:text-slate-100 dark:border dark:border-slate-800">
+        <div className="mb-4 rounded-2xl bg-emerald-100 p-4 text-center dark:bg-emerald-500/10">
           <p className="text-xs uppercase text-emerald-600">Atleta</p>
-          <p className="text-lg font-semibold text-slate-900">
+          <p className="text-lg font-semibold text-slate-900 dark:text-white">
             {user.first_name} {user.last_name}
           </p>
-          <p className="text-xs text-slate-500">{user.email}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-300">{user.email}</p>
           <button
             onClick={handleLogout}
             className="mt-3 w-full rounded-2xl border border-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500 hover:text-white"
@@ -64,8 +64,8 @@ export default function DashboardSidebar({ user, active }: SidebarProps) {
               (isActive
                 ? 'bg-emerald-500 text-white'
                 : disabled
-                  ? 'text-slate-400'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900')
+                  ? 'text-slate-400 dark:text-slate-600'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800')
             return disabled ? (
               <span key={label} className={commonClasses}>
                 {label}

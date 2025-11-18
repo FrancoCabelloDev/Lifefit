@@ -1,50 +1,47 @@
-import Link from 'next/link'
-import React from 'react'
+'use client'
 
-const HeroSection: React.FC = () => {
+import Link from 'next/link'
+import ThemeToggle from '@/components/ui/ThemeToggle'
+import { useTheme } from '@/hooks/useTheme'
+
+export default function HeroSection() {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+
   return (
     <>
-      {/* NAVBAR */}
-      <header className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-20">
+      <header
+        className={`sticky top-0 z-20 border-b backdrop-blur-md transition-colors ${
+          isDark ? 'border-slate-800 bg-slate-950/70' : 'border-slate-100 bg-white/80'
+        }`}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:py-4">
-          {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">
-              <span>Lf</span>
-            </div>
-            <span className="text-lg font-semibold text-slate-900">Lifefit</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white font-bold">Lf</div>
+            <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Lifefit</span>
           </Link>
 
-          {/* Links desktop */}
-          <nav className="hidden items-center gap-6 text-sm text-slate-600 md:flex">
-            <Link href="/" className="hover:text-slate-900">
-              Inicio
-            </Link>
-            <Link href="/sobre-nosotros" className="hover:text-slate-900">
-              Sobre nosotros
-            </Link>
-            <Link href="/funciones" className="hover:text-slate-900">
-              Funciones
-            </Link>
-            <Link href="/planes" className="hover:text-slate-900">
-              Planes
-            </Link>
-            <Link href="/testimonios" className="hover:text-slate-900">
-              Testimonios
-            </Link>
-            <Link href="/faq" className="hover:text-slate-900">
-              FAQ
-            </Link>
-            <Link href="/contacto" className="hover:text-slate-900">
-              Contacto
-            </Link>
+          <nav className={`hidden items-center gap-6 text-sm md:flex ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            {[
+              { href: '/', label: 'Inicio' },
+              { href: '/sobre-nosotros', label: 'Sobre nosotros' },
+              { href: '/funciones', label: 'Funciones' },
+              { href: '/planes', label: 'Planes' },
+              { href: '/testimonios', label: 'Testimonios' },
+              { href: '/faq', label: 'FAQ' },
+              { href: '/contacto', label: 'Contacto' },
+            ].map(({ href, label }) => (
+              <Link key={href} href={href} className="transition-colors hover:text-emerald-400">
+                {label}
+              </Link>
+            ))}
           </nav>
 
-          {/* Auth buttons */}
           <div className="flex items-center gap-3">
+            <ThemeToggle variant="icon" />
             <Link
               href="/registrarse"
-              className="hidden text-sm text-slate-600 hover:text-slate-900 md:inline-block"
+              className={`hidden text-sm md:inline-block ${isDark ? 'text-slate-200 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Registrarse
             </Link>
@@ -58,120 +55,121 @@ const HeroSection: React.FC = () => {
         </div>
       </header>
 
-      {/* HERO */}
       <section
         id="inicio"
-        className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 md:flex-row md:items-center md:py-16"
+        className={`mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 transition-colors md:flex-row md:items-center md:py-16 ${
+          isDark ? 'text-slate-100' : 'text-slate-900'
+        }`}
       >
-        {/* Columna izquierda */}
         <div className="flex-1 space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Disponible para gimnasios y atletas
+          <div
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+              isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-500" /> Disponible para gimnasios y atletas
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl lg:text-5xl">
+            <h1 className={`text-3xl font-bold tracking-tight md:text-4xl lg:text-5xl ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Entrena. Gana puntos.
               <br />
               Sube de nivel.
             </h1>
-            <p className="max-w-xl text-sm text-slate-600 md:text-base">
-              Lifefit te motiva con retos, ranking e insignias. Administra rutinas y
-              nutrición en un solo lugar para mantener tu compromiso al máximo.
+            <p className={`max-w-xl text-sm md:text-base ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              Lifefit te motiva con retos, ranking e insignias. Administra rutinas y nutrición en un solo lugar para mantener tu
+              compromiso al máximo.
             </p>
           </div>
 
-          {/* CTAs */}
           <div className="flex flex-wrap items-center gap-3">
             <button className="flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-white shadow-md hover:bg-emerald-600">
-              ▶ Probar demo
+              🚀 Probar demo
             </button>
-            <button className="flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Ver funciones →
+            <button
+              className={`flex items-center gap-2 rounded-full border px-5 py-2 text-sm font-medium transition ${
+                isDark
+                  ? 'border-slate-700 text-slate-200 hover:bg-slate-800'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Ver funciones ▶️
             </button>
           </div>
 
-          {/* Métricas */}
-          <div className="flex flex-wrap gap-8 text-sm text-slate-700">
-            <div>
-              <div className="font-semibold">+30%</div>
-              <div className="text-xs text-slate-500">Adherencia</div>
-            </div>
-            <div>
-              <div className="font-semibold">-20%</div>
-              <div className="text-xs text-slate-500">Abandono</div>
-            </div>
-            <div>
-              <div className="font-semibold">4.6/5</div>
-              <div className="text-xs text-slate-500">NPS Score</div>
-            </div>
+          <div className={`flex flex-wrap gap-8 text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+            {[
+              { label: 'Adherencia', value: '+30%' },
+              { label: 'Abandono', value: '-20%' },
+              { label: 'NPS Score', value: '4.6/5' },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="font-semibold">{item.value}</div>
+                <div className="text-xs text-slate-500">{item.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Columna derecha – tarjeta de progreso */}
         <div className="flex-1">
-          <div className="relative mx-auto max-w-md rounded-3xl bg-white p-4 shadow-xl md:p-5">
-            {/* Badge flotante */}
+          <div
+            className={`relative mx-auto max-w-md rounded-3xl p-4 shadow-xl transition-colors md:p-5 ${
+              isDark ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-900'
+            }`}
+          >
             <div className="absolute -right-4 -top-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-400 text-2xl shadow-lg">
-              🏆
+              🏅
             </div>
 
-            {/* Header verde */}
             <div className="rounded-2xl bg-emerald-500 px-4 py-4 text-white shadow-inner">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm">Nivel 12</div>
                   <div className="text-lg font-semibold">2,450 puntos</div>
                 </div>
-                <div className="text-xs opacity-90">⏱ 650 / 1000 XP</div>
+                <div className="text-xs opacity-90">🔥 650 / 1000 XP</div>
               </div>
-              {/* Barra de XP */}
               <div className="mt-3 h-2 w-full rounded-full bg-emerald-700/40">
                 <div className="h-2 w-2/3 rounded-full bg-white" />
               </div>
-              <p className="mt-1 text-xs text-emerald-50">
-                650 / 1000 XP para nivel 13
-              </p>
+              <p className="mt-1 text-xs text-emerald-50">650 / 1000 XP para nivel 13</p>
             </div>
 
-            {/* Stats principales */}
-            <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-slate-700">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                <div className="text-lg">🏅</div>
-                <div className="mt-1 text-[11px] text-slate-500">Retos</div>
-                <div className="text-sm font-semibold">8</div>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                <div className="text-lg">🎯</div>
-                <div className="mt-1 text-[11px] text-slate-500">Rutinas</div>
-                <div className="text-sm font-semibold">24</div>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                <div className="text-lg">📈</div>
-                <div className="mt-1 text-[11px] text-slate-500">Ranking</div>
-                <div className="text-sm font-semibold">#12</div>
-              </div>
+            <div className={`mt-4 grid grid-cols-3 gap-3 text-xs ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+              {[
+                { icon: '🏆', label: 'Retos', value: '8' },
+                { icon: '💪', label: 'Rutinas', value: '24' },
+                { icon: '📊', label: 'Ranking', value: '#12' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className={`rounded-2xl border p-3 ${
+                    isDark ? 'border-slate-700 bg-slate-900/30' : 'border-slate-100 bg-slate-50'
+                  }`}
+                >
+                  <div className="text-lg">{item.icon}</div>
+                  <div className="mt-1 text-[11px] text-slate-500">{item.label}</div>
+                  <div className="text-sm font-semibold">{item.value}</div>
+                </div>
+              ))}
             </div>
 
-            {/* Barras de progreso */}
-            <div className="mt-5 space-y-3 text-xs text-slate-700">
+            <div className={`mt-5 space-y-3 text-xs ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span>Entrenamientos esta semana</span>
                   <span className="font-semibold">4/5</span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-100">
+                <div className={`h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
                   <div className="h-2 w-4/5 rounded-full bg-emerald-500" />
                 </div>
               </div>
-
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span>Cumplimiento nutrición</span>
                   <span className="font-semibold">85%</span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-100">
+                <div className={`h-2 rounded-full ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
                   <div className="h-2 w-[85%] rounded-full bg-indigo-500" />
                 </div>
               </div>
@@ -182,5 +180,3 @@ const HeroSection: React.FC = () => {
     </>
   )
 }
-
-export default HeroSection
