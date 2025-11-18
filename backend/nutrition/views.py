@@ -1,13 +1,20 @@
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from rest_framework import permissions, viewsets
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.response import Response
 
-from .models import NutritionItem, NutritionMeal, NutritionPlan, UserNutritionPlan
+from .models import MealTemplate, NutritionItem, NutritionMeal, NutritionPlan, UserMealLog, UserNutritionPlan
 from .serializers import (
+    MealTemplateSerializer,
     NutritionItemSerializer,
     NutritionMealSerializer,
+    NutritionPlanDetailSerializer,
     NutritionPlanSerializer,
+    UserMealLogSerializer,
     UserNutritionPlanSerializer,
 )
 
@@ -22,12 +29,16 @@ def global_or_user_gym_filter(user, gym_field="gym"):
 
 
 class NutritionPlanViewSet(viewsets.ModelViewSet):
-    serializer_class = NutritionPlanSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return NutritionPlanDetailSerializer
+        return NutritionPlanSerializer
 
     def get_queryset(self):
         user = self.request.user
-        queryset = NutritionPlan.objects.select_related("gym")
+        queryset = NutritionPlan.objects.select_related("gym").prefetch_related("meal_templates")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
@@ -62,6 +73,96 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar este plan.")
+
+
+class MealTemplateViewSet(viewsets.ModelViewSet):
+    serializer_class = MealTemplateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = MealTemplate.objects.select_related("plan", "plan__gym")
+        
+        # Filter by plan_id if provided
+        plan_id = self.request.query_params.get('plan')
+        if plan_id:
+            queryset = queryset.filter(plan_id=plan_id)
+        
+        if user.role == User.Role.SUPER_ADMIN:
+            return queryset
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(global_or_user_gym_filter(user, "plan__gym"))
+            return queryset.filter(plan__gym__isnull=True)
+        return queryset.filter(global_or_user_gym_filter(user, "plan__gym"))
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
+            raise PermissionDenied("No tienes permisos para crear comidas.")
+        serializer.save()
+
+
+class UserMealLogViewSet(viewsets.ModelViewSet):
+    serializer_class = UserMealLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = UserMealLog.objects.select_related("user", "meal_template", "meal_template__plan")
+        
+        # Filter by date if provided
+        date_param = self.request.query_params.get('date')
+        if date_param:
+            queryset = queryset.filter(date=date_param)
+        
+        # Admins can see all, users only their own
+        if user.role == User.Role.SUPER_ADMIN:
+            return queryset
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            if user.gym_id:
+                return queryset.filter(Q(user_id=user.id) | Q(user__gym_id=user.gym_id))
+            return queryset.filter(user_id=user.id)
+        return queryset.filter(user_id=user.id)
+
+    def perform_create(self, serializer):
+        # Always set the current user
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def today(self, request):
+        """Get today's meal logs for the current user"""
+        today = date.today()
+        logs = self.get_queryset().filter(date=today, user=request.user)
+        serializer = self.get_serializer(logs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def toggle_complete(self, request):
+        """Toggle completion status of a meal log"""
+        meal_template_id = request.data.get('meal_template_id')
+        log_date = request.data.get('date', date.today())
+        
+        if not meal_template_id:
+            return Response(
+                {"error": "meal_template_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get or create the log
+        log, created = UserMealLog.objects.get_or_create(
+            user=request.user,
+            meal_template_id=meal_template_id,
+            date=log_date,
+            defaults={'completed': True}
+        )
+        
+        if not created:
+            log.completed = not log.completed
+            log.save()
+        
+        serializer = self.get_serializer(log)
+        return Response(serializer.data)
 
 
 class NutritionMealViewSet(viewsets.ModelViewSet):
