@@ -49,7 +49,9 @@ const PlansSection: React.FC = () => {
               <li>✔ Dashboard completo</li>
               <li>✔ Rutinas ilimitadas</li>
               <li>✔ Todos los retos</li>
-              <li>✔ Plan de nutrición</li>
+              <li>✔ Planes de nutrición personalizados</li>
+              <li>✔ Tracking de comidas y macros</li>
+              <li>✔ Recetas detalladas paso a paso</li>
               <li>✔ Ranking global</li>
               <li>✔ Insignias premium</li>
               <li>✔ Soporte prioritario</li>

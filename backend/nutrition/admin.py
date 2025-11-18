@@ -16,7 +16,7 @@ class NutritionItemInline(admin.TabularInline):
 
 @admin.register(NutritionPlan)
 class NutritionPlanAdmin(admin.ModelAdmin):
-    list_display = ("name", "gym", "calories_per_day", "protein_g", "carbs_g", "fats_g", "duration_days", "status", "points_reward")
+    list_display = ("name", "gym", "calories_per_day", "protein_g", "carbs_g", "fats_g", "duration_days", "status", "points_reward", "total_meals")
     list_filter = ("status", "gym", "duration_days")
     search_fields = ("name", "description")
     inlines = [MealTemplateInline]
@@ -28,6 +28,10 @@ class NutritionPlanAdmin(admin.ModelAdmin):
             "fields": ("calories_per_day", "protein_g", "carbs_g", "fats_g")
         }),
     )
+    
+    def total_meals(self, obj):
+        return obj.meal_templates.count()
+    total_meals.short_description = "Total de comidas"
 
 
 @admin.register(MealTemplate)

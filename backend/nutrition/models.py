@@ -34,6 +34,20 @@ class NutritionPlan(BaseModel):
 
     def __str__(self) -> str:
         return self.name
+    
+    def get_meals_by_day(self):
+        """Retorna las comidas organizadas por día"""
+        meals_dict = {}
+        for meal in self.meal_templates.all().order_by('day_number', 'order'):
+            day = meal.day_number
+            if day not in meals_dict:
+                meals_dict[day] = []
+            meals_dict[day].append(meal)
+        return meals_dict
+    
+    def get_total_meals(self):
+        """Retorna el total de comidas en el plan"""
+        return self.meal_templates.count()
 
 
 class MealTemplate(BaseModel):

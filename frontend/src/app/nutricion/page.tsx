@@ -87,6 +87,22 @@ export default function NutricionPage() {
   })
   const [formError, setFormError] = useState('')
   const [formSaving, setFormSaving] = useState(false)
+  const [showMealModal, setShowMealModal] = useState(false)
+  const [editingMeal, setEditingMeal] = useState<MealTemplate | null>(null)
+  const [mealForm, setMealForm] = useState({
+    plan: '',
+    day_number: 1,
+    meal_type: 'breakfast',
+    name: '',
+    description: '',
+    calories: 0,
+    protein_g: 0,
+    carbs_g: 0,
+    fats_g: 0,
+    ingredients: '',
+    instructions: '',
+    order: 1,
+  })
 
   const fetchPlans = useCallback(async () => {
     if (!token) return
@@ -297,6 +313,126 @@ export default function NutricionPage() {
     setFormError('')
   }
 
+  const handleCreateMeal = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!mealForm.plan || !mealForm.name) {
+      setFormError('Debes completar los campos obligatorios')
+      return
+    }
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/meal-templates/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify(mealForm),
+      })
+
+      if (response.ok) {
+        await fetchPlans()
+        if (selectedPlan) {
+          const updated = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/plans/${selectedPlan.id}/`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+          })
+          const data = await updated.json()
+          setSelectedPlan(data)
+        }
+        handleCloseMealModal()
+      } else {
+        const errorData = await response.json()
+        setFormError(errorData.detail || 'Error al crear la comida')
+      }
+    } catch (error) {
+      setFormError('Error al crear la comida')
+      console.error(error)
+    }
+  }
+
+  const handleEditMeal = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingMeal || !mealForm.name) {
+      setFormError('Debes completar los campos obligatorios')
+      return
+    }
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/meal-templates/${editingMeal.id}/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify(mealForm),
+      })
+
+      if (response.ok) {
+        await fetchPlans()
+        if (selectedPlan) {
+          const updated = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/plans/${selectedPlan.id}/`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+          })
+          const data = await updated.json()
+          setSelectedPlan(data)
+        }
+        handleCloseMealModal()
+      } else {
+        const errorData = await response.json()
+        setFormError(errorData.detail || 'Error al actualizar la comida')
+      }
+    } catch (error) {
+      setFormError('Error al actualizar la comida')
+      console.error(error)
+    }
+  }
+
+  const handleDeleteMeal = async (mealId: number) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta comida?')) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/meal-templates/${mealId}/`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+      })
+
+      if (response.ok) {
+        await fetchPlans()
+        if (selectedPlan) {
+          const updated = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/plans/${selectedPlan.id}/`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+          })
+          const data = await updated.json()
+          setSelectedPlan(data)
+        }
+      }
+    } catch (error) {
+      console.error('Error al eliminar la comida:', error)
+    }
+  }
+
+  const handleCloseMealModal = () => {
+    setShowMealModal(false)
+    setEditingMeal(null)
+    setMealForm({
+      plan: selectedPlan?.id.toString() || '',
+      day_number: selectedDay,
+      meal_type: 'breakfast',
+      name: '',
+      description: '',
+      calories: 0,
+      protein_g: 0,
+      carbs_g: 0,
+      fats_g: 0,
+      ingredients: '',
+      instructions: '',
+      order: 1,
+    })
+    setFormError('')
+  }
+
   if (!user) {
     return <DashboardPage user={user} active="/nutricion" loading loadingLabel="Cargando..." />
   }
@@ -313,10 +449,12 @@ export default function NutricionPage() {
                 Nutrición Personalizada
               </p>
               <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-                Planes disponibles para ti
+                {canManagePlans ? 'Gestiona tus planes de nutrición' : 'Planes disponibles para ti'}
               </h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                Accede al catálogo global de Lifefit y a los planes creados por tu gimnasio.
+                {canManagePlans 
+                  ? 'Crea planes personalizados y agrega comidas para cada día del plan.'
+                  : 'Accede al catálogo global de Lifefit y a los planes creados por tu gimnasio.'}
               </p>
             </div>
             {canManagePlans && (
@@ -369,21 +507,64 @@ export default function NutricionPage() {
               </div>
 
               {/* Selector de días */}
-              <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
-                {Array.from({ length: selectedPlan.duration_days }, (_, i) => i + 1).map((day) => (
-                  <button
-                    key={day}
-                    onClick={() => setSelectedDay(day)}
-                    className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                      selectedDay === day
-                        ? 'bg-emerald-500 text-white'
-                        : 'border border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-emerald-600'
-                    }`}
-                  >
-                    Día {day}
-                  </button>
-                ))}
+              <div className="mt-6">
+                <h4 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100">
+                  📅 Días del plan ({selectedPlan.duration_days} días)
+                </h4>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {Array.from({ length: selectedPlan.duration_days }, (_, i) => i + 1).map((day) => {
+                    const dayMealsCount = selectedPlan.meals_by_day?.[day]?.length || 0
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => setSelectedDay(day)}
+                        className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                          selectedDay === day
+                            ? 'bg-emerald-500 text-white'
+                            : 'border border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-emerald-600'
+                        }`}
+                      >
+                        <div>Día {day}</div>
+                        {dayMealsCount > 0 && (
+                          <div className="mt-0.5 text-[10px] opacity-75">
+                            {dayMealsCount} comida{dayMealsCount !== 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+
+              {canManagePlans && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => {
+                      setMealForm({
+                        plan: selectedPlan.id.toString(),
+                        day_number: selectedDay,
+                        meal_type: 'breakfast',
+                        name: '',
+                        description: '',
+                        calories: 0,
+                        protein_g: 0,
+                        carbs_g: 0,
+                        fats_g: 0,
+                        ingredients: '',
+                        instructions: '',
+                        order: currentDayMeals.length + 1,
+                      })
+                      setShowMealModal(true)
+                    }}
+                    className="rounded-2xl bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                  >
+                    + Agregar comida al Día {selectedDay}
+                  </button>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Selecciona un día arriba y agrega las comidas que desees (desayuno, snack, almuerzo, cena, etc.)
+                  </p>
+                </div>
+              )}
 
               {/* Progreso del día */}
               {selectedDay === 1 && (
@@ -416,6 +597,16 @@ export default function NutricionPage() {
 
               {/* Comidas del día */}
               <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    🍽️ Comidas del Día {selectedDay}
+                  </h4>
+                  {currentDayMeals.length > 0 && (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {currentDayMeals.length} comida{currentDayMeals.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
                 {currentDayMeals.length > 0 ? (
                   currentDayMeals.map((meal) => {
                     const completed = selectedDay === 1 && isMealCompleted(meal.id)
@@ -493,6 +684,40 @@ export default function NutricionPage() {
                             >
                               Ver receta
                             </button>
+                            {canManagePlans && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingMeal(meal)
+                                    setMealForm({
+                                      plan: meal.plan.toString(),
+                                      day_number: meal.day_number,
+                                      meal_type: meal.meal_type,
+                                      name: meal.name,
+                                      description: meal.description || '',
+                                      calories: meal.calories,
+                                      protein_g: meal.protein_g,
+                                      carbs_g: meal.carbs_g,
+                                      fats_g: meal.fats_g,
+                                      ingredients: meal.ingredients || '',
+                                      instructions: meal.instructions || '',
+                                      order: meal.order,
+                                    })
+                                    setShowMealModal(true)
+                                  }}
+                                  className="rounded-lg border border-blue-300 px-3 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMeal(meal.id)}
+                                  className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-900/20"
+                                  title="Eliminar comida"
+                                >
+                                  🗑️
+                                </button>
+                              </>
+                            )}
                             {selectedDay === 1 && (
                               <button
                                 onClick={() => handleToggleMeal(meal)}
@@ -532,9 +757,35 @@ export default function NutricionPage() {
                     )
                   })
                 ) : (
-                  <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No hay comidas registradas para este día
-                  </p>
+                  <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800/50">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      No hay comidas registradas para el Día {selectedDay}
+                    </p>
+                    {canManagePlans && (
+                      <button
+                        onClick={() => {
+                          setMealForm({
+                            plan: selectedPlan.id.toString(),
+                            day_number: selectedDay,
+                            meal_type: 'breakfast',
+                            name: '',
+                            description: '',
+                            calories: 0,
+                            protein_g: 0,
+                            carbs_g: 0,
+                            fats_g: 0,
+                            ingredients: '',
+                            instructions: '',
+                            order: 1,
+                          })
+                          setShowMealModal(true)
+                        }}
+                        className="mt-3 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-600"
+                      >
+                        + Agregar primera comida
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -677,8 +928,13 @@ export default function NutricionPage() {
                     {editingPlan ? 'Editar plan' : 'Nuevo plan'}
                   </p>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                    {editingPlan ? 'Modifica los datos del plan' : 'Crea un nuevo plan de nutrición'}
+                    {editingPlan ? 'Modifica los datos del plan' : 'Paso 1: Crea el plan base'}
                   </h3>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                    {editingPlan 
+                      ? 'Actualiza la información del plan de nutrición'
+                      : 'Define el nombre, objetivos nutricionales y duración. Después podrás agregar comidas para cada día.'}
+                  </p>
                 </div>
                 <button
                   onClick={handleCloseModal}
@@ -715,7 +971,7 @@ export default function NutricionPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Calorías/día
+                      Calorías/día *
                     </label>
                     <input
                       type="number"
@@ -725,11 +981,12 @@ export default function NutricionPage() {
                       value={planForm.calories_per_day}
                       onChange={(e) => setPlanForm({ ...planForm, calories_per_day: parseInt(e.target.value) || 2000 })}
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="2000"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Duración (días)
+                      Duración (días) *
                     </label>
                     <input
                       type="number"
@@ -739,7 +996,11 @@ export default function NutricionPage() {
                       value={planForm.duration_days}
                       onChange={(e) => setPlanForm({ ...planForm, duration_days: parseInt(e.target.value) || 7 })}
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="7"
                     />
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Podrás agregar comidas para cada día después de crear el plan
+                    </p>
                   </div>
                 </div>
 
@@ -823,7 +1084,202 @@ export default function NutricionPage() {
                     disabled={formSaving}
                     className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
                   >
-                    {formSaving ? 'Guardando...' : editingPlan ? 'Actualizar plan' : 'Crear plan'}
+                    {formSaving 
+                      ? 'Guardando...' 
+                      : editingPlan 
+                        ? 'Actualizar plan' 
+                        : 'Crear plan y comenzar a agregar comidas'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Crear/Editar Comida */}
+        {showMealModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">
+                    {editingMeal ? 'Editar comida' : `Agregar comida - Día ${mealForm.day_number}`}
+                  </p>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                    {editingMeal 
+                      ? 'Modifica los datos de la comida' 
+                      : `Paso 2: Agrega una comida al Día ${mealForm.day_number}`}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                    {editingMeal
+                      ? 'Actualiza la información nutricional, ingredientes e instrucciones'
+                      : 'Define el tipo de comida, información nutricional, ingredientes y preparación'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseMealModal}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:hover:text-slate-100"
+                >
+                  Cerrar ✕
+                </button>
+              </div>
+
+              <form onSubmit={editingMeal ? handleEditMeal : handleCreateMeal} className="mt-4 space-y-4">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700 dark:bg-emerald-900/20">
+                  <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                    💡 Tip: Puedes agregar múltiples comidas por día (desayuno, snack, almuerzo, cena, etc.)
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Tipo de comida *
+                    </label>
+                    <select
+                      required
+                      value={mealForm.meal_type}
+                      onChange={(e) => setMealForm({ ...mealForm, meal_type: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="breakfast">🍳 Desayuno</option>
+                      <option value="snack">🥤 Snack</option>
+                      <option value="lunch">🍽️ Almuerzo</option>
+                      <option value="dinner">🌙 Cena</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Orden</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={mealForm.order}
+                      onChange={(e) => setMealForm({ ...mealForm, order: parseInt(e.target.value) || 1 })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre *</label>
+                  <input
+                    type="text"
+                    required
+                    value={mealForm.name}
+                    onChange={(e) => setMealForm({ ...mealForm, name: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="Ej: Avena con frutas y nueces"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Descripción</label>
+                  <input
+                    type="text"
+                    value={mealForm.description}
+                    onChange={(e) => setMealForm({ ...mealForm, description: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="Ej: Rica en fibra y energía sostenida"
+                  />
+                </div>
+
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Calorías *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={mealForm.calories}
+                      onChange={(e) => setMealForm({ ...mealForm, calories: parseInt(e.target.value) || 0 })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="450"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Proteína (g)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={mealForm.protein_g}
+                      onChange={(e) => setMealForm({ ...mealForm, protein_g: parseFloat(e.target.value) || 0 })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Carbos (g)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={mealForm.carbs_g}
+                      onChange={(e) => setMealForm({ ...mealForm, carbs_g: parseFloat(e.target.value) || 0 })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="55"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Grasas (g)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={mealForm.fats_g}
+                      onChange={(e) => setMealForm({ ...mealForm, fats_g: parseFloat(e.target.value) || 0 })}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="12"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    🛒 Ingredientes
+                  </label>
+                  <textarea
+                    value={mealForm.ingredients}
+                    onChange={(e) => setMealForm({ ...mealForm, ingredients: e.target.value })}
+                    rows={4}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="- 50g de avena integral&#10;- 1 plátano maduro&#10;- 30g de nueces&#10;- 1 cucharada de miel"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    👨‍🍳 Preparación
+                  </label>
+                  <textarea
+                    value={mealForm.instructions}
+                    onChange={(e) => setMealForm({ ...mealForm, instructions: e.target.value })}
+                    rows={5}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="1. Cocina la avena en agua o leche durante 5 minutos&#10;2. Agrega el plátano cortado en rodajas&#10;3. Espolvorea las nueces picadas&#10;4. Añade la miel al gusto"
+                  />
+                </div>
+
+                {formError && <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-900/30 dark:text-red-400">{formError}</p>}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseMealModal}
+                    className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSaving}
+                    className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                  >
+                    {formSaving ? 'Guardando...' : editingMeal ? 'Actualizar comida' : 'Crear comida'}
                   </button>
                 </div>
               </form>
