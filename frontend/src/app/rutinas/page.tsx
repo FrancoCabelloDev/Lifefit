@@ -38,6 +38,7 @@ type Routine = {
   status: string
   duration_minutes: number
   completed_by_me?: boolean
+  completed_today?: boolean
   points_reward?: number
   routine_exercises?: RoutineExercise[]
 }
@@ -166,12 +167,19 @@ export default function RutinasPage() {
   const handleOpenRoutine = (routine: Routine) => {
     setSelectedRoutine(routine)
     setCompletionStatus('idle')
-    setCompletionMessage(routine.completed_by_me ? 'Ya registraste esta rutina anteriormente.' : '')
+    setCompletionMessage(
+      routine.completed_today 
+        ? 'Ya registraste esta rutina hoy.' 
+        : routine.completed_by_me 
+          ? 'Ya completaste esta rutina antes. Puedes registrarla de nuevo hoy.' 
+          : ''
+    )
     const initial: Record<string, boolean> = {}
     routine.routine_exercises
       ?.sort((a, b) => a.order - b.order)
       .forEach((exercise) => {
-        initial[exercise.id] = false
+        // Si la rutina ya fue completada hoy, marcar todos los ejercicios como completados
+        initial[exercise.id] = routine.completed_today || false
       })
     setExerciseProgress(initial)
   }
@@ -186,9 +194,9 @@ export default function RutinasPage() {
   }
 
   const toggleExerciseProgress = (exerciseId: string) => {
-    // Verificar si la rutina ya fue completada
-    if (selectedRoutine?.completed_by_me) {
-      alert('⚠️ Esta rutina ya fue registrada como completada.\n\nNo puedes modificar los ejercicios de una rutina finalizada.')
+    // Verificar si la rutina ya fue completada hoy
+    if (selectedRoutine?.completed_today) {
+      alert('⚠️ Esta rutina ya fue registrada como completada hoy.\n\nNo puedes modificar los ejercicios de una rutina ya finalizada hoy.')
       return
     }
     
@@ -384,11 +392,12 @@ export default function RutinasPage() {
   const completedExercises = Object.values(exerciseProgress).filter(Boolean).length
   const isRoutineCompleted =
     !!selectedRoutine &&
-    (selectedRoutine.completed_by_me ||
+    (selectedRoutine.completed_today ||
+      selectedRoutine.completed_by_me ||
       (totalExercises > 0 && completedExercises === totalExercises && totalExercises === Object.keys(exerciseProgress).length))
 
   const handleRegisterCompletion = async () => {
-    if (!selectedRoutine || !token || completionStatus === 'saving' || completionStatus === 'success') return
+    if (!selectedRoutine || !token || completionStatus === 'saving' || completionStatus === 'success' || selectedRoutine.completed_today) return
     setCompletionStatus('saving')
     setCompletionMessage('')
     try {
@@ -426,9 +435,9 @@ export default function RutinasPage() {
         })
       }
       setRoutines((prev) =>
-        prev.map((routine) => (routine.id === selectedRoutine.id ? { ...routine, completed_by_me: true } : routine)),
+        prev.map((routine) => (routine.id === selectedRoutine.id ? { ...routine, completed_by_me: true, completed_today: true } : routine)),
       )
-      setSelectedRoutine((prev) => (prev ? { ...prev, completed_by_me: true } : prev))
+      setSelectedRoutine((prev) => (prev ? { ...prev, completed_by_me: true, completed_today: true } : prev))
     } catch (error) {
       setCompletionStatus('error')
       setCompletionMessage(error instanceof Error ? error.message : 'No pudimos registrar la rutina.')
@@ -690,7 +699,7 @@ export default function RutinasPage() {
                     ?.sort((a, b) => a.order - b.order)
                     .map((exercise) => {
                       const completed = exerciseProgress[exercise.id]
-                      const isRoutineCompleted = selectedRoutine.completed_by_me
+                      const isRoutineCompleted = selectedRoutine.completed_today
                       const canToggle = !isRoutineCompleted
                       
                       return (
@@ -757,11 +766,18 @@ export default function RutinasPage() {
                               : 'Rutina registrada.')}
                         </p>
                       </>
+                    ) : selectedRoutine.completed_today ? (
+                      <>
+                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">✅ Rutina ya completada hoy</p>
+                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                          Ya registraste esta rutina hoy. Los puntos solo se otorgan una vez por día.
+                        </p>
+                      </>
                     ) : selectedRoutine.completed_by_me ? (
                       <>
-                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">✅ Rutina ya completada</p>
+                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">✅ Rutina completada anteriormente</p>
                         <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                          Ya registraste esta rutina anteriormente. Si la repetiste hoy, puedes volver a registrarla para sumar de nuevo.
+                          Ya completaste esta rutina antes. Puedes registrarla de nuevo hoy.
                         </p>
                         <button
                           onClick={handleRegisterCompletion}

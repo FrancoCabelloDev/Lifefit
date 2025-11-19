@@ -445,11 +445,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             points_earned = assignment.plan.points_reward
             
             # Log para debug
-            self.stdout.write(self.style.SUCCESS(
-                f"✓ Puntos otorgados: {points_earned} pts a {assignment.user.email}"
-            )) if hasattr(self, 'stdout') else print(
-                f"✓ Puntos otorgados: {points_earned} pts a {assignment.user.email}"
-            )
+            print(f"✓ Puntos otorgados: {points_earned} pts a {assignment.user.email}")
         
         return Response({
             "detail": f"¡Felicitaciones! Has completado el plan exitosamente.",

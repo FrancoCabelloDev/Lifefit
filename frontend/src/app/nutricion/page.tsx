@@ -84,10 +84,6 @@ export default function NutricionPage() {
   const [planForm, setPlanForm] = useState({
     name: '',
     description: '',
-    calories_per_day: 2000,
-    protein_g: 150,
-    carbs_g: 200,
-    fats_g: 65,
     duration_days: 7,
     points_reward: 0,
     status: 'draft',
@@ -184,6 +180,8 @@ export default function NutricionPage() {
   const handleSelectPlan = async (plan: NutritionPlan) => {
     await fetchPlanDetail(plan.id)
     setSelectedDay(1)
+    // Refrescar los logs de comidas para asegurar que estén actualizados
+    await fetchTodayMealLogs()
     
     // Auto-asignar el plan al usuario si aún no está asignado
     if (!plan.user_assignment && user?.role === 'athlete') {
@@ -264,7 +262,18 @@ export default function NutricionPage() {
   }
 
   const isMealCompleted = (mealTemplateId: string) => {
-    return mealLogs.some((log) => log.meal_template === mealTemplateId && log.completed)
+    const today = new Date().toISOString().split('T')[0]
+    return mealLogs.some((log) => {
+      // Verificar que el log es de hoy, de la comida correcta, está completado
+      // y además que la comida pertenece al plan actual
+      const isToday = log.date === today
+      const isThisMeal = log.meal_template === mealTemplateId
+      const isCompleted = log.completed
+      const belongsToCurrentPlan = log.meal_detail && selectedPlan?.meal_templates?.some(m => m.id === log.meal_template) ||
+                                    selectedPlan?.meals_by_day && Object.values(selectedPlan.meals_by_day).flat().some(m => m.id === log.meal_template)
+      
+      return isToday && isThisMeal && isCompleted && belongsToCurrentPlan
+    })
   }
 
   const todayCalories = useMemo(() => {
@@ -322,10 +331,6 @@ export default function NutricionPage() {
     setPlanForm({
       name: plan.name,
       description: plan.description,
-      calories_per_day: plan.calories_per_day,
-      protein_g: plan.protein_g,
-      carbs_g: plan.carbs_g,
-      fats_g: plan.fats_g,
       duration_days: plan.duration_days,
       points_reward: plan.points_reward || 0,
       status: plan.status,
@@ -344,6 +349,8 @@ export default function NutricionPage() {
 
       if (response.ok) {
         await fetchPlans()
+        // Refrescar los logs para limpiar cualquier estado obsoleto
+        await fetchTodayMealLogs()
       }
     } catch (error) {
       console.error(error)
@@ -356,10 +363,6 @@ export default function NutricionPage() {
     setPlanForm({
       name: '',
       description: '',
-      calories_per_day: 2000,
-      protein_g: 150,
-      carbs_g: 200,
-      fats_g: 65,
       duration_days: 7,
       points_reward: 0,
       status: 'draft',
@@ -408,6 +411,8 @@ export default function NutricionPage() {
         if (selectedPlan) {
           await fetchPlanDetail(selectedPlan.id)
         }
+        // Refrescar los logs para asegurar que la nueva comida no aparezca como completada
+        await fetchTodayMealLogs()
         handleCloseMealModal()
       } else {
         const errorData = await response.json()
@@ -466,6 +471,8 @@ export default function NutricionPage() {
         if (selectedPlan) {
           await fetchPlanDetail(selectedPlan.id)
         }
+        // Refrescar los logs después de editar
+        await fetchTodayMealLogs()
         handleCloseMealModal()
       } else {
         const errorData = await response.json()
@@ -499,6 +506,8 @@ export default function NutricionPage() {
         if (selectedPlan) {
           await fetchPlanDetail(selectedPlan.id)
         }
+        // Refrescar los logs después de eliminar
+        await fetchTodayMealLogs()
       }
     } catch (error) {
       console.error('Error al eliminar la comida:', error)
@@ -523,6 +532,80 @@ export default function NutricionPage() {
       order: 1,
     })
     setFormError('')
+  }
+
+  // Calcular totales de macros desde las comidas del plan
+  const calculatePlanTotals = () => {
+    if (!selectedPlan) return {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fats: 0,
+      caloriesPerDay: 0,
+      proteinPerDay: 0,
+      carbsPerDay: 0,
+      fatsPerDay: 0
+    }
+
+    // Obtener todas las comidas desde meals_by_day o meal_templates
+    let allMeals: MealTemplate[] = []
+    if (selectedPlan.meals_by_day) {
+      // Combinar todas las comidas de todos los días
+      allMeals = Object.values(selectedPlan.meals_by_day).flat()
+    } else if (selectedPlan.meal_templates) {
+      allMeals = selectedPlan.meal_templates
+    }
+
+    const totalCalories = allMeals.reduce((sum, meal) => sum + meal.calories, 0)
+    const totalProtein = allMeals.reduce((sum, meal) => sum + meal.protein_g, 0)
+    const totalCarbs = allMeals.reduce((sum, meal) => sum + meal.carbs_g, 0)
+    const totalFats = allMeals.reduce((sum, meal) => sum + meal.fats_g, 0)
+
+    const durationDays = selectedPlan.duration_days || 1
+
+    return {
+      calories: totalCalories,
+      protein: totalProtein,
+      carbs: totalCarbs,
+      fats: totalFats,
+      caloriesPerDay: Math.round(totalCalories / durationDays),
+      proteinPerDay: Math.round(totalProtein / durationDays),
+      carbsPerDay: Math.round(totalCarbs / durationDays),
+      fatsPerDay: Math.round(totalFats / durationDays)
+    }
+  }
+
+  // Calcular totales para cualquier plan (usado en las tarjetas)
+  const calculatePlanTotalsForCard = (plan: NutritionPlan) => {
+    // Obtener todas las comidas desde meals_by_day o meal_templates
+    let allMeals: MealTemplate[] = []
+    if (plan.meals_by_day) {
+      // Combinar todas las comidas de todos los días
+      allMeals = Object.values(plan.meals_by_day).flat()
+    } else if (plan.meal_templates) {
+      allMeals = plan.meal_templates
+    }
+
+    if (allMeals.length === 0) return {
+      caloriesPerDay: 0,
+      proteinPerDay: 0,
+      carbsPerDay: 0,
+      fatsPerDay: 0
+    }
+
+    const totalCalories = allMeals.reduce((sum, meal) => sum + meal.calories, 0)
+    const totalProtein = allMeals.reduce((sum, meal) => sum + meal.protein_g, 0)
+    const totalCarbs = allMeals.reduce((sum, meal) => sum + meal.carbs_g, 0)
+    const totalFats = allMeals.reduce((sum, meal) => sum + meal.fats_g, 0)
+
+    const durationDays = plan.duration_days || 1
+
+    return {
+      caloriesPerDay: Math.round(totalCalories / durationDays),
+      proteinPerDay: Math.round(totalProtein / durationDays),
+      carbsPerDay: Math.round(totalCarbs / durationDays),
+      fatsPerDay: Math.round(totalFats / durationDays)
+    }
   }
 
   const calculatePlanProgress = () => {
@@ -686,16 +769,16 @@ export default function NutricionPage() {
                   
                   <div className="mt-3 flex flex-wrap gap-3 text-sm">
                     <span className="rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                      🔥 {selectedPlan.calories_per_day} kcal/día
+                      🔥 {calculatePlanTotals().caloriesPerDay} kcal/día
                     </span>
                     <span className="rounded-full bg-blue-100 px-3 py-1 font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                      💪 {selectedPlan.protein_g}g proteína
+                      💪 {calculatePlanTotals().proteinPerDay}g proteína
                     </span>
                     <span className="rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                      🍞 {selectedPlan.carbs_g}g carbos
+                      🍞 {calculatePlanTotals().carbsPerDay}g carbos
                     </span>
                     <span className="rounded-full bg-purple-100 px-3 py-1 font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                      🥑 {selectedPlan.fats_g}g grasas
+                      🥑 {calculatePlanTotals().fatsPerDay}g grasas
                     </span>
                   </div>
                 </div>
@@ -725,7 +808,7 @@ export default function NutricionPage() {
                   )}
                   
                   {selectedPlan.user_assignment?.status === 'completed' && (
-                    <div className="rounded-2xl bg-gradient-to-br from-green-100 to-emerald-100 px-4 py-3 text-center dark:from-green-900/30 dark:to-emerald-900/30">
+                    <div className="rounded-2xl bg-linear-to-br from-green-100 to-emerald-100 px-4 py-3 text-center dark:from-green-900/30 dark:to-emerald-900/30">
                       <p className="text-sm font-bold text-green-800 dark:text-green-400">
                         ✅ Plan Completado
                       </p>
@@ -808,23 +891,23 @@ export default function NutricionPage() {
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Progreso de Hoy</p>
                   <div className="mt-2 flex items-center gap-4 text-sm">
                     <span className="text-emerald-700 dark:text-emerald-400">
-                      🔥 {todayCalories}/{selectedPlan.calories_per_day} kcal
+                      🔥 {todayCalories}/{calculatePlanTotals().caloriesPerDay} kcal
                     </span>
                     <span className="text-blue-700 dark:text-blue-400">
-                      💪 {todayMacros.protein}g/{selectedPlan.protein_g}g
+                      💪 {todayMacros.protein}g/{calculatePlanTotals().proteinPerDay}g
                     </span>
                     <span className="text-amber-700 dark:text-amber-400">
-                      🍞 {todayMacros.carbs}g/{selectedPlan.carbs_g}g
+                      🍞 {todayMacros.carbs}g/{calculatePlanTotals().carbsPerDay}g
                     </span>
                     <span className="text-purple-700 dark:text-purple-400">
-                      🥑 {todayMacros.fats}g/{selectedPlan.fats_g}g
+                      🥑 {todayMacros.fats}g/{calculatePlanTotals().fatsPerDay}g
                     </span>
                   </div>
                   <div className="mt-3 h-2 rounded-full bg-emerald-200 dark:bg-emerald-800">
                     <div
                       className="h-full rounded-full bg-emerald-600 dark:bg-emerald-500"
                       style={{
-                        width: `${Math.min((todayCalories / selectedPlan.calories_per_day) * 100, 100)}%`,
+                        width: `${Math.min((todayCalories / calculatePlanTotals().caloriesPerDay) * 100, 100)}%`,
                       }}
                     />
                   </div>
@@ -1084,13 +1167,13 @@ export default function NutricionPage() {
                     )}
                     <div className="mb-4 flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
-                        {plan.calories_per_day} kcal
+                        {calculatePlanTotalsForCard(plan).caloriesPerDay} kcal/día
                       </span>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
                         {plan.duration_days} días
                       </span>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-                        P:{plan.protein_g}g C:{plan.carbs_g}g G:{plan.fats_g}g
+                        P:{calculatePlanTotalsForCard(plan).proteinPerDay}g C:{calculatePlanTotalsForCard(plan).carbsPerDay}g G:{calculatePlanTotalsForCard(plan).fatsPerDay}g
                       </span>
                     </div>
                     <div className="flex gap-2">
@@ -1240,78 +1323,23 @@ export default function NutricionPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Calorías/día *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="800"
-                      max="5000"
-                      value={planForm.calories_per_day}
-                      onChange={(e) => setPlanForm({ ...planForm, calories_per_day: parseInt(e.target.value) || 2000 })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="2000"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Duración (días) *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      max="90"
-                      value={planForm.duration_days}
-                      onChange={(e) => setPlanForm({ ...planForm, duration_days: parseInt(e.target.value) || 7 })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="7"
-                    />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Podrás agregar comidas para cada día después de crear el plan
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Proteína (g)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={planForm.protein_g}
-                      onChange={(e) => setPlanForm({ ...planForm, protein_g: parseInt(e.target.value) || 150 })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Carbos (g)</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={planForm.carbs_g}
-                      onChange={(e) => setPlanForm({ ...planForm, carbs_g: parseInt(e.target.value) || 200 })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Grasas (g)</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      value={planForm.fats_g}
-                      onChange={(e) => setPlanForm({ ...planForm, fats_g: parseInt(e.target.value) || 65 })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Duración (días) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    max="90"
+                    value={planForm.duration_days}
+                    onChange={(e) => setPlanForm({ ...planForm, duration_days: parseInt(e.target.value) || 7 })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="7"
+                  />
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Podrás agregar comidas para cada día después de crear el plan. Las calorías y macros se calcularán automáticamente según las comidas que agregues.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

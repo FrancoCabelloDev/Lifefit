@@ -50,6 +50,7 @@ class RoutineExerciseSerializer(serializers.ModelSerializer):
 class WorkoutRoutineSerializer(serializers.ModelSerializer):
     routine_exercises = RoutineExerciseSerializer(many=True, read_only=True)
     completed_by_me = serializers.SerializerMethodField()
+    completed_today = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkoutRoutine
@@ -67,10 +68,11 @@ class WorkoutRoutineSerializer(serializers.ModelSerializer):
             "notes",
             "routine_exercises",
             "completed_by_me",
+            "completed_today",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "routine_exercises", "created_by", "completed_by_me"]
+        read_only_fields = ["id", "created_at", "updated_at", "routine_exercises", "created_by", "completed_by_me", "completed_today"]
 
     def create(self, validated_data):
         request = self.context.get("request")
@@ -86,6 +88,18 @@ class WorkoutRoutineSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return obj.sessions.filter(user=request.user, status=WorkoutSession.Status.COMPLETED).exists()
+    
+    def get_completed_today(self, obj):
+        """Verifica si el usuario completó esta rutina hoy"""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        from datetime import date
+        return obj.sessions.filter(
+            user=request.user,
+            status=WorkoutSession.Status.COMPLETED,
+            performed_at__date=date.today()
+        ).exists()
 
 
 class WorkoutSessionSerializer(serializers.ModelSerializer):
