@@ -48,6 +48,13 @@ type NutritionPlan = {
   meal_templates?: MealTemplate[]
   meals_by_day?: Record<string, MealTemplate[]>
   total_meals?: number
+  user_assignment?: {
+    id: string
+    status: string
+    compliance_percentage: number
+    start_date: string
+    end_date?: string
+  }
 }
 
 const MEAL_TYPE_LABELS: Record<string, string> = {
@@ -177,6 +184,26 @@ export default function NutricionPage() {
   const handleSelectPlan = async (plan: NutritionPlan) => {
     await fetchPlanDetail(plan.id)
     setSelectedDay(1)
+    
+    // Auto-asignar el plan al usuario si aún no está asignado
+    if (!plan.user_assignment && user?.role === 'athlete') {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/nutrition/plans/${plan.id}/start_plan/`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (response.ok) {
+          // Refrescar el plan para obtener la asignación
+          await fetchPlanDetail(plan.id)
+        }
+      } catch (error) {
+        console.error('Error al iniciar plan:', error)
+      }
+    }
   }
 
   const handleClosePlan = () => {
@@ -187,8 +214,24 @@ export default function NutricionPage() {
 
   const handleToggleMeal = async (mealTemplate: MealTemplate) => {
     if (!token) return
+    
+    // Verificar si el plan está completado
+    if (selectedPlan?.user_assignment?.status === 'completed') {
+      alert('⚠️ Este plan ya está completado.\n\nNo puedes modificar las comidas de un plan finalizado.')
+      return
+    }
+    
+    const today = new Date().toISOString().split('T')[0]
+    
+    console.log('🔄 Toggling meal:', {
+      meal: mealTemplate.name,
+      mealId: mealTemplate.id,
+      date: today,
+      currentState: isMealCompleted(mealTemplate.id),
+      planStatus: selectedPlan?.user_assignment?.status
+    })
+    
     try {
-      const today = new Date().toISOString().split('T')[0]
       const response = await fetch(`${API_BASE_URL}/api/nutrition/meal-logs/toggle_complete/`, {
         method: 'POST',
         headers: {
@@ -202,10 +245,21 @@ export default function NutricionPage() {
       })
 
       if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Toggle response:', data)
+        
+        // Refrescar los logs de comidas del día
         await fetchTodayMealLogs()
+        
+        console.log('✅ Logs refreshed, new state:', isMealCompleted(mealTemplate.id))
+      } else {
+        const errorText = await response.text()
+        console.error('❌ Error al marcar/desmarcar comida:', errorText)
+        alert('❌ No se pudo modificar el estado de la comida.\nIntenta nuevamente.')
       }
     } catch (error) {
-      console.error(error)
+      console.error('❌ Error en handleToggleMeal:', error)
+      alert('❌ Error de conexión.\nIntenta nuevamente.')
     }
   }
 
@@ -320,33 +374,54 @@ export default function NutricionPage() {
       return
     }
 
+    setFormSaving(true)
+    setFormError('')
+
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/meal-templates/`, {
+      // Asegurar que los números sean enteros donde corresponda
+      const payload = {
+        plan: mealForm.plan,
+        day_number: mealForm.day_number,
+        meal_type: mealForm.meal_type,
+        name: mealForm.name,
+        description: mealForm.description,
+        calories: parseInt(mealForm.calories.toString()) || 0,
+        protein_g: parseFloat(mealForm.protein_g.toString()) || 0,
+        carbs_g: parseFloat(mealForm.carbs_g.toString()) || 0,
+        fats_g: parseFloat(mealForm.fats_g.toString()) || 0,
+        ingredients: mealForm.ingredients,
+        instructions: mealForm.instructions,
+        order: mealForm.order,
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/nutrition/meal-templates/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(mealForm),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
         await fetchPlans()
         if (selectedPlan) {
-          const updated = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/plans/${selectedPlan.id}/`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-          })
-          const data = await updated.json()
-          setSelectedPlan(data)
+          await fetchPlanDetail(selectedPlan.id)
         }
         handleCloseMealModal()
       } else {
         const errorData = await response.json()
-        setFormError(errorData.detail || 'Error al crear la comida')
+        const errorMessage = typeof errorData === 'object' 
+          ? JSON.stringify(errorData, null, 2) 
+          : errorData.detail || 'Error al crear la comida'
+        setFormError(errorMessage)
+        console.error('Error response:', errorData)
       }
     } catch (error) {
       setFormError('Error al crear la comida')
       console.error(error)
+    } finally {
+      setFormSaving(false)
     }
   }
 
@@ -357,55 +432,72 @@ export default function NutricionPage() {
       return
     }
 
+    setFormSaving(true)
+    setFormError('')
+
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/meal-templates/${editingMeal.id}/`, {
+      // Asegurar que los números sean enteros donde corresponda
+      const payload = {
+        plan: mealForm.plan,
+        day_number: mealForm.day_number,
+        meal_type: mealForm.meal_type,
+        name: mealForm.name,
+        description: mealForm.description,
+        calories: parseInt(mealForm.calories.toString()) || 0,
+        protein_g: parseFloat(mealForm.protein_g.toString()) || 0,
+        carbs_g: parseFloat(mealForm.carbs_g.toString()) || 0,
+        fats_g: parseFloat(mealForm.fats_g.toString()) || 0,
+        ingredients: mealForm.ingredients,
+        instructions: mealForm.instructions,
+        order: mealForm.order,
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/nutrition/meal-templates/${editingMeal.id}/`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(mealForm),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
         await fetchPlans()
         if (selectedPlan) {
-          const updated = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/plans/${selectedPlan.id}/`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-          })
-          const data = await updated.json()
-          setSelectedPlan(data)
+          await fetchPlanDetail(selectedPlan.id)
         }
         handleCloseMealModal()
       } else {
         const errorData = await response.json()
-        setFormError(errorData.detail || 'Error al actualizar la comida')
+        const errorMessage = typeof errorData === 'object' 
+          ? JSON.stringify(errorData, null, 2) 
+          : errorData.detail || 'Error al actualizar la comida'
+        setFormError(errorMessage)
+        console.error('Error response:', errorData)
       }
     } catch (error) {
       setFormError('Error al actualizar la comida')
       console.error(error)
+    } finally {
+      setFormSaving(false)
     }
   }
 
-  const handleDeleteMeal = async (mealId: number) => {
+  const handleDeleteMeal = async (mealId: string) => {
     if (!confirm('¿Estás seguro de que deseas eliminar esta comida?')) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/meal-templates/${mealId}/`, {
+      const response = await fetch(`${API_BASE_URL}/api/nutrition/meal-templates/${mealId}/`, {
         method: 'DELETE',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${token}`,
         },
       })
 
       if (response.ok) {
         await fetchPlans()
         if (selectedPlan) {
-          const updated = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/nutrition/plans/${selectedPlan.id}/`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-          })
-          const data = await updated.json()
-          setSelectedPlan(data)
+          await fetchPlanDetail(selectedPlan.id)
         }
       }
     } catch (error) {
@@ -433,6 +525,89 @@ export default function NutricionPage() {
     setFormError('')
   }
 
+  const calculatePlanProgress = () => {
+    if (!selectedPlan) return 0
+    
+    const totalMeals = selectedPlan.total_meals || 0
+    if (totalMeals === 0) return 0
+    
+    const completedMeals = mealLogs.filter(log => log.completed).length
+    return Math.round((completedMeals / totalMeals) * 100)
+  }
+
+  const canCompletePlan = () => {
+    const progress = calculatePlanProgress()
+    return progress >= 80 && selectedPlan?.user_assignment?.status === 'active'
+  }
+
+  const handleCompletePlan = async () => {
+    if (!selectedPlan?.user_assignment) return
+    
+    const progress = calculatePlanProgress()
+    
+    if (!confirm(
+      `¿Completar plan de nutrición?\n\n` +
+      `📊 Progreso: ${progress}%\n` +
+      `💰 Recompensa: ${selectedPlan.points_reward} puntos\n\n` +
+      `✅ Al confirmar:\n` +
+      `• Se marcará el plan como completado\n` +
+      `• Recibirás ${selectedPlan.points_reward} puntos\n` +
+      `• Los puntos se sumarán a tu cuenta\n\n` +
+      `⚠️ Requieres al menos 80% de las comidas completadas.`
+    )) {
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/nutrition/assignments/${selectedPlan.user_assignment.id}/complete/`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Mostrar mensaje de éxito con detalles
+        alert(
+          `🎉 ¡FELICITACIONES!\n\n` +
+          `✅ ${data.detail}\n\n` +
+          `💰 PUNTOS GANADOS: +${data.points_earned} pts\n` +
+          `📊 Progreso final: ${data.completion_percentage}%\n` +
+          `🍽️ Comidas completadas: ${data.completed_meals}/${data.total_meals}\n\n` +
+          `Los ${data.points_earned} puntos han sido sumados a tu cuenta.\n` +
+          `Revisa tu perfil para ver tu nuevo total de puntos.`
+        )
+        
+        // Refrescar datos
+        await Promise.all([
+          fetchPlanDetail(selectedPlan.id),
+          fetchPlans(),
+        ])
+        
+        // Opcional: Redirigir al perfil o mostrar notificación
+        console.log(`✅ Plan completado: +${data.points_earned} puntos otorgados`)
+      } else {
+        // Mostrar error detallado
+        alert(
+          `❌ No se pudo completar el plan\n\n` +
+          `${data.detail}\n\n` +
+          `${data.completion_percentage ? `Progreso actual: ${data.completion_percentage}%\n` : ''}` +
+          `${data.completed_meals ? `Comidas completadas: ${data.completed_meals}/${data.total_meals}\n` : ''}` +
+          `${data.required_meals ? `Comidas requeridas: ${data.required_meals}` : ''}`
+        )
+      }
+    } catch (error) {
+      console.error('Error al completar plan:', error)
+      alert('❌ Error de conexión al completar el plan.\nIntenta nuevamente.')
+    }
+  }
+
   if (!user) {
     return <DashboardPage user={user} active="/nutricion" loading loadingLabel="Cargando..." />
   }
@@ -442,7 +617,7 @@ export default function NutricionPage() {
   return (
     <DashboardPage user={user} active="/nutricion" loading={authLoading || loading}>
       <>
-        <section className="mb-6">
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
@@ -484,6 +659,31 @@ export default function NutricionPage() {
                 <div>
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{selectedPlan.name}</h3>
                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{selectedPlan.description}</p>
+                  
+                  {selectedPlan.user_assignment && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        selectedPlan.user_assignment.status === 'completed'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          : selectedPlan.user_assignment.status === 'active'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
+                      }`}>
+                        {selectedPlan.user_assignment.status === 'completed' ? '✓ Completado' : 
+                         selectedPlan.user_assignment.status === 'active' ? '⏳ En progreso' : 
+                         '⏸️ Pausado'}
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Progreso: {calculatePlanProgress()}% de las comidas
+                      </span>
+                      {canCompletePlan() && (
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                          ¡Listo para finalizar! 🎉
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  
                   <div className="mt-3 flex flex-wrap gap-3 text-sm">
                     <span className="rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                       🔥 {selectedPlan.calories_per_day} kcal/día
@@ -499,11 +699,47 @@ export default function NutricionPage() {
                     </span>
                   </div>
                 </div>
-                {selectedPlan.points_reward > 0 && (
-                  <span className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                    {selectedPlan.points_reward} pts
-                  </span>
-                )}
+                <div className="flex flex-col items-end gap-2">
+                  {selectedPlan.points_reward > 0 && (
+                    <span className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      {selectedPlan.points_reward} pts
+                    </span>
+                  )}
+                  
+                  {canManagePlans && (
+                    <button
+                      onClick={() => handleEditPlan(selectedPlan)}
+                      className="rounded-2xl border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                    >
+                      ✏️ Editar Plan
+                    </button>
+                  )}
+                  
+                  {canCompletePlan() && (
+                    <button
+                      onClick={handleCompletePlan}
+                      className="rounded-2xl bg-green-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600 shadow-lg"
+                    >
+                      ✓ Finalizar y Reclamar Puntos
+                    </button>
+                  )}
+                  
+                  {selectedPlan.user_assignment?.status === 'completed' && (
+                    <div className="rounded-2xl bg-gradient-to-br from-green-100 to-emerald-100 px-4 py-3 text-center dark:from-green-900/30 dark:to-emerald-900/30">
+                      <p className="text-sm font-bold text-green-800 dark:text-green-400">
+                        ✅ Plan Completado
+                      </p>
+                      <p className="mt-1 text-xs text-green-700 dark:text-green-500">
+                        +{selectedPlan.points_reward} puntos obtenidos
+                      </p>
+                      {selectedPlan.user_assignment.end_date && (
+                        <p className="mt-1 text-[10px] text-green-600 dark:text-green-600">
+                          {new Date(selectedPlan.user_assignment.end_date).toLocaleDateString('es-ES')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Selector de días */}
@@ -609,7 +845,11 @@ export default function NutricionPage() {
                 </div>
                 {currentDayMeals.length > 0 ? (
                   currentDayMeals.map((meal) => {
-                    const completed = selectedDay === 1 && isMealCompleted(meal.id)
+                    const isToday = selectedDay === 1
+                    const completed = isToday && isMealCompleted(meal.id)
+                    const isPlanCompleted = selectedPlan?.user_assignment?.status === 'completed'
+                    const canToggle = isToday && !isPlanCompleted
+                    
                     return (
                       <div
                         key={meal.id}
@@ -711,18 +951,34 @@ export default function NutricionPage() {
                                 </button>
                                 <button
                                   onClick={() => handleDeleteMeal(meal.id)}
-                                  className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-900/20"
+                                  className="rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
                                   title="Eliminar comida"
                                 >
                                   🗑️
                                 </button>
                               </>
                             )}
-                            {selectedDay === 1 && (
+                            {isToday && (
                               <button
-                                onClick={() => handleToggleMeal(meal)}
-                                className="shrink-0"
-                                title={completed ? 'Marcar como pendiente' : 'Marcar como completado'}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleToggleMeal(meal)
+                                }}
+                                type="button"
+                                disabled={isPlanCompleted}
+                                className={`shrink-0 transition-transform ${
+                                  canToggle 
+                                    ? 'cursor-pointer hover:scale-110' 
+                                    : 'cursor-not-allowed opacity-60'
+                                }`}
+                                title={
+                                  isPlanCompleted
+                                    ? '⚠️ Plan completado - No se puede modificar'
+                                    : completed 
+                                      ? 'Click para desmarcar' 
+                                      : 'Click para marcar como completado'
+                                }
                               >
                                 {completed ? (
                                   <svg
@@ -738,7 +994,7 @@ export default function NutricionPage() {
                                   </svg>
                                 ) : (
                                   <svg
-                                    className="h-7 w-7 text-slate-400 dark:text-slate-600"
+                                    className="h-7 w-7 text-slate-400 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-400"
                                     fill="currentColor"
                                     viewBox="0 0 20 20"
                                   >
@@ -761,30 +1017,6 @@ export default function NutricionPage() {
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                       No hay comidas registradas para el Día {selectedDay}
                     </p>
-                    {canManagePlans && (
-                      <button
-                        onClick={() => {
-                          setMealForm({
-                            plan: selectedPlan.id.toString(),
-                            day_number: selectedDay,
-                            meal_type: 'breakfast',
-                            name: '',
-                            description: '',
-                            calories: 0,
-                            protein_g: 0,
-                            carbs_g: 0,
-                            fats_g: 0,
-                            ingredients: '',
-                            instructions: '',
-                            order: 1,
-                          })
-                          setShowMealModal(true)
-                        }}
-                        className="mt-3 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-600"
-                      >
-                        + Agregar primera comida
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
@@ -797,19 +1029,59 @@ export default function NutricionPage() {
                 filteredPlans.map((plan) => (
                   <div
                     key={plan.id}
-                    className="group relative rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
+                    className={`group relative rounded-3xl border p-6 shadow-sm transition hover:shadow-md ${
+                      plan.user_assignment?.status === 'completed'
+                        ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/20'
+                        : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                    }`}
                   >
+                    {plan.user_assignment?.status === 'completed' && (
+                      <div className="absolute -right-2 -top-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg">
+                        <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                    )}
                     <div className="mb-3">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{plan.name}</h3>
+                        <h3 className={`text-lg font-bold ${
+                          plan.user_assignment?.status === 'completed'
+                            ? 'text-emerald-800 dark:text-emerald-300'
+                            : 'text-slate-900 dark:text-slate-100'
+                        }`}>{plan.name}</h3>
                         {plan.points_reward > 0 && (
                           <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                             {plan.points_reward} pts
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{plan.description}</p>
+                      <p className={`mt-1 text-sm ${
+                        plan.user_assignment?.status === 'completed'
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}>{plan.description}</p>
                     </div>
+                    {plan.user_assignment?.status === 'completed' && (
+                      <div className="mb-3 rounded-xl bg-emerald-100 px-3 py-2 dark:bg-emerald-900/40">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                          <span>✓</span>
+                          <span>Plan Completado</span>
+                          {plan.user_assignment?.end_date && (
+                            <span className="ml-auto text-xs font-normal">
+                              {new Date(plan.user_assignment.end_date).toLocaleDateString('es-ES', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <div className="mb-4 flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
                         {plan.calories_per_day} kcal

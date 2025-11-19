@@ -1,10 +1,11 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
+from django.db import models
 from django.db.models import Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from .models import MealTemplate, NutritionItem, NutritionMeal, NutritionPlan, UserMealLog, UserNutritionPlan
@@ -74,6 +75,97 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             return
         raise PermissionDenied("No puedes eliminar este plan.")
 
+    @action(detail=True, methods=["post"])
+    def start_plan(self, request, pk=None):
+        """Inicia un plan de nutrición para el usuario actual (auto-asignación)"""
+        plan = self.get_object()
+        user = request.user
+        
+        # Verificar si ya tiene una asignación activa de este plan
+        existing = UserNutritionPlan.objects.filter(
+            user=user,
+            plan=plan,
+            status__in=['active', 'completed']
+        ).first()
+        
+        if existing:
+            if existing.status == 'completed':
+                return Response(
+                    {"detail": "Ya completaste este plan anteriormente"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            return Response(
+                {"detail": "Ya tienes este plan activo", "assignment_id": str(existing.id)},
+                status=status.HTTP_200_OK
+            )
+        
+        # Crear asignación automática
+        from datetime import date, timedelta
+        assignment = UserNutritionPlan.objects.create(
+            user=user,
+            plan=plan,
+            assigned_by=user,  # Auto-asignado
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=plan.duration_days),
+            status='active'
+        )
+        
+        return Response({
+            "detail": f"Plan iniciado exitosamente",
+            "assignment_id": str(assignment.id),
+            "start_date": assignment.start_date.isoformat(),
+            "end_date": assignment.end_date.isoformat() if assignment.end_date else None,
+        })
+
+    @action(detail=True, methods=["post"])
+    def assign_to_user(self, request, pk=None):
+        """Asigna este plan a un usuario (solo para admins)"""
+        plan = self.get_object()
+        user_id = request.data.get("user_id")
+        
+        if not user_id:
+            return Response(
+                {"detail": "Se requiere user_id"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Usuario no encontrado"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verificar si ya tiene una asignación activa
+        existing = UserNutritionPlan.objects.filter(
+            user=target_user,
+            plan=plan,
+            status='active'
+        ).exists()
+        
+        if existing:
+            return Response(
+                {"detail": "El usuario ya tiene este plan asignado"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Crear asignación
+        from datetime import timedelta
+        assignment = UserNutritionPlan.objects.create(
+            user=target_user,
+            plan=plan,
+            assigned_by=request.user,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=plan.duration_days),
+            status='active'
+        )
+        
+        return Response({
+            "detail": f"Plan asignado exitosamente a {target_user.email}",
+            "assignment_id": str(assignment.id)
+        })
+
 
 class MealTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = MealTemplateSerializer
@@ -108,60 +200,59 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        queryset = UserMealLog.objects.select_related("user", "meal_template", "meal_template__plan")
-        
-        # Filter by date if provided
-        date_param = self.request.query_params.get('date')
+        queryset = UserMealLog.objects.filter(user=self.request.user)
+        date_param = self.request.query_params.get("date")
         if date_param:
             queryset = queryset.filter(date=date_param)
-        
-        # Admins can see all, users only their own
-        if user.role == User.Role.SUPER_ADMIN:
-            return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
-            if user.gym_id:
-                return queryset.filter(Q(user_id=user.id) | Q(user__gym_id=user.gym_id))
-            return queryset.filter(user_id=user.id)
-        return queryset.filter(user_id=user.id)
+        return queryset.select_related("meal_template")
 
-    def perform_create(self, serializer):
-        # Always set the current user
-        serializer.save(user=self.request.user)
-
-    @action(detail=False, methods=['get'])
-    def today(self, request):
-        """Get today's meal logs for the current user"""
-        today = date.today()
-        logs = self.get_queryset().filter(date=today, user=request.user)
-        serializer = self.get_serializer(logs, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=["post"])
     def toggle_complete(self, request):
-        """Toggle completion status of a meal log"""
-        meal_template_id = request.data.get('meal_template_id')
-        log_date = request.data.get('date', date.today())
-        
-        if not meal_template_id:
+        """Marca o desmarca una comida como completada"""
+        meal_template_id = request.data.get("meal_template_id")
+        date_str = request.data.get("date")
+
+        if not meal_template_id or not date_str:
             return Response(
-                {"error": "meal_template_id is required"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Se requieren meal_template_id y date"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
-        # Get or create the log
-        log, created = UserMealLog.objects.get_or_create(
+
+        try:
+            meal_template = MealTemplate.objects.get(id=meal_template_id)
+        except MealTemplate.DoesNotExist:
+            return Response(
+                {"detail": "Comida no encontrada"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verificar si el plan está completado
+        user_assignment = UserNutritionPlan.objects.filter(
             user=request.user,
-            meal_template_id=meal_template_id,
-            date=log_date,
-            defaults={'completed': True}
+            plan=meal_template.plan,
+            status='completed'
+        ).first()
+        
+        if user_assignment:
+            return Response(
+                {"detail": "No puedes modificar comidas de un plan completado"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Buscar o crear el log
+        meal_log, created = UserMealLog.objects.get_or_create(
+            user=request.user,
+            meal_template=meal_template,
+            date=date_str,
+            defaults={"completed": True}
         )
-        
+
+        # Si ya existía, hacer toggle del estado
         if not created:
-            log.completed = not log.completed
-            log.save()
-        
-        serializer = self.get_serializer(log)
+            meal_log.completed = not meal_log.completed
+            meal_log.save()
+
+        serializer = self.get_serializer(meal_log)
         return Response(serializer.data)
 
 
@@ -260,14 +351,13 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = UserNutritionPlan.objects.select_related("plan", "user", "plan__gym")
-        if user.role == User.Role.SUPER_ADMIN:
-            return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            return queryset.filter(plan__gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE:
-            return queryset.filter(user=user)
-        return queryset.none()
+        if user.role in ["super_admin", "gym_admin", "coach"]:
+            if user.gym:
+                return UserNutritionPlan.objects.filter(
+                    Q(user__gym=user.gym) | Q(user=user)
+                )
+            return UserNutritionPlan.objects.all()
+        return UserNutritionPlan.objects.filter(user=user)
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -291,3 +381,80 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             serializer.save()
             return
         raise PermissionDenied("No puedes modificar esta asignación.")
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+        """Marca el plan como completado y otorga puntos al usuario"""
+        assignment = self.get_object()
+        
+        if assignment.status == "completed":
+            return Response(
+                {"detail": "Este plan ya fue completado anteriormente"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Calcular progreso real
+        total_meals = assignment.plan.meal_templates.count()
+        
+        if total_meals == 0:
+            return Response(
+                {"detail": "Este plan no tiene comidas configuradas"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Contar comidas completadas (únicas por meal_template)
+        completed_logs = UserMealLog.objects.filter(
+            user=assignment.user,
+            meal_template__plan=assignment.plan,
+            completed=True
+        ).values('meal_template').distinct().count()
+        
+        completion_percentage = (completed_logs / total_meals * 100)
+        
+        if completion_percentage < 80:
+            return Response(
+                {
+                    "detail": f"Debes completar al menos 80% de las comidas del plan.\n\nProgreso actual: {completion_percentage:.1f}%\nComidas completadas: {completed_logs}/{total_meals}",
+                    "completion_percentage": round(completion_percentage, 1),
+                    "completed_meals": completed_logs,
+                    "total_meals": total_meals,
+                    "required_meals": int(total_meals * 0.8),
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Marcar como completado
+        assignment.status = "completed"
+        assignment.compliance_percentage = completion_percentage
+        assignment.end_date = date.today()
+        assignment.save()
+        
+        # Otorgar puntos si el plan tiene recompensa
+        points_earned = 0
+        if assignment.plan.points_reward > 0:
+            from gamification.models import UserPoints
+            
+            # Crear registro de puntos
+            user_points = UserPoints.objects.create(
+                user=assignment.user,
+                points=assignment.plan.points_reward,
+                source="nutrition_plan_completed",
+                description=f"Completaste el plan de nutrición: {assignment.plan.name}",
+                related_nutrition_plan=assignment.plan,
+            )
+            points_earned = assignment.plan.points_reward
+            
+            # Log para debug
+            self.stdout.write(self.style.SUCCESS(
+                f"✓ Puntos otorgados: {points_earned} pts a {assignment.user.email}"
+            )) if hasattr(self, 'stdout') else print(
+                f"✓ Puntos otorgados: {points_earned} pts a {assignment.user.email}"
+            )
+        
+        return Response({
+            "detail": f"¡Felicitaciones! Has completado el plan exitosamente.",
+            "points_earned": points_earned,
+            "completion_percentage": round(completion_percentage, 1),
+            "completed_meals": completed_logs,
+            "total_meals": total_meals,
+        })

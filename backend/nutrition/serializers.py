@@ -31,7 +31,7 @@ class MealTemplateSerializer(serializers.ModelSerializer):
 
 class UserMealLogSerializer(serializers.ModelSerializer):
     meal_detail = MealTemplateSerializer(source="meal_template", read_only=True)
-    
+
     class Meta:
         model = UserMealLog
         fields = [
@@ -45,13 +45,14 @@ class UserMealLogSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "meal_detail"]
+        read_only_fields = ["user", "created_at", "updated_at"]
 
 
 class NutritionPlanSerializer(serializers.ModelSerializer):
-    meal_templates = MealTemplateSerializer(many=True, read_only=True)
+    meals_by_day = serializers.SerializerMethodField()
     total_meals = serializers.SerializerMethodField()
-    
+    user_assignment = serializers.SerializerMethodField()
+
     class Meta:
         model = NutritionPlan
         fields = [
@@ -66,15 +67,52 @@ class NutritionPlanSerializer(serializers.ModelSerializer):
             "duration_days",
             "status",
             "points_reward",
-            "meal_templates",
-            "total_meals",
             "created_at",
             "updated_at",
+            "meals_by_day",
+            "total_meals",
+            "user_assignment",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "meal_templates", "total_meals"]
-    
+
+    def get_meals_by_day(self, obj):
+        meals_by_day = {}
+        meal_templates = obj.meal_templates.all().order_by("day_number", "order")
+        
+        for meal in meal_templates:
+            day = str(meal.day_number)
+            if day not in meals_by_day:
+                meals_by_day[day] = []
+            meals_by_day[day].append(MealTemplateSerializer(meal).data)
+        
+        return meals_by_day
+
     def get_total_meals(self, obj):
         return obj.meal_templates.count()
+    
+    def get_user_assignment(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        try:
+            # Buscar asignación activa o completada más reciente
+            assignment = UserNutritionPlan.objects.filter(
+                user=request.user,
+                plan=obj
+            ).order_by('-created_at').first()
+            
+            if assignment:
+                return {
+                    'id': str(assignment.id),
+                    'status': assignment.status,
+                    'compliance_percentage': float(assignment.compliance_percentage),
+                    'start_date': assignment.start_date.isoformat(),
+                    'end_date': assignment.end_date.isoformat() if assignment.end_date else None,
+                }
+        except UserNutritionPlan.DoesNotExist:
+            pass
+        
+        return None
 
 
 class NutritionPlanDetailSerializer(NutritionPlanSerializer):

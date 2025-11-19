@@ -186,6 +186,12 @@ export default function RutinasPage() {
   }
 
   const toggleExerciseProgress = (exerciseId: string) => {
+    // Verificar si la rutina ya fue completada
+    if (selectedRoutine?.completed_by_me) {
+      alert('⚠️ Esta rutina ya fue registrada como completada.\n\nNo puedes modificar los ejercicios de una rutina finalizada.')
+      return
+    }
+    
     setExerciseProgress((prev) => ({
       ...prev,
       [exerciseId]: !prev[exerciseId],
@@ -684,15 +690,26 @@ export default function RutinasPage() {
                     ?.sort((a, b) => a.order - b.order)
                     .map((exercise) => {
                       const completed = exerciseProgress[exercise.id]
+                      const isRoutineCompleted = selectedRoutine.completed_by_me
+                      const canToggle = !isRoutineCompleted
+                      
                       return (
                         <button
                           key={exercise.id}
                           onClick={() => toggleExerciseProgress(exercise.id)}
+                          disabled={isRoutineCompleted}
                           className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
                             completed
                               ? 'border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/30'
                               : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800/50'
-                          }`}
+                          } ${!canToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-sm'}`}
+                          title={
+                            isRoutineCompleted
+                              ? '⚠️ Rutina completada - No se puede modificar'
+                              : completed
+                                ? 'Click para desmarcar'
+                                : 'Click para marcar como completado'
+                          }
                         >
                           <div>
                             <p className={`font-semibold ${completed ? 'text-emerald-800 dark:text-emerald-300' : 'dark:text-slate-100'}`}>
@@ -740,25 +757,33 @@ export default function RutinasPage() {
                               : 'Rutina registrada.')}
                         </p>
                       </>
-                    ) : (
+                    ) : selectedRoutine.completed_by_me ? (
                       <>
-                        <p className="text-sm text-emerald-800 dark:text-emerald-300">
-                          {selectedRoutine.completed_by_me
-                            ? 'Ya registraste esta rutina. Si la repetiste hoy, vuelve a registrarla para sumar de nuevo.'
-                            : selectedRoutine.points_reward && selectedRoutine.points_reward > 0
-                              ? `Marca como completada para ganar ${selectedRoutine.points_reward} puntos.`
-                              : 'Marca como completada para registrar tu progreso.'}
+                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">✅ Rutina ya completada</p>
+                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                          Ya registraste esta rutina anteriormente. Si la repetiste hoy, puedes volver a registrarla para sumar de nuevo.
                         </p>
                         <button
                           onClick={handleRegisterCompletion}
                           disabled={completionStatus === 'saving'}
                           className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                         >
-                          {completionStatus === 'saving'
-                            ? 'Guardando...'
-                            : selectedRoutine.completed_by_me
-                              ? 'Registrar nuevamente'
-                              : 'Registrar rutina completada'}
+                          {completionStatus === 'saving' ? 'Guardando...' : 'Registrar nuevamente'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-emerald-800 dark:text-emerald-300">
+                          {selectedRoutine.points_reward && selectedRoutine.points_reward > 0
+                            ? `Marca como completada para ganar ${selectedRoutine.points_reward} puntos.`
+                            : 'Marca como completada para registrar tu progreso.'}
+                        </p>
+                        <button
+                          onClick={handleRegisterCompletion}
+                          disabled={completionStatus === 'saving'}
+                          className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                        >
+                          {completionStatus === 'saving' ? 'Guardando...' : 'Registrar rutina completada'}
                         </button>
                         {completionStatus === 'error' && (
                           <p className="mt-2 text-xs text-red-600">{completionMessage}</p>
