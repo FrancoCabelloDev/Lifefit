@@ -304,48 +304,48 @@ export default function RetosPage() {
               <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase text-emerald-600">{editingChallenge ? 'Editar reto' : 'Nuevo reto'}</p>
-                    <h3 className="text-xl font-semibold text-slate-900">
+                    <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">{editingChallenge ? 'Editar reto' : 'Nuevo reto'}</p>
+                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
                       {editingChallenge ? 'Modifica los datos del reto' : 'Crea un nuevo reto'}
                     </h3>
                   </div>
                   <button
                     onClick={handleCloseModal}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
+                    className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                   >
                     Cerrar ✕
                   </button>
                 </div>
                 <form onSubmit={handleCreateChallenge} className="mt-4 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
                     <input
                       type="text"
                       required
                       value={challengeForm.name}
                       onChange={(e) => setChallengeForm({ ...challengeForm, name: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Ej: Ganar proteína"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Descripción</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Descripción</label>
                     <textarea
                       required
                       value={challengeForm.description}
                       onChange={(e) => setChallengeForm({ ...challengeForm, description: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Ej: Consumir durante 10 días 80 gramos de proteína animal"
                       rows={3}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Tipo</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo</label>
                       <select
                         value={challengeForm.type}
                         onChange={(e) => setChallengeForm({ ...challengeForm, type: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       >
                         <option value="workouts">Entrenamientos</option>
                         <option value="attendance">Asistencia</option>
@@ -355,11 +355,11 @@ export default function RetosPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Estado</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Estado</label>
                       <select
                         value={challengeForm.status}
                         onChange={(e) => setChallengeForm({ ...challengeForm, status: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       >
                         <option value="draft">Borrador</option>
                         <option value="active">Activo</option>
@@ -370,58 +370,58 @@ export default function RetosPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Fecha inicio</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Fecha inicio</label>
                       <input
                         type="date"
                         required
                         value={challengeForm.start_date}
                         onChange={(e) => setChallengeForm({ ...challengeForm, start_date: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Fecha fin</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Fecha fin</label>
                       <input
                         type="date"
                         required
                         value={challengeForm.end_date}
                         onChange={(e) => setChallengeForm({ ...challengeForm, end_date: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Puntos de recompensa</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Puntos de recompensa</label>
                       <input
                         type="number"
                         required
                         min="0"
                         value={challengeForm.reward_points}
                         onChange={(e) => setChallengeForm({ ...challengeForm, reward_points: parseInt(e.target.value) || 0 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Meta (valor)</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Meta (valor)</label>
                       <input
                         type="number"
                         required
                         min="1"
                         value={challengeForm.goal_value}
                         onChange={(e) => setChallengeForm({ ...challengeForm, goal_value: parseInt(e.target.value) || 10 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
                   </div>
                   {formError && (
-                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{formError}</p>
+                    <p className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-xs text-red-600 dark:text-red-400">{formError}</p>
                   )}
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="flex-1 rounded-2xl border border-slate-300 dark:border-slate-700 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
                       Cancelar
                     </button>

@@ -30,6 +30,21 @@ export default function DashboardSidebar({ user, active }: SidebarProps) {
   const router = useRouter()
   const routes = user.role === 'super_admin' ? [...baseRoutes, { href: '/admin', label: 'Admin' }] : baseRoutes
 
+  const getRoleLabel = () => {
+    switch (user.role) {
+      case 'super_admin':
+        return 'Administrador'
+      case 'gym_owner':
+        return 'Dueño de Gimnasio'
+      case 'coach':
+        return 'Entrenador'
+      case 'athlete':
+        return 'Atleta'
+      default:
+        return 'Usuario'
+    }
+  }
+
   const handleLogout = () => {
     localStorage.removeItem('lifefit_access_token')
     localStorage.removeItem('lifefit_refresh_token')
@@ -44,7 +59,7 @@ export default function DashboardSidebar({ user, active }: SidebarProps) {
     <aside className="lg:w-64">
       <div className="rounded-3xl bg-white p-6 shadow-lg dark:bg-slate-900 dark:text-slate-100 dark:border dark:border-slate-800">
         <div className="mb-4 rounded-2xl bg-emerald-100 p-4 text-center dark:bg-emerald-500/10">
-          <p className="text-xs uppercase text-emerald-600">Atleta</p>
+          <p className="text-xs uppercase text-emerald-600">{getRoleLabel()}</p>
           <p className="text-lg font-semibold text-slate-900 dark:text-white">
             {user.first_name} {user.last_name}
           </p>

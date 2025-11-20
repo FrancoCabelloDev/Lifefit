@@ -63,7 +63,7 @@ class ChallengeParticipation(BaseModel):
 
 
 class Badge(BaseModel):
-    gym = models.ForeignKey("gyms.Gym", related_name="badges", on_delete=models.CASCADE)
+    gym = models.ForeignKey("gyms.Gym", related_name="badges", on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     icon = models.CharField(max_length=255, blank=True)

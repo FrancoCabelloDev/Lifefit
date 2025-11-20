@@ -576,10 +576,15 @@ export default function RutinasPage() {
                       <button
                         onClick={() => handleOpenRoutine(routine)}
                         className={`mt-4 w-full rounded-2xl py-2 text-sm font-semibold text-white transition ${
-                          routine.completed_by_me ? 'bg-emerald-600' : 'bg-emerald-500 hover:bg-emerald-600'
+                          canManageRoutines 
+                            ? 'bg-blue-500 hover:bg-blue-600'
+                            : routine.completed_by_me 
+                              ? 'bg-emerald-600' 
+                              : 'bg-emerald-500 hover:bg-emerald-600'
                         }`}
+                        title={canManageRoutines ? 'Ver detalles de la rutina' : ''}
                       >
-                        {routine.completed_by_me ? 'Ver rutina (completada)' : 'Iniciar'}
+                        {canManageRoutines ? 'Vista previa' : routine.completed_by_me ? 'Ver rutina (completada)' : 'Iniciar'}
                       </button>
                       {canManageRoutines && (
                         <button
@@ -645,79 +650,105 @@ export default function RutinasPage() {
                     )
                   })()}
                 </div>
-                <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                  <div className="flex items-center gap-3">
-                    <svg
-                      className="h-5 w-5 text-slate-600 dark:text-slate-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">{formatTime(timerSeconds)}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handlePlayPauseTimer}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
-                      title={isTimerRunning ? 'Pausar' : 'Iniciar'}
-                    >
-                      {isTimerRunning ? (
-                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                        </svg>
-                      ) : (
-                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      onClick={handleResetTimer}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-                      title="Reiniciar"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                
+                {/* Timer - Solo para usuarios no admin */}
+                {!canManageRoutines && (
+                  <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                    <div className="flex items-center gap-3">
+                      <svg
+                        className="h-5 w-5 text-slate-600 dark:text-slate-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
-                    </button>
+                      <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">{formatTime(timerSeconds)}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handlePlayPauseTimer}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+                        title={isTimerRunning ? 'Pausar' : 'Iniciar'}
+                      >
+                        {isTimerRunning ? (
+                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                          </svg>
+                        ) : (
+                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleResetTimer}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+                        title="Reiniciar"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Mensaje informativo para admins */}
+                {canManageRoutines && (
+                  <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                    <div className="flex items-start gap-3">
+                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+                          Vista de administrador
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          Como administrador, puedes ver el contenido de las rutinas pero no iniciarlas ni completarlas. Esta función es exclusiva para usuarios atletas.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-4 space-y-3">
                   {selectedRoutine.routine_exercises
                     ?.sort((a, b) => a.order - b.order)
                     .map((exercise) => {
                       const completed = exerciseProgress[exercise.id]
                       const isRoutineCompleted = selectedRoutine.completed_today
-                      const canToggle = !isRoutineCompleted
+                      const canToggle = !isRoutineCompleted && !canManageRoutines
                       
                       return (
                         <button
                           key={exercise.id}
-                          onClick={() => toggleExerciseProgress(exercise.id)}
-                          disabled={isRoutineCompleted}
+                          onClick={() => !canManageRoutines && toggleExerciseProgress(exercise.id)}
+                          disabled={isRoutineCompleted || canManageRoutines}
                           className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
                             completed
                               ? 'border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/30'
                               : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800/50'
                           } ${!canToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-sm'}`}
                           title={
-                            isRoutineCompleted
-                              ? '⚠️ Rutina completada - No se puede modificar'
-                              : completed
-                                ? 'Click para desmarcar'
-                                : 'Click para marcar como completado'
+                            canManageRoutines
+                              ? 'Los administradores no pueden marcar ejercicios'
+                              : isRoutineCompleted
+                                ? '⚠️ Rutina completada - No se puede modificar'
+                                : completed
+                                  ? 'Click para desmarcar'
+                                  : 'Click para marcar como completado'
                           }
                         >
                           <div>
@@ -754,7 +785,9 @@ export default function RutinasPage() {
                     <p className="text-sm text-slate-500">Aún no se han agregado ejercicios a esta rutina.</p>
                   )}
                 </div>
-                {isRoutineCompleted && (
+                
+                {/* Sección de completar rutina - Solo para usuarios no admin */}
+                {!canManageRoutines && isRoutineCompleted && (
                   <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-100 p-4 text-center dark:border-emerald-700 dark:bg-emerald-900/30">
                     {completionStatus === 'success' ? (
                       <>
@@ -816,48 +849,48 @@ export default function RutinasPage() {
               <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase text-emerald-600">{editingRoutine ? 'Editar rutina' : 'Nueva rutina'}</p>
-                    <h3 className="text-xl font-semibold text-slate-900">
+                    <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">{editingRoutine ? 'Editar rutina' : 'Nueva rutina'}</p>
+                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
                       {editingRoutine ? 'Modifica los datos de la rutina' : 'Crea una nueva rutina'}
                     </h3>
                   </div>
                   <button
                     onClick={handleCloseModal}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
+                    className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   >
                     Cerrar ✕
                   </button>
                 </div>
                 <form onSubmit={handleCreateRoutine} className="mt-4 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
                     <input
                       type="text"
                       required
                       value={routineForm.name}
                       onChange={(e) => setRoutineForm({ ...routineForm, name: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Ej: Rutina de fuerza completa"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Objetivo</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Objetivo</label>
                     <textarea
                       required
                       value={routineForm.objective}
                       onChange={(e) => setRoutineForm({ ...routineForm, objective: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Ej: Mejorar fuerza y resistencia muscular"
                       rows={3}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Nivel</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nivel</label>
                       <select
                         value={routineForm.level}
                         onChange={(e) => setRoutineForm({ ...routineForm, level: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       >
                         <option value="beginner">Principiante</option>
                         <option value="intermediate">Intermedio</option>
@@ -865,11 +898,11 @@ export default function RutinasPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Estado</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Estado</label>
                       <select
                         value={routineForm.status}
                         onChange={(e) => setRoutineForm({ ...routineForm, status: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       >
                         <option value="draft">Borrador</option>
                         <option value="published">Publicada</option>
@@ -879,36 +912,36 @@ export default function RutinasPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Duración (min)</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Duración (min)</label>
                       <input
                         type="number"
                         required
                         min="1"
                         value={routineForm.duration_minutes}
                         onChange={(e) => setRoutineForm({ ...routineForm, duration_minutes: parseInt(e.target.value) || 0 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Puntos</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Puntos</label>
                       <input
                         type="number"
                         required
                         min="0"
                         value={routineForm.points_reward}
                         onChange={(e) => setRoutineForm({ ...routineForm, points_reward: parseInt(e.target.value) || 0 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
                   </div>
                   {formError && (
-                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{formError}</p>
+                    <p className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-xs text-red-600 dark:text-red-400">{formError}</p>
                   )}
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="flex-1 rounded-2xl border border-slate-300 dark:border-slate-700 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
                       Cancelar
                     </button>
@@ -929,35 +962,35 @@ export default function RutinasPage() {
               <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase text-emerald-600">Nuevo ejercicio</p>
-                    <h3 className="text-xl font-semibold text-slate-900">Crea un nuevo ejercicio</h3>
+                    <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">Nuevo ejercicio</p>
+                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Crea un nuevo ejercicio</h3>
                   </div>
                   <button
                     onClick={() => setShowExerciseModal(false)}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
+                    className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   >
                     Cerrar ✕
                   </button>
                 </div>
                 <form onSubmit={handleCreateExercise} className="mt-4 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
                     <input
                       type="text"
                       required
                       value={exerciseForm.name}
                       onChange={(e) => setExerciseForm({ ...exerciseForm, name: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Ej: Press de banca"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Categoría</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Categoría</label>
                       <select
                         value={exerciseForm.category}
                         onChange={(e) => setExerciseForm({ ...exerciseForm, category: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       >
                         <option value="strength">Fuerza</option>
                         <option value="cardio">Cardio</option>
@@ -967,44 +1000,44 @@ export default function RutinasPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700">Grupo muscular</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Grupo muscular</label>
                       <input
                         type="text"
                         value={exerciseForm.muscle_group}
                         onChange={(e) => setExerciseForm({ ...exerciseForm, muscle_group: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                         placeholder="Ej: Pecho"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Equipo</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Equipo</label>
                     <input
                       type="text"
                       value={exerciseForm.equipment}
                       onChange={(e) => setExerciseForm({ ...exerciseForm, equipment: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Ej: Barra, Mancuernas"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700">Descripción</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Descripción</label>
                     <textarea
                       value={exerciseForm.description}
                       onChange={(e) => setExerciseForm({ ...exerciseForm, description: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                       placeholder="Describe el ejercicio..."
                       rows={3}
                     />
                   </div>
                   {formError && (
-                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{formError}</p>
+                    <p className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-xs text-red-600 dark:text-red-400">{formError}</p>
                   )}
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={() => setShowExerciseModal(false)}
-                      className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="flex-1 rounded-2xl border border-slate-300 dark:border-slate-700 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
                       Cancelar
                     </button>

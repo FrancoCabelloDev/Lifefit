@@ -90,7 +90,7 @@ const FeaturedFunctionsSection: React.FC = () => {
               key={feature.title}
               className="flex flex-col rounded-3xl border border-slate-100 bg-white p-5 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900"
             >
-              <div className="mb-4 h-28 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700" />
+              <div className="mb-4 h-28 rounded-2xl bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700" />
               <h3 className="text-sm font-semibold">{feature.title}</h3>
               <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 md:text-sm">{feature.description}</p>
             </div>
