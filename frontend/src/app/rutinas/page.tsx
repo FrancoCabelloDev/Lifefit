@@ -41,6 +41,24 @@ type Routine = {
   completed_today?: boolean
   points_reward?: number
   routine_exercises?: RoutineExercise[]
+  // Nuevos campos para personalización
+  scope?: 'global' | 'gym' | 'individual'
+  assigned_user?: string | null
+  assigned_user_detail?: {
+    id: string
+    first_name: string
+    last_name: string
+    email: string
+  }
+}
+
+type User = {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  role: string
+  gym?: string | null
 }
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -59,18 +77,27 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function RutinasPage() {
   const { user, token, loading: authLoading, setUser } = useDashboardAuth()
+
   const [routines, setRoutines] = useState<Routine[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+
   const [loading, setLoading] = useState(true)
-  const [activeCategory, setActiveCategory] = useState('todas')
+
+  // filtros: todas | solo gym | globales
+  const [activeCategory, setActiveCategory] = useState<'todas' | 'mi_gym' | 'globales'>('todas')
+
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null)
   const [exerciseProgress, setExerciseProgress] = useState<Record<string, boolean>>({})
   const [completionStatus, setCompletionStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
   const [completionMessage, setCompletionMessage] = useState('')
+
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showExerciseModal, setShowExerciseModal] = useState(false)
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false)
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null)
+
   const [routineForm, setRoutineForm] = useState({
     name: '',
     objective: '',
@@ -78,7 +105,10 @@ export default function RutinasPage() {
     duration_minutes: 30,
     points_reward: 0,
     status: 'draft',
+    scope: 'gym' as 'gym' | 'global' | 'individual',
+    assigned_user: '',
   })
+
   const [exerciseForm, setExerciseForm] = useState({
     name: '',
     category: 'strength',
@@ -86,6 +116,7 @@ export default function RutinasPage() {
     muscle_group: '',
     description: '',
   })
+
   const [addExerciseForm, setAddExerciseForm] = useState({
     routine: '',
     exercise: '',
@@ -94,6 +125,7 @@ export default function RutinasPage() {
     reps: 10,
     rest_seconds: 60,
   })
+
   const [formError, setFormError] = useState('')
   const [formSaving, setFormSaving] = useState(false)
   const [timerSeconds, setTimerSeconds] = useState(0)
@@ -159,26 +191,45 @@ export default function RutinasPage() {
     }
   }, [token])
 
+  const fetchUsers = useCallback(async () => {
+    if (!token) return
+    try {
+      setUsersLoading(true)
+      const response = await fetch(`${API_BASE_URL}/api/auth/users/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const list = Array.isArray(data) ? data : data.results ?? []
+        setUsers(list)
+      }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setUsersLoading(false)
+    }
+  }, [token])
+
   useEffect(() => {
     fetchRoutines()
     fetchExercises()
-  }, [fetchRoutines, fetchExercises])
+    fetchUsers()
+  }, [fetchRoutines, fetchExercises, fetchUsers])
 
   const handleOpenRoutine = (routine: Routine) => {
     setSelectedRoutine(routine)
     setCompletionStatus('idle')
     setCompletionMessage(
-      routine.completed_today 
-        ? 'Ya registraste esta rutina hoy.' 
-        : routine.completed_by_me 
-          ? 'Ya completaste esta rutina antes. Puedes registrarla de nuevo hoy.' 
-          : ''
+      routine.completed_today
+        ? 'Ya registraste esta rutina hoy.'
+        : routine.completed_by_me
+        ? 'Ya completaste esta rutina antes. Puedes registrarla de nuevo hoy.'
+        : '',
     )
     const initial: Record<string, boolean> = {}
     routine.routine_exercises
       ?.sort((a, b) => a.order - b.order)
       .forEach((exercise) => {
-        // Si la rutina ya fue completada hoy, marcar todos los ejercicios como completados
         initial[exercise.id] = routine.completed_today || false
       })
     setExerciseProgress(initial)
@@ -194,12 +245,13 @@ export default function RutinasPage() {
   }
 
   const toggleExerciseProgress = (exerciseId: string) => {
-    // Verificar si la rutina ya fue completada hoy
     if (selectedRoutine?.completed_today) {
-      alert('⚠️ Esta rutina ya fue registrada como completada hoy.\n\nNo puedes modificar los ejercicios de una rutina ya finalizada hoy.')
+      alert(
+        '⚠️ Esta rutina ya fue registrada como completada hoy.\n\nNo puedes modificar los ejercicios de una rutina ya finalizada hoy.',
+      )
       return
     }
-    
+
     setExerciseProgress((prev) => ({
       ...prev,
       [exerciseId]: !prev[exerciseId],
@@ -209,28 +261,44 @@ export default function RutinasPage() {
   const handleCreateRoutine = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!token) return
-    setFormSaving(true)
+
     setFormError('')
+
+    if (routineForm.scope === 'individual' && !routineForm.assigned_user) {
+      setFormError('Selecciona el atleta al que quieres asignar esta rutina.')
+      return
+    }
+
+    setFormSaving(true)
     try {
       const url = editingRoutine
         ? `${API_BASE_URL}/api/workouts/routines/${editingRoutine.id}/`
         : `${API_BASE_URL}/api/workouts/routines/`
       const method = editingRoutine ? 'PATCH' : 'POST'
-      
+
+      const payload: any = {
+        name: routineForm.name,
+        objective: routineForm.objective,
+        level: routineForm.level,
+        duration_minutes: routineForm.duration_minutes,
+        status: routineForm.status,
+        points_reward: routineForm.points_reward,
+        scope: routineForm.scope,
+      }
+
+      if (routineForm.scope === 'individual') {
+        payload.assigned_user = routineForm.assigned_user || null
+      } else {
+        payload.assigned_user = null
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: routineForm.name,
-          objective: routineForm.objective,
-          level: routineForm.level,
-          duration_minutes: routineForm.duration_minutes,
-          status: routineForm.status,
-          points_reward: routineForm.points_reward,
-        }),
+        body: JSON.stringify(payload),
       })
       if (!response.ok) {
         const detail = await response.text()
@@ -238,7 +306,16 @@ export default function RutinasPage() {
       }
       setShowCreateModal(false)
       setEditingRoutine(null)
-      setRoutineForm({ name: '', objective: '', level: 'beginner', duration_minutes: 30, points_reward: 0, status: 'draft' })
+      setRoutineForm({
+        name: '',
+        objective: '',
+        level: 'beginner',
+        duration_minutes: 30,
+        points_reward: 0,
+        status: 'draft',
+        scope: 'gym',
+        assigned_user: '',
+      })
       fetchRoutines()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Ocurrió un error inesperado.')
@@ -256,6 +333,10 @@ export default function RutinasPage() {
       duration_minutes: routine.duration_minutes,
       points_reward: routine.points_reward || 0,
       status: routine.status,
+      scope:
+        (routine.scope as any) ||
+        (routine.assigned_user ? 'individual' : routine.gym ? 'gym' : 'global'),
+      assigned_user: routine.assigned_user || '',
     })
     setShowCreateModal(true)
     setFormError('')
@@ -264,7 +345,7 @@ export default function RutinasPage() {
   const handleDeleteRoutine = async (routineId: string) => {
     if (!token) return
     if (!confirm('¿Estás seguro de eliminar esta rutina?')) return
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/workouts/routines/${routineId}/`, {
         method: 'DELETE',
@@ -283,7 +364,16 @@ export default function RutinasPage() {
   const handleCloseModal = () => {
     setShowCreateModal(false)
     setEditingRoutine(null)
-    setRoutineForm({ name: '', objective: '', level: 'beginner', duration_minutes: 30, points_reward: 0, status: 'draft' })
+    setRoutineForm({
+      name: '',
+      objective: '',
+      level: 'beginner',
+      duration_minutes: 30,
+      points_reward: 0,
+      status: 'draft',
+      scope: 'gym',
+      assigned_user: '',
+    })
     setFormError('')
   }
 
@@ -306,7 +396,13 @@ export default function RutinasPage() {
         throw new Error(detail || 'No pudimos crear el ejercicio.')
       }
       setShowExerciseModal(false)
-      setExerciseForm({ name: '', category: 'strength', equipment: '', muscle_group: '', description: '' })
+      setExerciseForm({
+        name: '',
+        category: 'strength',
+        equipment: '',
+        muscle_group: '',
+        description: '',
+      })
       fetchExercises()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Ocurrió un error inesperado.')
@@ -334,7 +430,14 @@ export default function RutinasPage() {
         throw new Error(detail || 'No pudimos agregar el ejercicio a la rutina.')
       }
       setShowAddExerciseModal(false)
-      setAddExerciseForm({ routine: '', exercise: '', order: 1, sets: 3, reps: 10, rest_seconds: 60 })
+      setAddExerciseForm({
+        routine: '',
+        exercise: '',
+        order: 1,
+        sets: 3,
+        reps: 10,
+        rest_seconds: 60,
+      })
       fetchRoutines()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Ocurrió un error inesperado.')
@@ -344,31 +447,38 @@ export default function RutinasPage() {
   }
 
   const handleOpenAddExercise = (routineId: string) => {
-    setAddExerciseForm({ ...addExerciseForm, routine: routineId })
+    setAddExerciseForm((prev) => ({ ...prev, routine: routineId }))
     setShowAddExerciseModal(true)
     setFormError('')
   }
 
-  const userGymId = user?.gym === null || user?.gym === undefined || user?.gym === '' ? null : user?.gym
+  const userGymId =
+    user?.gym === null || user?.gym === undefined || user?.gym === '' ? null : (user?.gym as string)
 
-  const categories = useMemo(() => {
-    const catSet = new Set<string>()
-    routines.forEach((routine) =>
-      routine.routine_exercises?.forEach((block) => {
-        if (block.exercise_detail?.category) {
-          catSet.add(block.exercise_detail.category)
-        }
-      }),
-    )
-    return ['todas', ...Array.from(catSet)]
-  }, [routines])
+  const assignableAthletes = useMemo(() => {
+    return users.filter((u) => {
+      if (u.role === 'super_admin' || u.role === 'gym_admin' || u.role === 'coach') return false
+      if (userGymId && u.gym && String(u.gym) !== String(userGymId)) return false
+      return true
+    })
+  }, [users, userGymId])
 
   const filteredRoutines = useMemo(() => {
     if (activeCategory === 'todas') return routines
-    return routines.filter((routine) =>
-      routine.routine_exercises?.some((block) => block.exercise_detail?.category === activeCategory),
-    )
-  }, [activeCategory, routines])
+
+    if (activeCategory === 'mi_gym') {
+      if (!userGymId) return []
+      return routines.filter(
+        (routine) => routine.gym !== null && String(routine.gym) === String(userGymId),
+      )
+    }
+
+    if (activeCategory === 'globales') {
+      return routines.filter((routine) => !routine.gym && routine.scope !== 'individual')
+    }
+
+    return routines
+  }, [activeCategory, routines, userGymId])
 
   if (!user) {
     return <DashboardPage user={user} active="/rutinas" loading loadingLabel="Cargando rutinas..." />
@@ -377,13 +487,17 @@ export default function RutinasPage() {
   const loadingState = authLoading || loading
 
   const hasGymSpecificRoutines =
-    userGymId !== null && routines.some((routine) => routine.gym !== null && String(routine.gym) === String(userGymId))
+    userGymId !== null &&
+    routines.some((routine) => routine.gym !== null && String(routine.gym) === String(userGymId))
   const showGymEmptyMessage = userGymId !== null && !hasGymSpecificRoutines && routines.length > 0
 
   const canManageRoutines = user?.role && ['super_admin', 'gym_admin', 'coach'].includes(user.role)
 
   const renderBadge = (label: string, colorClass: string, key?: string) => (
-    <span key={key ?? label} className={`rounded-full px-3 py-0.5 text-xs font-semibold text-white ${colorClass}`}>
+    <span
+      key={key ?? label}
+      className={`rounded-full px-3 py-0.5 text-xs font-semibold text-white ${colorClass}`}
+    >
       {label}
     </span>
   )
@@ -394,10 +508,19 @@ export default function RutinasPage() {
     !!selectedRoutine &&
     (selectedRoutine.completed_today ||
       selectedRoutine.completed_by_me ||
-      (totalExercises > 0 && completedExercises === totalExercises && totalExercises === Object.keys(exerciseProgress).length))
+      (totalExercises > 0 &&
+        completedExercises === totalExercises &&
+        totalExercises === Object.keys(exerciseProgress).length))
 
   const handleRegisterCompletion = async () => {
-    if (!selectedRoutine || !token || completionStatus === 'saving' || completionStatus === 'success' || selectedRoutine.completed_today) return
+    if (
+      !selectedRoutine ||
+      !token ||
+      completionStatus === 'saving' ||
+      completionStatus === 'success' ||
+      selectedRoutine.completed_today
+    )
+      return
     setCompletionStatus('saving')
     setCompletionMessage('')
     try {
@@ -424,7 +547,7 @@ export default function RutinasPage() {
       setCompletionMessage(
         reward > 0
           ? `Has ganado ${reward} puntos. Buen trabajo!`
-          : 'Rutina registrada en tu historial. Sigue asi!',
+          : 'Rutina registrada en tu historial. ¡Sigue así!',
       )
       if (reward > 0 && setUser) {
         setUser((prev) => {
@@ -435,9 +558,15 @@ export default function RutinasPage() {
         })
       }
       setRoutines((prev) =>
-        prev.map((routine) => (routine.id === selectedRoutine.id ? { ...routine, completed_by_me: true, completed_today: true } : routine)),
+        prev.map((routine) =>
+          routine.id === selectedRoutine.id
+            ? { ...routine, completed_by_me: true, completed_today: true }
+            : routine,
+        ),
       )
-      setSelectedRoutine((prev) => (prev ? { ...prev, completed_by_me: true, completed_today: true } : prev))
+      setSelectedRoutine((prev) =>
+        prev ? { ...prev, completed_by_me: true, completed_today: true } : prev,
+      )
     } catch (error) {
       setCompletionStatus('error')
       setCompletionMessage(error instanceof Error ? error.message : 'No pudimos registrar la rutina.')
@@ -446,719 +575,1008 @@ export default function RutinasPage() {
 
   return (
     <DashboardPage user={user} active="/rutinas" loading={loadingState} loadingLabel="Cargando rutinas...">
-        <>
-          <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase text-emerald-600">Rutinas</p>
-                <h1 className="text-2xl font-semibold text-slate-900">Entrena con rutinas personalizadas</h1>
-                <p className="text-sm text-slate-500">Accede al catálogo global de Lifefit y a los planes creados por tu gym.</p>
+      <>
+        {/* Header */}
+        <header className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase text-emerald-600">Rutinas</p>
+              <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                Diseña planes personalizados para tus atletas
+              </h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Crea rutinas específicas para tu gym y ajusta el valor en puntos que recibirán tus atletas al
+                completarlas.
+              </p>
+            </div>
+            {canManageRoutines && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowExerciseModal(true)}
+                  className="rounded-2xl border border-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                >
+                  + Crear ejercicio
+                </button>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                >
+                  + Agregar rutina
+                </button>
               </div>
-              {canManageRoutines && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowExerciseModal(true)}
-                    className="rounded-2xl border border-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-50"
-                  >
-                    + Crear ejercicio
-                  </button>
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                  >
-                    + Agregar rutina
-                  </button>
-                </div>
-              )}
-            </div>
-          </header>
+            )}
+          </div>
+        </header>
 
-          <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
-            <div className="mb-6 flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
-              {categories.map((category) => {
-                const label = category === 'todas' ? 'Todas' : CATEGORY_LABELS[category] ?? category
-                const isActive = activeCategory === category
-                return (
-                  <button
-                    key={category}
-                    onClick={() => setActiveCategory(category)}
-                    className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold transition ${
-                      isActive ? 'bg-white text-emerald-600 shadow-sm dark:bg-slate-800 dark:text-emerald-300' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                    }`}
-                  >
-                    {label}
-                  </button>
+        {/* Rutinas */}
+        <section className="rounded-3xl bg-white p-6 shadow-lg transition-colors dark:bg-slate-900 dark:text-slate-100">
+          {/* Filtros superiores (ya no por categoría de ejercicio) */}
+          <div className="mb-6 flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/60">
+            {[
+              { id: 'todas' as const, label: 'Todas las rutinas' },
+              { id: 'mi_gym' as const, label: 'Solo mi gym' },
+              { id: 'globales' as const, label: 'Planes globales' },
+            ].map((tab) => {
+              const isActive = activeCategory === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveCategory(tab.id)}
+                  className={`flex-1 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                    isActive
+                      ? 'bg-white text-emerald-600 shadow-sm dark:bg-slate-800 dark:text-emerald-300'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {showGymEmptyMessage && (
+            <p className="mb-4 text-xs text-slate-400">
+              Tu gym aún no ha publicado rutinas propias. Estás viendo las rutinas globales de Lifefit.
+            </p>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {filteredRoutines.length ? (
+              filteredRoutines.map((routine) => {
+                const exerciseCount = routine.routine_exercises?.length ?? 0
+                const levelLabel = LEVEL_LABELS[routine.level] ?? routine.level
+                const routineCategories = Array.from(
+                  new Set(
+                    routine.routine_exercises
+                      ?.map((block) => block.exercise_detail?.category)
+                      .filter(Boolean) as string[],
+                  ),
                 )
-              })}
-            </div>
 
-            {showGymEmptyMessage && (
-              <p className="mb-4 text-xs text-slate-400">
-                Tu gym aún no ha publicado rutinas propias. Estás viendo las rutinas globales de Lifefit.
+                let scopeLabel: string
+                if (routine.scope === 'individual' || routine.assigned_user) {
+                  scopeLabel = 'Rutina personalizada'
+                } else if (routine.gym) {
+                  scopeLabel = 'Plan de tu gym'
+                } else {
+                  scopeLabel = 'Plan global Lifefit'
+                }
+
+                const athleteName = routine.assigned_user_detail
+                  ? `${routine.assigned_user_detail.first_name} ${routine.assigned_user_detail.last_name}`.trim() ||
+                    routine.assigned_user_detail.email
+                  : undefined
+
+                return (
+                  <div
+                    key={routine.id}
+                    className="flex flex-col rounded-3xl border border-slate-100 p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          {routine.name}
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{routine.objective}</p>
+                        {athleteName && (
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
+                            Asignada a:{' '}
+                            <span className="font-semibold text-slate-800 dark:text-slate-100">
+                              {athleteName}
+                            </span>
+                          </p>
+                        )}
+                        {routine.completed_by_me && !canManageRoutines && (
+                          <p className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            Rutina completada ✓
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                          {scopeLabel}
+                        </span>
+                        {canManageRoutines && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditRoutine(routine)
+                              }}
+                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                              title="Editar rutina"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteRoutine(routine.id)
+                              }}
+                              className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                              title="Eliminar rutina"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                      <span>⏱️ {routine.duration_minutes} min</span>
+                      <span>💪 {exerciseCount} ejercicios</span>
+                      {routine.points_reward ? (
+                        <span>⭐ {routine.points_reward} pts por sesión</span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {renderBadge(levelLabel, 'bg-amber-500', `${routine.id}-level`)}
+                      {routineCategories.length === 0 &&
+                        renderBadge('General', 'bg-slate-400', `${routine.id}-general`)}
+                      {routineCategories.map((category) => {
+                        const colors: Record<string, string> = {
+                          strength: 'bg-purple-500',
+                          cardio: 'bg-sky-500',
+                          mobility: 'bg-emerald-500',
+                          flexibility: 'bg-pink-500',
+                          hiit: 'bg-orange-500',
+                        }
+                        return renderBadge(
+                          CATEGORY_LABELS[category] ?? category,
+                          colors[category] ?? 'bg-slate-400',
+                          `${routine.id}-${category}`,
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenRoutine(routine)}
+                      className={`mt-4 w-full rounded-2xl py-2 text-sm font-semibold text-white transition ${
+                        canManageRoutines
+                          ? 'bg-blue-500 hover:bg-blue-600'
+                          : routine.completed_by_me
+                          ? 'bg-emerald-600'
+                          : 'bg-emerald-500 hover:bg-emerald-600'
+                      }`}
+                      title={canManageRoutines ? 'Ver detalles de la rutina' : ''}
+                    >
+                      {canManageRoutines
+                        ? 'Vista previa'
+                        : routine.completed_by_me
+                        ? 'Ver rutina (completada)'
+                        : 'Iniciar'}
+                    </button>
+
+                    {canManageRoutines && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleOpenAddExercise(routine.id)
+                        }}
+                        className="mt-2 w-full rounded-2xl border border-emerald-500 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-50 dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-900/20"
+                      >
+                        + Agregar ejercicio
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {activeCategory === 'todas'
+                  ? userGymId !== null
+                    ? 'Aún no hay rutinas disponibles para tu cuenta.'
+                    : 'Aún no hay rutinas globales disponibles.'
+                  : 'No hay rutinas en esta vista.'}
               </p>
             )}
+          </div>
+        </section>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {filteredRoutines.length ? (
-                filteredRoutines.map((routine) => {
-                  const exerciseCount = routine.routine_exercises?.length ?? 0
-                  const levelLabel = LEVEL_LABELS[routine.level] ?? routine.level
-                  const routineCategories = Array.from(
-                    new Set(
-                      routine.routine_exercises
-                        ?.map((block) => block.exercise_detail?.category)
-                        .filter(Boolean) as string[],
-                    ),
-                  )
+        {/* Modal de rutina en curso */}
+        {selectedRoutine && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 px-4">
+            <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase text-emerald-600">Rutina en curso</p>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+                    {selectedRoutine.name}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {selectedRoutine.objective}
+                  </p>
+                  {selectedRoutine.points_reward ? (
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      Valor: {selectedRoutine.points_reward} pts
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  onClick={handleCloseRoutine}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-100"
+                >
+                  Cerrar ✕
+                </button>
+              </div>
+
+              {/* Barra de progreso */}
+              <div className="mt-4">
+                {(() => {
+                  const total = totalExercises
+                  const completed = completedExercises
+                  const percentage = total ? Math.round((completed / total) * 100) : 0
                   return (
-                    <div key={routine.id} className="flex flex-col rounded-3xl border border-slate-100 p-5 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-base font-semibold text-slate-900">{routine.name}</p>
-                          <p className="text-sm text-slate-500">{routine.objective}</p>
-                          {routine.completed_by_me && (
-                            <p className="mt-1 text-xs font-semibold text-emerald-600">Rutina completada ✓</p>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="text-xs text-slate-400">
-                            {routine.gym ? 'Plan de tu gym' : 'Plan global Lifefit'}
-                          </span>
-                          {canManageRoutines && (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleEditRoutine(routine)
-                                }}
-                                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                                title="Editar rutina"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDeleteRoutine(routine.id)
-                                }}
-                                className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                                title="Eliminar rutina"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span>Progreso</span>
+                        <span>
+                          {completed}/{total}
+                        </span>
                       </div>
-                      <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
-                        <span>⏱️ {routine.duration_minutes} min</span>
-                        <span>💪 {exerciseCount} ejercicios</span>
-                        {routine.points_reward ? <span>⭐ {routine.points_reward} pts</span> : null}
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700">
+                        <div
+                          className="h-full rounded-full bg-emerald-500"
+                          style={{ width: `${percentage}%` }}
+                        />
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {renderBadge(levelLabel, 'bg-amber-500', `${routine.id}-level`)}
-                        {routineCategories.length === 0 && renderBadge('General', 'bg-slate-400', `${routine.id}-general`)}
-                        {routineCategories.map((category) => {
-                          const colors: Record<string, string> = {
-                            strength: 'bg-purple-500',
-                            cardio: 'bg-sky-500',
-                            mobility: 'bg-emerald-500',
-                            flexibility: 'bg-pink-500',
-                            hiit: 'bg-orange-500',
-                          }
-                          return renderBadge(
-                            CATEGORY_LABELS[category] ?? category,
-                            colors[category] ?? 'bg-slate-400',
-                            `${routine.id}-${category}`,
-                          )
-                        })}
-                      </div>
-                      <button
-                        onClick={() => handleOpenRoutine(routine)}
-                        className={`mt-4 w-full rounded-2xl py-2 text-sm font-semibold text-white transition ${
-                          canManageRoutines 
-                            ? 'bg-blue-500 hover:bg-blue-600'
-                            : routine.completed_by_me 
-                              ? 'bg-emerald-600' 
-                              : 'bg-emerald-500 hover:bg-emerald-600'
-                        }`}
-                        title={canManageRoutines ? 'Ver detalles de la rutina' : ''}
-                      >
-                        {canManageRoutines ? 'Vista previa' : routine.completed_by_me ? 'Ver rutina (completada)' : 'Iniciar'}
-                      </button>
-                      {canManageRoutines && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleOpenAddExercise(routine.id)
-                          }}
-                          className="mt-2 w-full rounded-2xl border border-emerald-500 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-50"
-                        >
-                          + Agregar ejercicio
-                        </button>
-                      )}
                     </div>
                   )
-                })
-              ) : (
-                <p className="text-sm text-slate-500">
-                  {activeCategory === 'todas'
-                    ? userGymId !== null
-                      ? 'Aún no hay rutinas disponibles para tu cuenta.'
-                      : 'Aún no hay rutinas globales disponibles.'
-                    : 'No hay rutinas en esta categoría.'}
-                </p>
-              )}
-            </div>
-          </section>
-          {selectedRoutine && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 px-4">
-              <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase text-emerald-600">Rutina en curso</p>
-                    <h3 className="text-xl font-semibold text-slate-900">{selectedRoutine.name}</h3>
-                    <p className="text-sm text-slate-500">{selectedRoutine.objective}</p>
-                    {selectedRoutine.points_reward ? (
-                      <p className="text-xs font-semibold text-emerald-600">Valor: {selectedRoutine.points_reward} pts</p>
-                    ) : null}
+                })()}
+              </div>
+
+              {/* Timer solo para atletas */}
+              {!canManageRoutines && (
+                <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                  <div className="flex items-center gap-3">
+                    <svg
+                      className="h-5 w-5 text-slate-600 dark:text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      {formatTime(timerSeconds)}
+                    </span>
                   </div>
-                  <button
-                    onClick={handleCloseRoutine}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
-                  >
-                    Cerrar ?
-                  </button>
-                </div>
-                <div className="mt-4">
-                  {(() => {
-                    const total = totalExercises
-                    const completed = completedExercises
-                    const percentage = total ? Math.round((completed / total) * 100) : 0
-                    return (
-                      <div>
-                        <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-                          <span>Progreso</span>
-                          <span>
-                            {completed}/{total}
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-slate-100">
-                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${percentage}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-                
-                {/* Timer - Solo para usuarios no admin */}
-                {!canManageRoutines && (
-                  <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                    <div className="flex items-center gap-3">
-                      <svg
-                        className="h-5 w-5 text-slate-600 dark:text-slate-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handlePlayPauseTimer}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 dark:border-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                      title={isTimerRunning ? 'Pausar' : 'Iniciar'}
+                    >
+                      {isTimerRunning ? (
+                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleResetTimer}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+                      title="Reiniciar"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                         />
                       </svg>
-                      <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">{formatTime(timerSeconds)}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handlePlayPauseTimer}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
-                        title={isTimerRunning ? 'Pausar' : 'Iniciar'}
-                      >
-                        {isTimerRunning ? (
-                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                          </svg>
-                        ) : (
-                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={handleResetTimer}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
-                        title="Reiniciar"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                          />
-                        </svg>
-                      </button>
-                    </div>
+                    </button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Mensaje informativo para admins */}
-                {canManageRoutines && (
-                  <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-                    <div className="flex items-start gap-3">
-                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                      <div>
-                        <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                          Vista de administrador
-                        </p>
-                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                          Como administrador, puedes ver el contenido de las rutinas pero no iniciarlas ni completarlas. Esta función es exclusiva para usuarios atletas.
-                        </p>
-                      </div>
+              {/* Mensaje para admins */}
+              {canManageRoutines && (
+                <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                  <div className="flex items-start gap-3">
+                    <svg
+                      className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+                        Vista de administrador
+                      </p>
+                      <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                        Como administrador o coach, puedes ver el contenido de las rutinas pero no iniciarlas ni
+                        completarlas. Esta función es exclusiva para usuarios atletas.
+                      </p>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                <div className="mt-4 space-y-3">
-                  {selectedRoutine.routine_exercises
-                    ?.sort((a, b) => a.order - b.order)
-                    .map((exercise) => {
-                      const completed = exerciseProgress[exercise.id]
-                      const isRoutineCompleted = selectedRoutine.completed_today
-                      const canToggle = !isRoutineCompleted && !canManageRoutines
-                      
-                      return (
-                        <button
-                          key={exercise.id}
-                          onClick={() => !canManageRoutines && toggleExerciseProgress(exercise.id)}
-                          disabled={isRoutineCompleted || canManageRoutines}
-                          className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
-                            completed
-                              ? 'border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/30'
-                              : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800/50'
-                          } ${!canToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-sm'}`}
-                          title={
-                            canManageRoutines
-                              ? 'Los administradores no pueden marcar ejercicios'
-                              : isRoutineCompleted
-                                ? '⚠️ Rutina completada - No se puede modificar'
-                                : completed
-                                  ? 'Click para desmarcar'
-                                  : 'Click para marcar como completado'
-                          }
-                        >
-                          <div>
-                            <p className={`font-semibold ${completed ? 'text-emerald-800 dark:text-emerald-300' : 'dark:text-slate-100'}`}>
-                              {exercise.exercise_detail?.name ?? 'Ejercicio'}
-                            </p>
-                            <p className={`text-xs ${completed ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                              {exercise.sets} series x {exercise.reps} repeticiones · Descanso {exercise.rest_seconds} seg
-                            </p>
-                          </div>
-                          <div className="shrink-0">
-                            {completed ? (
-                              <svg className="h-6 w-6 text-emerald-600 dark:text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path
-                                  fillRule="evenodd"
-                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                  clipRule="evenodd"
-                                />
-                              </svg>
-                            ) : (
-                              <svg className="h-6 w-6 text-slate-400 dark:text-slate-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path
-                                  fillRule="evenodd"
-                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"
-                                  clipRule="evenodd"
-                                />
-                              </svg>
-                            )}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  {!selectedRoutine.routine_exercises?.length && (
-                    <p className="text-sm text-slate-500">Aún no se han agregado ejercicios a esta rutina.</p>
-                  )}
-                </div>
-                
-                {/* Sección de completar rutina - Solo para usuarios no admin */}
-                {!canManageRoutines && isRoutineCompleted && (
-                  <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-100 p-4 text-center dark:border-emerald-700 dark:bg-emerald-900/30">
-                    {completionStatus === 'success' ? (
-                      <>
-                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">Rutina completada</p>
-                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                          {completionMessage ||
-                            (selectedRoutine.points_reward
-                              ? `Has ganado ${selectedRoutine.points_reward} puntos.`
-                              : 'Rutina registrada.')}
-                        </p>
-                      </>
-                    ) : selectedRoutine.completed_today ? (
-                      <>
-                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">✅ Rutina ya completada hoy</p>
-                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                          Ya registraste esta rutina hoy. Los puntos solo se otorgan una vez por día.
-                        </p>
-                      </>
-                    ) : selectedRoutine.completed_by_me ? (
-                      <>
-                        <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">✅ Rutina completada anteriormente</p>
-                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                          Ya completaste esta rutina antes. Puedes registrarla de nuevo hoy.
-                        </p>
-                        <button
-                          onClick={handleRegisterCompletion}
-                          disabled={completionStatus === 'saving'}
-                          className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-700"
-                        >
-                          {completionStatus === 'saving' ? 'Guardando...' : 'Registrar nuevamente'}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm text-emerald-800 dark:text-emerald-300">
-                          {selectedRoutine.points_reward && selectedRoutine.points_reward > 0
-                            ? `Marca como completada para ganar ${selectedRoutine.points_reward} puntos.`
-                            : 'Marca como completada para registrar tu progreso.'}
-                        </p>
-                        <button
-                          onClick={handleRegisterCompletion}
-                          disabled={completionStatus === 'saving'}
-                          className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-700"
-                        >
-                          {completionStatus === 'saving' ? 'Guardando...' : 'Registrar rutina completada'}
-                        </button>
-                        {completionStatus === 'error' && (
-                          <p className="mt-2 text-xs text-red-600">{completionMessage}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
+              {/* Ejercicios */}
+              <div className="mt-4 space-y-3">
+                {selectedRoutine.routine_exercises
+                  ?.sort((a, b) => a.order - b.order)
+                  .map((exercise) => {
+                    const completed = exerciseProgress[exercise.id]
+                    const isRoutineCompletedToday = selectedRoutine.completed_today
+                    const canToggle = !isRoutineCompletedToday && !canManageRoutines
+
+                    return (
+                      <button
+                        key={exercise.id}
+                        onClick={() => !canManageRoutines && toggleExerciseProgress(exercise.id)}
+                        disabled={isRoutineCompletedToday || canManageRoutines}
+                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                          completed
+                            ? 'border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/30'
+                            : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800/50'
+                        } ${!canToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-sm'}`}
+                        title={
+                          canManageRoutines
+                            ? 'Los administradores no pueden marcar ejercicios'
+                            : isRoutineCompletedToday
+                            ? '⚠️ Rutina completada - No se puede modificar'
+                            : completed
+                            ? 'Click para desmarcar'
+                            : 'Click para marcar como completado'
+                        }
+                      >
+                        <div>
+                          <p
+                            className={`font-semibold ${
+                              completed ? 'text-emerald-800 dark:text-emerald-300' : 'dark:text-slate-100'
+                            }`}
+                          >
+                            {exercise.exercise_detail?.name ?? 'Ejercicio'}
+                          </p>
+                          <p
+                            className={`text-xs ${
+                              completed
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {exercise.sets} series x {exercise.reps} repeticiones · Descanso{' '}
+                            {exercise.rest_seconds} seg
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          {completed ? (
+                            <svg
+                              className="h-6 w-6 text-emerald-600 dark:text-emerald-400"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className="h-6 w-6 text-slate-400 dark:text-slate-600"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                {!selectedRoutine.routine_exercises?.length && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Aún no se han agregado ejercicios a esta rutina.
+                  </p>
                 )}
               </div>
-            </div>
-          )}
-          {showCreateModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-              <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">{editingRoutine ? 'Editar rutina' : 'Nueva rutina'}</p>
-                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                      {editingRoutine ? 'Modifica los datos de la rutina' : 'Crea una nueva rutina'}
-                    </h3>
-                  </div>
-                  <button
-                    onClick={handleCloseModal}
-                    className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                  >
-                    Cerrar ✕
-                  </button>
-                </div>
-                <form onSubmit={handleCreateRoutine} className="mt-4 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
-                    <input
-                      type="text"
-                      required
-                      value={routineForm.name}
-                      onChange={(e) => setRoutineForm({ ...routineForm, name: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Ej: Rutina de fuerza completa"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Objetivo</label>
-                    <textarea
-                      required
-                      value={routineForm.objective}
-                      onChange={(e) => setRoutineForm({ ...routineForm, objective: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Ej: Mejorar fuerza y resistencia muscular"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nivel</label>
-                      <select
-                        value={routineForm.level}
-                        onChange={(e) => setRoutineForm({ ...routineForm, level: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+
+              {/* Sección de completar rutina - solo atletas */}
+              {!canManageRoutines && (
+                <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-100 p-4 text-center dark:border-emerald-700 dark:bg-emerald-900/30">
+                  {completionStatus === 'success' ? (
+                    <>
+                      <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">
+                        Rutina completada
+                      </p>
+                      <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                        {completionMessage ||
+                          (selectedRoutine.points_reward
+                            ? `Has ganado ${selectedRoutine.points_reward} puntos.`
+                            : 'Rutina registrada.')}
+                      </p>
+                    </>
+                  ) : selectedRoutine.completed_today ? (
+                    <>
+                      <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">
+                        ✅ Rutina ya completada hoy
+                      </p>
+                      <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                        Ya registraste esta rutina hoy. Los puntos solo se otorgan una vez por día.
+                      </p>
+                    </>
+                  ) : selectedRoutine.completed_by_me ? (
+                    <>
+                      <p className="text-base font-semibold text-emerald-800 dark:text-emerald-300">
+                        ✅ Rutina completada anteriormente
+                      </p>
+                      <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                        Ya completaste esta rutina antes. Puedes registrarla de nuevo hoy.
+                      </p>
+                      <button
+                        onClick={handleRegisterCompletion}
+                        disabled={completionStatus === 'saving'}
+                        className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                       >
-                        <option value="beginner">Principiante</option>
-                        <option value="intermediate">Intermedio</option>
-                        <option value="advanced">Avanzado</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Estado</label>
-                      <select
-                        value={routineForm.status}
-                        onChange={(e) => setRoutineForm({ ...routineForm, status: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                        {completionStatus === 'saving' ? 'Guardando...' : 'Registrar nuevamente'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-emerald-800 dark:text-emerald-300">
+                        {selectedRoutine.points_reward && selectedRoutine.points_reward > 0
+                          ? `Marca como completada para ganar ${selectedRoutine.points_reward} puntos.`
+                          : 'Marca como completada para registrar tu progreso.'}
+                      </p>
+                      <button
+                        onClick={handleRegisterCompletion}
+                        disabled={completionStatus === 'saving'}
+                        className="mt-3 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                       >
-                        <option value="draft">Borrador</option>
-                        <option value="published">Publicada</option>
-                        <option value="archived">Archivada</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Duración (min)</label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        value={routineForm.duration_minutes}
-                        onChange={(e) => setRoutineForm({ ...routineForm, duration_minutes: parseInt(e.target.value) || 0 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Puntos</label>
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        value={routineForm.points_reward}
-                        onChange={(e) => setRoutineForm({ ...routineForm, points_reward: parseInt(e.target.value) || 0 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                  {formError && (
-                    <p className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-xs text-red-600 dark:text-red-400">{formError}</p>
+                        {completionStatus === 'saving' ? 'Guardando...' : 'Registrar rutina completada'}
+                      </button>
+                      {completionStatus === 'error' && (
+                        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{completionMessage}</p>
+                      )}
+                    </>
                   )}
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={handleCloseModal}
-                      className="flex-1 rounded-2xl border border-slate-300 dark:border-slate-700 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={formSaving}
-                      className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
-                    >
-                      {formSaving ? 'Guardando...' : editingRoutine ? 'Guardar cambios' : 'Crear rutina'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-          {showExerciseModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-              <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">Nuevo ejercicio</p>
-                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Crea un nuevo ejercicio</h3>
-                  </div>
-                  <button
-                    onClick={() => setShowExerciseModal(false)}
-                    className="rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                  >
-                    Cerrar ✕
-                  </button>
                 </div>
-                <form onSubmit={handleCreateExercise} className="mt-4 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
-                    <input
-                      type="text"
-                      required
-                      value={exerciseForm.name}
-                      onChange={(e) => setExerciseForm({ ...exerciseForm, name: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Ej: Press de banca"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Categoría</label>
-                      <select
-                        value={exerciseForm.category}
-                        onChange={(e) => setExerciseForm({ ...exerciseForm, category: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      >
-                        <option value="strength">Fuerza</option>
-                        <option value="cardio">Cardio</option>
-                        <option value="mobility">Movilidad</option>
-                        <option value="flexibility">Flexibilidad</option>
-                        <option value="hiit">HIIT</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Grupo muscular</label>
-                      <input
-                        type="text"
-                        value={exerciseForm.muscle_group}
-                        onChange={(e) => setExerciseForm({ ...exerciseForm, muscle_group: e.target.value })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                        placeholder="Ej: Pecho"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Equipo</label>
-                    <input
-                      type="text"
-                      value={exerciseForm.equipment}
-                      onChange={(e) => setExerciseForm({ ...exerciseForm, equipment: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Ej: Barra, Mancuernas"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Descripción</label>
-                    <textarea
-                      value={exerciseForm.description}
-                      onChange={(e) => setExerciseForm({ ...exerciseForm, description: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      placeholder="Describe el ejercicio..."
-                      rows={3}
-                    />
-                  </div>
-                  {formError && (
-                    <p className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-xs text-red-600 dark:text-red-400">{formError}</p>
-                  )}
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowExerciseModal(false)}
-                      className="flex-1 rounded-2xl border border-slate-300 dark:border-slate-700 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-800"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={formSaving}
-                      className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
-                    >
-                      {formSaving ? 'Guardando...' : 'Crear ejercicio'}
-                    </button>
-                  </div>
-                </form>
-              </div>
+              )}
             </div>
-          )}
-          {showAddExerciseModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
-              <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase text-emerald-600">Agregar ejercicio</p>
-                    <h3 className="text-xl font-semibold text-slate-900">Añade un ejercicio a la rutina</h3>
-                  </div>
-                  <button
-                    onClick={() => setShowAddExerciseModal(false)}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900"
-                  >
-                    Cerrar ✕
-                  </button>
+          </div>
+        )}
+
+        {/* Modal crear / editar rutina */}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">
+                    {editingRoutine ? 'Editar rutina' : 'Nueva rutina'}
+                  </p>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    {editingRoutine ? 'Modifica los datos de la rutina' : 'Crea una nueva rutina'}
+                  </h3>
                 </div>
-                <form onSubmit={handleAddExerciseToRoutine} className="mt-4 space-y-4">
+                <button
+                  onClick={handleCloseModal}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Cerrar ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateRoutine} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
+                  <input
+                    type="text"
+                    required
+                    value={routineForm.name}
+                    onChange={(e) => setRoutineForm({ ...routineForm, name: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Ej: Plan fuerza + movilidad 1 semana"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Objetivo</label>
+                  <textarea
+                    required
+                    value={routineForm.objective}
+                    onChange={(e) =>
+                      setRoutineForm({
+                        ...routineForm,
+                        objective: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Ej: Mejorar fuerza, core y movilidad en 1 semana"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Alcance de la rutina */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Alcance de la rutina
+                  </label>
+                  <select
+                    value={routineForm.scope}
+                    onChange={(e) =>
+                      setRoutineForm({
+                        ...routineForm,
+                        scope: e.target.value as 'gym' | 'global' | 'individual',
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="gym">Miembros de mi gym</option>
+                    <option value="global">Plantilla global Lifefit</option>
+                    <option value="individual">Personalizada para un atleta</option>
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Esto define quién verá esta rutina en su panel. Las rutinas personalizadas se asignan a un
+                    atleta específico.
+                  </p>
+                </div>
+
+                {/* Selección de atleta si es individual */}
+                {routineForm.scope === 'individual' && (
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Ejercicio</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Asignar a atleta
+                    </label>
                     <select
+                      value={routineForm.assigned_user}
+                      onChange={(e) =>
+                        setRoutineForm({
+                          ...routineForm,
+                          assigned_user: e.target.value,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       required
-                      value={addExerciseForm.exercise}
-                      onChange={(e) => setAddExerciseForm({ ...addExerciseForm, exercise: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                     >
-                      <option value="">Selecciona un ejercicio</option>
-                      {exercises.map((ex) => (
-                        <option key={ex.id} value={ex.id}>
-                          {ex.name} ({ex.category})
-                        </option>
-                      ))}
+                      <option value="">Selecciona un atleta...</option>
+                      {usersLoading && <option>Cargando usuarios...</option>}
+                      {!usersLoading &&
+                        assignableAthletes.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.first_name} {u.last_name} ({u.email})
+                          </option>
+                        ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      Solo se muestran usuarios de tu gimnasio que no son administradores ni coaches.
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Nivel
+                    </label>
+                    <select
+                      value={routineForm.level}
+                      onChange={(e) =>
+                        setRoutineForm({
+                          ...routineForm,
+                          level: e.target.value,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="beginner">Principiante</option>
+                      <option value="intermediate">Intermedio</option>
+                      <option value="advanced">Avanzado</option>
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700">Orden</label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        value={addExerciseForm.order}
-                        onChange={(e) => setAddExerciseForm({ ...addExerciseForm, order: parseInt(e.target.value) || 1 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700">Series</label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        value={addExerciseForm.sets}
-                        onChange={(e) => setAddExerciseForm({ ...addExerciseForm, sets: parseInt(e.target.value) || 3 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700">Repeticiones</label>
-                      <input
-                        type="number"
-                        required
-                        min="1"
-                        value={addExerciseForm.reps}
-                        onChange={(e) => setAddExerciseForm({ ...addExerciseForm, reps: parseInt(e.target.value) || 10 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700">Descanso (seg)</label>
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        value={addExerciseForm.rest_seconds}
-                        onChange={(e) => setAddExerciseForm({ ...addExerciseForm, rest_seconds: parseInt(e.target.value) || 60 })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                  {formError && (
-                    <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600">{formError}</p>
-                  )}
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddExerciseModal(false)}
-                      className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Estado
+                    </label>
+                    <select
+                      value={routineForm.status}
+                      onChange={(e) =>
+                        setRoutineForm({
+                          ...routineForm,
+                          status: e.target.value,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={formSaving}
-                      className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
-                    >
-                      {formSaving ? 'Guardando...' : 'Agregar ejercicio'}
-                    </button>
+                      <option value="draft">Borrador</option>
+                      <option value="published">Publicada</option>
+                      <option value="archived">Archivada</option>
+                    </select>
                   </div>
-                </form>
-              </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Duración (min)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={routineForm.duration_minutes}
+                      onChange={(e) =>
+                        setRoutineForm({
+                          ...routineForm,
+                          duration_minutes: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Puntos por sesión
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={routineForm.points_reward}
+                      onChange={(e) =>
+                        setRoutineForm({
+                          ...routineForm,
+                          points_reward: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                {formError && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+                    {formError}
+                  </p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSaving}
+                    className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                  >
+                    {formSaving ? 'Guardando...' : editingRoutine ? 'Guardar cambios' : 'Crear rutina'}
+                  </button>
+                </div>
+              </form>
             </div>
-          )}
-        </>
-      </DashboardPage>
+          </div>
+        )}
+
+        {/* Modal crear ejercicio */}
+        {showExerciseModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase text-emerald-600 dark:text-emerald-400">Nuevo ejercicio</p>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    Crea un nuevo ejercicio
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowExerciseModal(false)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Cerrar ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateExercise} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
+                  <input
+                    type="text"
+                    required
+                    value={exerciseForm.name}
+                    onChange={(e) =>
+                      setExerciseForm({
+                        ...exerciseForm,
+                        name: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Ej: Press de banca"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Categoría
+                    </label>
+                    <select
+                      value={exerciseForm.category}
+                      onChange={(e) =>
+                        setExerciseForm({
+                          ...exerciseForm,
+                          category: e.target.value,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="strength">Fuerza</option>
+                      <option value="cardio">Cardio</option>
+                      <option value="mobility">Movilidad</option>
+                      <option value="flexibility">Flexibilidad</option>
+                      <option value="hiit">HIIT</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Grupo muscular
+                    </label>
+                    <input
+                      type="text"
+                      value={exerciseForm.muscle_group}
+                      onChange={(e) =>
+                        setExerciseForm({
+                          ...exerciseForm,
+                          muscle_group: e.target.value,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      placeholder="Ej: Pecho"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Equipo</label>
+                  <input
+                    type="text"
+                    value={exerciseForm.equipment}
+                    onChange={(e) =>
+                      setExerciseForm({
+                        ...exerciseForm,
+                        equipment: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Ej: Barra, mancuernas"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Descripción
+                  </label>
+                  <textarea
+                    value={exerciseForm.description}
+                    onChange={(e) =>
+                      setExerciseForm({
+                        ...exerciseForm,
+                        description: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    placeholder="Describe el ejercicio..."
+                    rows={3}
+                  />
+                </div>
+                {formError && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+                    {formError}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowExerciseModal(false)}
+                    className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSaving}
+                    className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                  >
+                    {formSaving ? 'Guardando...' : 'Crear ejercicio'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal agregar ejercicio a rutina */}
+        {showAddExerciseModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl transition-colors dark:bg-slate-900 dark:text-slate-100">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase text-emerald-600">Agregar ejercicio</p>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+                    Añade un ejercicio a la rutina
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowAddExerciseModal(false)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-100"
+                >
+                  Cerrar ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleAddExerciseToRoutine} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Ejercicio
+                  </label>
+                  <select
+                    required
+                    value={addExerciseForm.exercise}
+                    onChange={(e) =>
+                      setAddExerciseForm({
+                        ...addExerciseForm,
+                        exercise: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="">Selecciona un ejercicio</option>
+                    {exercises.map((ex) => (
+                      <option key={ex.id} value={ex.id}>
+                        {ex.name} ({CATEGORY_LABELS[ex.category] ?? ex.category})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Orden
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={addExerciseForm.order}
+                      onChange={(e) =>
+                        setAddExerciseForm({
+                          ...addExerciseForm,
+                          order: parseInt(e.target.value) || 1,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Series
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={addExerciseForm.sets}
+                      onChange={(e) =>
+                        setAddExerciseForm({
+                          ...addExerciseForm,
+                          sets: parseInt(e.target.value) || 3,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Repeticiones
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={addExerciseForm.reps}
+                      onChange={(e) =>
+                        setAddExerciseForm({
+                          ...addExerciseForm,
+                          reps: parseInt(e.target.value) || 10,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Descanso (seg)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      value={addExerciseForm.rest_seconds}
+                      onChange={(e) =>
+                        setAddExerciseForm({
+                          ...addExerciseForm,
+                          rest_seconds: parseInt(e.target.value) || 60,
+                        })
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                {formError && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+                    {formError}
+                  </p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddExerciseModal(false)}
+                    className="flex-1 rounded-2xl border border-slate-300 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSaving}
+                    className="flex-1 rounded-2xl bg-emerald-500 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+                  >
+                    {formSaving ? 'Guardando...' : 'Agregar ejercicio'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </>
+    </DashboardPage>
   )
 }
-
-
