@@ -452,6 +452,34 @@ export default function RutinasPage() {
     setFormError('')
   }
 
+  const handleDeleteExerciseFromRoutine = async (routineExerciseId: string) => {
+    if (!confirm('¿Estás seguro de eliminar este ejercicio de la rutina?')) return
+    if (!token) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/workouts/routine-exercises/${routineExerciseId}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (response.ok) {
+        await fetchRoutines()
+        // Actualizar la rutina seleccionada también
+        if (selectedRoutine) {
+          const updatedRoutine = await fetch(`${API_BASE_URL}/api/workouts/routines/${selectedRoutine.id}/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (updatedRoutine.ok) {
+            const data = await updatedRoutine.json()
+            setSelectedRoutine(data)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error al eliminar ejercicio:', error)
+    }
+  }
+
   const userGymId =
     user?.gym === null || user?.gym === undefined || user?.gym === '' ? null : (user?.gym as string)
 
@@ -940,72 +968,87 @@ export default function RutinasPage() {
                     const canToggle = !isRoutineCompletedToday && !canManageRoutines
 
                     return (
-                      <button
+                      <div
                         key={exercise.id}
-                        onClick={() => !canManageRoutines && toggleExerciseProgress(exercise.id)}
-                        disabled={isRoutineCompletedToday || canManageRoutines}
                         className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
                           completed
                             ? 'border-emerald-300 bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/30'
                             : 'border-slate-200 dark:border-slate-700 dark:bg-slate-800/50'
-                        } ${!canToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-sm'}`}
-                        title={
-                          canManageRoutines
-                            ? 'Los administradores no pueden marcar ejercicios'
-                            : isRoutineCompletedToday
-                            ? '⚠️ Rutina completada - No se puede modificar'
-                            : completed
-                            ? 'Click para desmarcar'
-                            : 'Click para marcar como completado'
-                        }
+                        }`}
                       >
-                        <div>
-                          <p
-                            className={`font-semibold ${
-                              completed ? 'text-emerald-800 dark:text-emerald-300' : 'dark:text-slate-100'
-                            }`}
-                          >
-                            {exercise.exercise_detail?.name ?? 'Ejercicio'}
-                          </p>
-                          <p
-                            className={`text-xs ${
-                              completed
-                                ? 'text-emerald-700 dark:text-emerald-400'
-                                : 'text-slate-500 dark:text-slate-400'
-                            }`}
-                          >
-                            {exercise.sets} series x {exercise.reps} repeticiones · Descanso{' '}
-                            {exercise.rest_seconds} seg
-                          </p>
-                        </div>
-                        <div className="shrink-0">
-                          {completed ? (
-                            <svg
-                              className="h-6 w-6 text-emerald-600 dark:text-emerald-400"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
+                        <button
+                          onClick={() => !canManageRoutines && toggleExerciseProgress(exercise.id)}
+                          disabled={isRoutineCompletedToday || canManageRoutines}
+                          className={`flex flex-1 items-center justify-between ${
+                            !canToggle ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                          }`}
+                          title={
+                            canManageRoutines
+                              ? 'Los administradores no pueden marcar ejercicios'
+                              : isRoutineCompletedToday
+                              ? '⚠️ Rutina completada - No se puede modificar'
+                              : completed
+                              ? 'Click para desmarcar'
+                              : 'Click para marcar como completado'
+                          }
+                        >
+                          <div>
+                            <p
+                              className={`font-semibold ${
+                                completed ? 'text-emerald-800 dark:text-emerald-300' : 'dark:text-slate-100'
+                              }`}
                             >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          ) : (
-                            <svg
-                              className="h-6 w-6 text-slate-400 dark:text-slate-600"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
+                              {exercise.exercise_detail?.name ?? 'Ejercicio'}
+                            </p>
+                            <p
+                              className={`text-xs ${
+                                completed
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}
                             >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                      </button>
+                              {exercise.sets} series x {exercise.reps} repeticiones · Descanso{' '}
+                              {exercise.rest_seconds} seg
+                            </p>
+                          </div>
+                          <div className="shrink-0">
+                            {completed ? (
+                              <svg
+                                className="h-6 w-6 text-emerald-600 dark:text-emerald-400"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            ) : (
+                              <svg
+                                className="h-6 w-6 text-slate-400 dark:text-slate-600"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </button>
+                        {canManageRoutines && (
+                          <button
+                            onClick={() => handleDeleteExerciseFromRoutine(exercise.id)}
+                            className="ml-2 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
+                            title="Eliminar ejercicio de la rutina"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
                     )
                   })}
                 {!selectedRoutine.routine_exercises?.length && (

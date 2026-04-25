@@ -289,7 +289,7 @@ export default function BadgeManagement({ token }: BadgeManagementProps) {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 text-3xl dark:from-emerald-900/40 dark:to-emerald-700/40">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-linear-to-br from-emerald-100 to-emerald-200 text-3xl dark:from-emerald-900/40 dark:to-emerald-700/40">
                       {badge.icon || '🏆'}
                     </div>
                     <div>

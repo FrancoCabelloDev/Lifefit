@@ -1,17 +1,12 @@
 'use client'
-import TestimonialsSection from './TestimonialsSection'
 import { useEffect } from 'react'
 import HeroSection from './HeroSection'
 import CoreFeaturesSection from './CoreFeaturesSection'
 import HowItWorksSection from './HowItWorksSection'
-import FeaturedFunctionsSection from './FeaturedFunctionsSection'
-import GymsSection from './GymsSection'
 import PlansSection from './PlansSection'
-import FAQSection from './FAQSection'
+import AboutSection from './AboutSection'
 import CTASection from './CTASection'
 import FooterSection from './FooterSection'
-import AboutSection from './AboutSection'
-import ContactSection from './ContactSection'
 
 type HomeClientProps = {
   initialSection?: string
@@ -27,17 +22,12 @@ export default function HomeClient({ initialSection }: HomeClientProps) {
   }, [initialSection])
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+    <main className="min-h-screen bg-[#0a0a0a] text-white">
       <HeroSection />
-      <AboutSection /> 
       <CoreFeaturesSection />
       <HowItWorksSection />
-      <FeaturedFunctionsSection />
-      <GymsSection />
-      <TestimonialsSection />
       <PlansSection />
-      <FAQSection />
-      <ContactSection /> 
+      <AboutSection /> 
       <CTASection />
       <FooterSection />
     </main>

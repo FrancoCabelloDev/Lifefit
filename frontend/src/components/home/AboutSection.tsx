@@ -1,42 +1,47 @@
 import React from 'react'
 
-const stats = [
-  { value: '10k+', label: 'Atletas registrados', desc: 'Usuarios que entrenan y hacen seguimiento de su progreso con Lifefit.' },
-  { value: '120+', label: 'Gimnasios conectados', desc: 'Centros que utilizan retos, ranking y panel administrativo.' },
-  { value: '35%', label: 'Menos abandono', desc: 'Reducción promedio en la tasa de abandono de los miembros.' },
-  { value: '4.6/5', label: 'Satisfacción de usuarios', desc: 'Valoración promedio basada en encuestas internas.' },
+const team = [
+  {
+    name: 'Alejandra Vega',
+    role: 'CEO & Co-founder',
+    image: 'https://i.pravatar.cc/150?u=alejandra',
+  },
+  {
+    name: 'Marcos Ruiz',
+    role: 'CTO & Co-founder',
+    image: 'https://i.pravatar.cc/150?u=marcos',
+  },
+  {
+    name: 'Sofía Delgado',
+    role: 'Head of Product',
+    image: 'https://i.pravatar.cc/150?u=sofia',
+  },
 ]
 
 const AboutSection: React.FC = () => {
   return (
     <section
       id="sobre-nosotros"
-      className="border-t border-slate-100 bg-white py-14 text-slate-900 transition-colors dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 md:py-20"
+      className="bg-[#0d0d0d] border-t border-zinc-800/50 py-20 md:py-32"
     >
-      <div className="mx-auto grid max-w-6xl items-start gap-10 px-4 md:grid-cols-2">
-        <div>
-          <h2 className="mb-3 text-2xl font-semibold md:text-3xl">Sobre Lifefit</h2>
-          <p className="mb-4 text-sm text-slate-600 dark:text-slate-300 md:text-base">
-            Lifefit nace con la misión de hacer que entrenar sea tan adictivo como jugar tu juego favorito. Combinamos gamificación,
-            datos en tiempo real y comunidad para ayudarte a sostener el hábito a largo plazo.
-          </p>
-          <p className="mb-4 text-sm text-slate-600 dark:text-slate-300 md:text-base">
-            Nuestro equipo está formado por coaches, especialistas en producto y desarrolladores que han vivido de cerca el problema
-            del abandono en gimnasios y programas online. Por eso diseñamos una experiencia que motiva tanto a atletas individuales
-            como a gimnasios completos.
-          </p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 md:text-base">
-            Creemos que el progreso debe sentirse, verse y celebrarse. Cada reto, insignia y punto de experiencia está pensado para
-            acercarte un paso más a tu mejor versión.
-          </p>
-        </div>
+      <div className="mx-auto max-w-4xl px-4 text-center">
+        <h2 className="text-3xl font-bold text-white md:text-5xl tracking-tight">
+          Sobre Nosotros
+        </h2>
+        <p className="mt-6 mx-auto max-w-2xl text-base text-zinc-400 leading-relaxed">
+          Somos un equipo apasionado por el fitness y la tecnología. Creamos LifeFit porque creemos que la gamificación puede transformar la industria del fitness, ayudando a los gimnasios a retener clientes y a las personas a alcanzar sus metas.
+        </p>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {stats.map(({ value, label, desc }) => (
-            <div key={label} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-800">
-              <p className="mb-1 text-3xl font-semibold text-emerald-500">{value}</p>
-              <p className="text-xs font-medium">{label}</p>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">{desc}</p>
+        <div className="mt-16 flex flex-wrap justify-center gap-12 sm:gap-24">
+          {team.map(({ name, role, image }) => (
+            <div key={name} className="flex flex-col items-center">
+              <img
+                src={image}
+                alt={name}
+                className="h-24 w-24 rounded-full border border-zinc-800 object-cover shadow-lg"
+              />
+              <h3 className="mt-4 text-lg font-bold text-white">{name}</h3>
+              <p className="text-sm text-zinc-500">{role}</p>
             </div>
           ))}
         </div>

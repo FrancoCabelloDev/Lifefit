@@ -303,17 +303,28 @@ export default function NutricionPage() {
         ? `${API_BASE_URL}/api/nutrition/plans/${editingPlan.id}/`
         : `${API_BASE_URL}/api/nutrition/plans/`
 
+      // Asegurar que duration_days sea un número entero
+      const payload = {
+        ...planForm,
+        duration_days: parseInt(planForm.duration_days.toString()) || 7,
+        points_reward: parseInt(planForm.points_reward.toString()) || 0,
+      }
+
       const response = await fetch(url, {
         method: editingPlan ? 'PUT' : 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(planForm),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
         await fetchPlans()
+        // Si estamos editando un plan que está seleccionado, refrescar su detalle
+        if (editingPlan && selectedPlan && editingPlan.id === selectedPlan.id) {
+          await fetchPlanDetail(editingPlan.id)
+        }
         handleCloseModal()
       } else {
         const errorData = await response.json()
