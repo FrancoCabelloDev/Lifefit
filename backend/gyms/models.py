@@ -13,6 +13,8 @@ class Gym(BaseModel):
     description = models.TextField(blank=True)
     location = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    logo = models.ImageField(upload_to="gyms/logos/", null=True, blank=True)
+    ruc = models.CharField(max_length=20, blank=True)
     brand_color = models.CharField(max_length=7, blank=True, help_text="Hex color code")
     website = models.URLField(blank=True)
     contact_email = models.EmailField(blank=True)

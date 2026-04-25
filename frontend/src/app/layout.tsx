@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Lexend, Inter } from 'next/font/google'
 import './globals.css'
 import Providers from './providers'
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const lexend = Lexend({
+  variable: '--font-lexend',
   subsets: ['latin'],
 })
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
 })
 
@@ -23,15 +23,17 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
+  themeColor: '#F8F9FA',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className="dark" suppressHydrationWarning>
-      <head />
-      <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-[#0a0a0a] text-white selection:bg-yellow-500/30`}>
-        <Providers initialTheme="dark">{children}</Providers>
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+      </head>
+      <body className={`${lexend.variable} ${inter.variable} min-h-screen bg-background text-foreground font-sans selection:bg-secondary/30`}>
+        <Providers initialTheme="light">{children}</Providers>
       </body>
     </html>
   )

@@ -1,10 +1,10 @@
 from django.contrib.auth import get_user_model
 from rest_framework import viewsets
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .models import Branch, Gym
-from .serializers import BranchSerializer, GymSerializer
+from .serializers import BranchSerializer, GymSerializer, PublicGymSerializer
 
 User = get_user_model()
 
@@ -30,7 +30,24 @@ class GymViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if self.request.user.role != User.Role.SUPER_ADMIN:
             raise PermissionDenied("Solo los super administradores pueden crear gimnasios.")
-        serializer.save()
+        
+        gym = serializer.save()
+
+        admin_email = self.request.data.get('admin_email')
+        admin_password = self.request.data.get('admin_password')
+        admin_first_name = self.request.data.get('admin_first_name', '')
+        admin_last_name = self.request.data.get('admin_last_name', '')
+
+        if admin_email and admin_password:
+            User.objects.create_user(
+                email=admin_email,
+                password=admin_password,
+                first_name=admin_first_name,
+                last_name=admin_last_name,
+                role=User.Role.GYM_ADMIN,
+                gym=gym,
+                is_active=True
+            )
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -103,3 +120,14 @@ class BranchViewSet(viewsets.ModelViewSet):
             return
 
         raise PermissionDenied("No tienes permisos para eliminar esta sucursal.")
+
+
+class PublicGymViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Endpoint público para listar gimnasios activos.
+    Usado en las vistas de /tugimnasio y /unirse del frontend.
+    """
+    queryset = Gym.objects.filter(status=Gym.Status.ACTIVE).order_by("name")
+    serializer_class = PublicGymSerializer
+    permission_classes = [AllowAny]
+

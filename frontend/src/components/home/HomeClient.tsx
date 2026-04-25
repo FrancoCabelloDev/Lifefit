@@ -1,10 +1,10 @@
 'use client'
 import { useEffect } from 'react'
+import HeaderSection from './HeaderSection'
 import HeroSection from './HeroSection'
-import CoreFeaturesSection from './CoreFeaturesSection'
 import HowItWorksSection from './HowItWorksSection'
+import CoreFeaturesSection from './CoreFeaturesSection'
 import PlansSection from './PlansSection'
-import AboutSection from './AboutSection'
 import CTASection from './CTASection'
 import FooterSection from './FooterSection'
 
@@ -22,14 +22,16 @@ export default function HomeClient({ initialSection }: HomeClientProps) {
   }, [initialSection])
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white">
-      <HeroSection />
-      <CoreFeaturesSection />
-      <HowItWorksSection />
-      <PlansSection />
-      <AboutSection /> 
-      <CTASection />
+    <div className="antialiased min-h-screen flex flex-col selection:bg-primary-container selection:text-on-primary-container">
+      <HeaderSection />
+      <main className="flex-grow">
+        <HeroSection />
+        <HowItWorksSection />
+        <CoreFeaturesSection />
+        <PlansSection />
+        <CTASection />
+      </main>
       <FooterSection />
-    </main>
+    </div>
   )
 }

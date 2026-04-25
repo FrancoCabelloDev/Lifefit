@@ -1,81 +1,113 @@
 import React from 'react'
-import { ClipboardCheck, Apple, Target, Trophy, Bot, MapPin, BarChart3, Users } from 'lucide-react'
-
-const features = [
-  {
-    icon: ClipboardCheck,
-    title: 'Rutinas Personalizadas',
-    desc: 'Cada coach asigna entrenamientos específicos a sus clientes.',
-  },
-  {
-    icon: Apple,
-    title: 'Planes de Nutrición',
-    desc: 'Seguimiento de calorías, macros y adherencia diaria.',
-  },
-  {
-    icon: Target,
-    title: 'Retos Gamificados',
-    desc: 'Retos individuales y grupales que mantienen la motivación.',
-  },
-  {
-    icon: Trophy,
-    title: 'Rankings y XP',
-    desc: 'Puntos, niveles, rachas e insignias estilo videojuego.',
-  },
-  {
-    icon: Bot,
-    title: 'Coach IA Integrado',
-    desc: 'Asistente inteligente que guía y motiva a cada usuario.',
-  },
-  {
-    icon: MapPin,
-    title: 'Check-in QR',
-    desc: 'Control de asistencia con verificación doble del coach.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Métricas para el Gimnasio',
-    desc: 'Panel admin con retención, adherencia y crecimiento.',
-  },
-  {
-    icon: Users,
-    title: 'Multi-Gimnasio (SaaS)',
-    desc: 'Cada gimnasio con su propia base de datos y configuración.',
-  },
-]
 
 const CoreFeaturesSection: React.FC = () => {
   return (
-    <section
-      id="funciones"
-      className="relative overflow-hidden bg-[#0a0a0a] border-t border-zinc-800/50 py-20 md:py-32"
-    >
-      {/* Subtle glow effect */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-yellow-500/5 blur-[120px] rounded-full pointer-events-none"></div>
-
-      <div className="relative z-10 mx-auto max-w-6xl px-4">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold text-white md:text-5xl tracking-tight">Todo lo que tu gimnasio necesita</h2>
-          <p className="mt-4 mx-auto max-w-2xl text-base text-zinc-400">
-            Una plataforma completa que integra entrenamiento, nutrición y gamificación para maximizar la experiencia de tus clientes.
-          </p>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {features.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="group rounded-2xl bg-zinc-900/50 backdrop-blur-sm border border-zinc-800/60 p-6 transition-all hover:border-yellow-400/30 hover:bg-zinc-900/80 hover:shadow-[0_0_30px_-10px_rgba(250,204,21,0.15)]">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-400/10 group-hover:bg-yellow-400/20 transition-colors">
-                <Icon className="h-6 w-6 text-yellow-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">{title}</h3>
-              <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{desc}</p>
+    <section className="py-32 px-margin-mobile md:px-margin-desktop bg-background" id="solutions">
+      <div className="max-w-7xl mx-auto flex flex-col gap-24">
+        
+        {/* Feature 1: Gamification */}
+        <div className="flex flex-col md:flex-row items-center gap-16">
+          <div className="flex-1 flex flex-col gap-4">
+            <div className="w-12 h-12 bg-secondary-container rounded-xl flex items-center justify-center mb-2">
+              <span className="material-symbols-outlined text-on-secondary-container text-2xl">sports_esports</span>
             </div>
-          ))}
+            <h2 className="font-headline-lg text-headline-lg text-on-background">Motor de Gamificación</h2>
+            <p className="font-body-lg text-body-lg text-on-surface-variant">
+              Convierte los entrenamientos rutinarios en misiones. Configura desafíos personalizados, otorga XP por asistencia y crea una sensación de progreso que mantenga a los miembros regresando.
+            </p>
+            <ul className="mt-4 flex flex-col gap-3">
+              <li className="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+                <span className="material-symbols-outlined text-primary">check_circle</span> Medallas y Niveles Personalizables
+              </li>
+              <li className="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+                <span className="material-symbols-outlined text-primary">check_circle</span> Tablas de Clasificación Automatizadas
+              </li>
+              <li className="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+                <span className="material-symbols-outlined text-primary">check_circle</span> Sistema de Recompensas por Logros
+              </li>
+            </ul>
+          </div>
+          
+          <div className="flex-1 w-full bg-surface-container-high rounded-xl p-8 ambient-shadow flex flex-col gap-4">
+            {/* Mockup inner */}
+            <div className="bg-surface rounded-lg p-4 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold">1</div>
+                <div>
+                  <div className="font-label-md text-label-md text-on-surface">Sarah J.</div>
+                  <div className="font-body-md text-body-md text-on-surface-variant text-sm">12,400 XP</div>
+                </div>
+              </div>
+              <span className="material-symbols-outlined text-secondary-fixed-dim" style={{ fontVariationSettings: "'FILL' 1" }}>emoji_events</span>
+            </div>
+            
+            <div className="bg-surface rounded-lg p-4 flex items-center justify-between shadow-sm border-l-4 border-primary">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface font-bold">2</div>
+                <div>
+                  <div className="font-label-md text-label-md text-on-surface">Tú</div>
+                  <div className="font-body-md text-body-md text-on-surface-variant text-sm">11,250 XP</div>
+                </div>
+              </div>
+              <span className="font-label-md text-label-md text-primary">2do</span>
+            </div>
+            
+            <div className="bg-surface rounded-lg p-4 flex items-center justify-between shadow-sm opacity-60">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface font-bold">3</div>
+                <div>
+                  <div className="font-label-md text-label-md text-on-surface">Mike T.</div>
+                  <div className="font-body-md text-body-md text-on-surface-variant text-sm">9,800 XP</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Feature 2: AI Coach */}
+        <div className="flex flex-col md:flex-row-reverse items-center gap-16">
+          <div className="flex-1 flex flex-col gap-4">
+            <div className="w-12 h-12 bg-tertiary-container rounded-xl flex items-center justify-center mb-2">
+              <span className="material-symbols-outlined text-on-tertiary-container text-2xl">smart_toy</span>
+            </div>
+            <h2 className="font-headline-lg text-headline-lg text-on-background">Integración de Entrenador IA</h2>
+            <p className="font-body-lg text-body-lg text-on-surface-variant">
+              Escala el entrenamiento personal sin esfuerzo. Nuestra IA genera planes de entrenamiento dinámicos y personalizados basados en el equipo disponible y los objetivos del miembro.
+            </p>
+            <ul className="mt-4 flex flex-col gap-3">
+              <li className="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+                <span className="material-symbols-outlined text-tertiary">check_circle</span> Rutinas Basadas en tu Equipo
+              </li>
+              <li className="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+                <span className="material-symbols-outlined text-tertiary">check_circle</span> Consejos de Corrección de Postura
+              </li>
+              <li className="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+                <span className="material-symbols-outlined text-tertiary">check_circle</span> Seguimiento de Sobrecarga Progresiva
+              </li>
+            </ul>
+          </div>
+          
+          <div className="flex-1 w-full relative">
+            <img 
+              alt="Aplicación Móvil del Entrenador IA" 
+              className="rounded-xl w-full h-[400px] object-cover ambient-shadow" 
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgr5xyM5iT4Z2yZki1uflvpQH9PMiJk4W7-JkMdOtiA7l1qOrmyXOW-6vGDxnP7fCbSSnYWAW9OmyEt_M3nk6ImBeRmGm9ssY2faZxQ4k_SwA60w6-F945eDUxKuah1WL96MopOtZ-ZByT2cgP_A64A1OoQGlslqdrpWpTh5xg__LRJPMiJvBC06jMl4hDaAt-VzQ_Bnan4qz3HZh3swcKZaLKqlm5J_NsfW5ZKYLcIoFc18SQl7TzDaAngU1e7nFj4dAV7ssTSKw"
+            />
+            <div className="absolute -bottom-6 -right-6 bg-surface p-4 rounded-xl ambient-shadow border border-surface-container max-w-xs">
+              <div className="flex gap-3">
+                <span className="material-symbols-outlined text-tertiary">info</span>
+                <div>
+                  <p className="font-label-md text-label-md text-on-surface">Consejo del Entrenador</p>
+                  <p className="font-body-md text-body-md text-on-surface-variant text-sm mt-1">Basado en tu reciente prensa de piernas, aumentemos el peso en sentadillas por 5lbs hoy.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
       </div>
     </section>
   )
 }
 
 export default CoreFeaturesSection
-

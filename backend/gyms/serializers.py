@@ -40,6 +40,8 @@ class GymSerializer(serializers.ModelSerializer):
             "description",
             "location",
             "status",
+            "logo",
+            "ruc",
             "brand_color",
             "website",
             "contact_email",
@@ -49,3 +51,17 @@ class GymSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "branches"]
+
+
+class PublicGymSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Gym
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "location",
+            "logo",
+            "brand_color",
+        ]
+        read_only_fields = fields

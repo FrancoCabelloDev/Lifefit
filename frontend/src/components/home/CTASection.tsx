@@ -2,19 +2,21 @@ import React from 'react'
 
 const CTASection: React.FC = () => {
   return (
-    <section className="bg-[#0a0a0a] border-t border-zinc-800/50 py-20 md:py-32">
-      <div className="mx-auto max-w-4xl px-4 text-center">
-        <h2 className="text-3xl font-bold text-white md:text-5xl tracking-tight">
-          ¿Listo para transformar tu gimnasio?
+    <section className="py-24 px-margin-mobile md:px-margin-desktop bg-surface">
+      <div className="max-w-4xl mx-auto bg-primary-container rounded-[2rem] p-12 text-center flex flex-col items-center gap-6 ambient-shadow relative overflow-hidden">
+        <div 
+          className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1540497077202-7c8a3999166f?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-10 mix-blend-overlay" 
+        ></div>
+        <h2 className="font-headline-xl text-headline-xl text-on-primary-container relative z-10">
+          ¿Listo para subir de nivel tu gimnasio?
         </h2>
-        <p className="mt-6 mx-auto max-w-2xl text-base text-zinc-400">
-          Únete a más de 150 gimnasios que ya usan LifeFit para fidelizar a sus clientes.
+        <p className="font-body-lg text-body-lg text-on-primary-container/80 max-w-xl relative z-10">
+          Únete a cientos de instalaciones que están utilizando LifeFit para aumentar la retención de sus miembros en más de un 40%.
         </p>
-
-        <div className="mt-10 flex justify-center">
-          <button className="rounded-xl bg-[#222] px-8 py-3.5 text-base font-semibold text-yellow-400 transition hover:bg-zinc-800 hover:text-yellow-300">
-            Empieza Gratis Hoy
-          </button>
+        <div className="flex gap-4 mt-4 relative z-10">
+          <a className="bg-primary text-on-primary font-label-md text-label-md px-8 py-4 rounded-full btn-pressable" href="#">
+            Inicia tu Prueba Gratis de 14 Días
+          </a>
         </div>
       </div>
     </section>

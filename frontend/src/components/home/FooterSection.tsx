@@ -1,77 +1,38 @@
 import React from 'react'
-import Link from 'next/link'
 
 const FooterSection: React.FC = () => {
   return (
-    <footer className="bg-[#050505] border-t border-zinc-800/50 py-16">
-      <div className="mx-auto max-w-6xl px-4">
-        <div className="grid gap-12 md:grid-cols-4">
-          
-          {/* Brand Col */}
-          <div className="md:col-span-1">
-            <h3 className="text-xl font-bold text-yellow-400 tracking-wider">LIFEFIT</h3>
-            <p className="mt-4 text-sm text-zinc-400 leading-relaxed max-w-xs">
-              Gamificación inteligente para gimnasios que quieren fidelizar y motivar a sus clientes.
-            </p>
-          </div>
-
-          {/* Links Col 1 */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-100">Producto</h4>
-            <ul className="mt-6 space-y-3">
-              <li>
-                <Link href="#funciones" className="text-sm text-zinc-400 transition hover:text-white">
-                  Características
-                </Link>
-              </li>
-              <li>
-                <Link href="#planes" className="text-sm text-zinc-400 transition hover:text-white">
-                  Precios
-                </Link>
-              </li>
-              <li>
-                <Link href="#sobre-nosotros" className="text-sm text-zinc-400 transition hover:text-white">
-                  Nosotros
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Links Col 2 */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-100">Legal</h4>
-            <ul className="mt-6 space-y-3">
-              <li>
-                <Link href="#" className="text-sm text-zinc-400 transition hover:text-white">
-                  Términos
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="text-sm text-zinc-400 transition hover:text-white">
-                  Privacidad
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Contact Col */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-100">Contacto</h4>
-            <ul className="mt-6 space-y-3">
-              <li>
-                <a href="mailto:info@lifefit.app" className="text-sm text-zinc-400 transition hover:text-white">
-                  info@lifefit.app
-                </a>
-              </li>
-              <li>
-                <a href="https://twitter.com/lifefit_app" target="_blank" rel="noopener noreferrer" className="text-sm text-zinc-400 transition hover:text-white">
-                  @lifefit_app
-                </a>
-              </li>
-            </ul>
-          </div>
-
+    <footer className="bg-gray-50 dark:bg-gray-950 w-full py-12 border-t border-gray-200 dark:border-gray-800 flat z-10 relative">
+      <div className="max-w-7xl mx-auto px-8 grid grid-cols-1 md:grid-cols-2 items-center gap-4">
+        {/* Brand / Copyright */}
+        <div className="flex flex-col gap-2">
+          <span className="font-bold text-gray-900 dark:text-white font-lexend text-xl">LifeFit</span>
+          <span className="font-lexend text-xs text-gray-500">© 2024 LifeFit SaaS. Transformando el esfuerzo.</span>
         </div>
+        
+        {/* Links */}
+        <ul className="flex flex-wrap md:justify-end gap-6 font-lexend text-xs">
+          <li>
+            <a className="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">
+              Política de Privacidad
+            </a>
+          </li>
+          <li>
+            <a className="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">
+              Términos de Servicio
+            </a>
+          </li>
+          <li>
+            <a className="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">
+              Contactar Soporte
+            </a>
+          </li>
+          <li>
+            <a className="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">
+              Documentación API
+            </a>
+          </li>
+        </ul>
       </div>
     </footer>
   )

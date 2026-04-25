@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LifeFit - Gamify Your Gym Experience</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Lexend:wght@600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed": "#001c3a",
+                        "on-surface-variant": "#404945",
+                        "inverse-primary": "#96d3bd",
+                        "surface-variant": "#e1e3e4",
+                        "on-error-container": "#93000a",
+                        "on-background": "#191c1d",
+                        "primary": "#2c6956",
+                        "surface": "#f8f9fa",
+                        "surface-container-high": "#e7e8e9",
+                        "on-secondary": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "background": "#f8f9fa",
+                        "surface-dim": "#d9dadb",
+                        "surface-container-low": "#f3f4f5",
+                        "secondary-fixed": "#ffe173",
+                        "primary-fixed-dim": "#96d3bd",
+                        "on-secondary-fixed": "#221b00",
+                        "secondary-fixed-dim": "#e8c426",
+                        "on-primary-fixed-variant": "#0d503f",
+                        "on-error": "#ffffff",
+                        "tertiary": "#005faf",
+                        "error-container": "#ffdad6",
+                        "on-surface": "#191c1d",
+                        "error": "#ba1a1a",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed-variant": "#554500",
+                        "outline": "#707974",
+                        "tertiary-fixed-dim": "#a5c8ff",
+                        "surface-tint": "#2c6956",
+                        "surface-container": "#edeeef",
+                        "surface-container-highest": "#e1e3e4",
+                        "tertiary-container": "#c5daff",
+                        "primary-fixed": "#b1efd8",
+                        "primary-container": "#a8e6cf",
+                        "tertiary-fixed": "#d4e3ff",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-secondary-container": "#715d00",
+                        "on-primary-container": "#2c6957",
+                        "surface-bright": "#f8f9fa",
+                        "secondary-container": "#fdd73b",
+                        "inverse-surface": "#2e3132",
+                        "outline-variant": "#bfc9c3",
+                        "on-tertiary-fixed-variant": "#004786",
+                        "secondary": "#705d00",
+                        "on-tertiary-container": "#005faf",
+                        "on-primary-fixed": "#002118"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-desktop": "40px",
+                        "stack-md": "16px",
+                        "stack-sm": "8px",
+                        "margin-mobile": "20px",
+                        "unit": "8px",
+                        "stack-lg": "32px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter", "sans-serif"],
+                        "headline-xl": ["Lexend", "sans-serif"],
+                        "headline-md": ["Lexend", "sans-serif"],
+                        "body-lg": ["Inter", "sans-serif"],
+                        "body-md": ["Inter", "sans-serif"],
+                        "headline-lg": ["Lexend", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "headline-xl": ["40px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+        }
+        .ambient-shadow {
+            box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.05);
+        }
+        .btn-pressable {
+            box-shadow: 0 4px 0 theme('colors.on-primary-container');
+            transition: all 0.1s ease;
+        }
+        .btn-pressable:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 theme('colors.on-primary-container');
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar (From JSON) -->
+<header class="bg-white/80 dark:bg-gray-950/80 backdrop-blur-md docked full-width top-0 sticky border-b border-gray-100 dark:border-gray-800 shadow-sm z-50">
+<nav class="flex justify-between items-center w-full px-6 py-4 max-w-7xl mx-auto font-lexend tracking-tight">
+<!-- Brand -->
+<div class="text-2xl font-black text-emerald-500 dark:text-emerald-400">
+                LifeFit
+            </div>
+<!-- Links (Desktop) -->
+<ul class="hidden md:flex items-center gap-8">
+<li><a class="text-gray-500 dark:text-gray-400 font-medium hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors active:scale-95 duration-200" href="#product">Product</a></li>
+<li><a class="text-gray-500 dark:text-gray-400 font-medium hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors active:scale-95 duration-200" href="#solutions">Solutions</a></li>
+<li><a class="text-gray-500 dark:text-gray-400 font-medium hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors active:scale-95 duration-200" href="#pricing">Pricing</a></li>
+</ul>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-4">
+<button aria-label="Search" class="text-gray-500 dark:text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+<span class="material-symbols-outlined">search</span>
+</button>
+<button aria-label="Notifications" class="text-gray-500 dark:text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button aria-label="Account" class="text-gray-500 dark:text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+<a class="hidden sm:inline-flex bg-emerald-500 text-white font-medium px-5 py-2.5 rounded-full hover:bg-emerald-600 transition-colors active:scale-95 duration-200" href="#get-started">
+                    Get Started
+                </a>
+</div>
+</nav>
+</header>
+<main class="flex-grow">
+<!-- Hero Section -->
+<section class="relative pt-24 pb-32 px-margin-mobile md:px-margin-desktop max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-12">
+<div class="flex-1 flex flex-col gap-stack-lg z-10">
+<div class="inline-flex items-center gap-2 bg-primary-container text-on-primary-container px-4 py-2 rounded-full w-fit">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+<span class="font-label-md text-label-md">New: AI Coaching Beta</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-background lg:text-6xl leading-tight">
+                    Transform the <span class="text-primary relative inline-block">grind
+                        <svg class="absolute -bottom-2 left-0 w-full h-3 text-secondary-container" preserveaspectratio="none" viewbox="0 0 100 20"><path d="M0 10 Q 50 20 100 10" fill="transparent" stroke="currentColor" stroke-width="4"></path></svg>
+</span> into a game.
+                </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
+                    LifeFit is the ultimate B2B SaaS platform for gyms. Gamify your members' experience, boost retention, and build an engaged community with our white-label software.
+                </p>
+<div class="flex flex-wrap items-center gap-4 mt-4">
+<a class="bg-primary text-on-primary font-label-md text-label-md px-8 py-4 rounded-full btn-pressable inline-flex items-center gap-2" href="#demo">
+                        Book a Demo <span class="material-symbols-outlined">arrow_forward</span>
+</a>
+<a class="bg-surface-container-high text-on-surface font-label-md text-label-md px-8 py-4 rounded-full hover:bg-surface-variant transition-colors" href="#pricing">
+                        View Pricing
+                    </a>
+</div>
+</div>
+<!-- Hero Image/Graphic (Glassmorphism card cluster) -->
+<div class="flex-1 relative w-full aspect-square md:aspect-auto md:h-[600px]">
+<div class="absolute inset-0 bg-primary-container rounded-full blur-[100px] opacity-40 mix-blend-multiply"></div>
+<!-- Main UI Mockup -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4/5 h-4/5 bg-surface rounded-xl ambient-shadow border border-surface-container-highest overflow-hidden flex flex-col">
+<div class="h-12 bg-surface-container-lowest border-b border-surface-container-highest flex items-center px-4 gap-2">
+<div class="w-3 h-3 rounded-full bg-error"></div>
+<div class="w-3 h-3 rounded-full bg-secondary-container"></div>
+<div class="w-3 h-3 rounded-full bg-primary-container"></div>
+</div>
+<div class="flex-1 p-6 bg-[url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&amp;w=2070&amp;auto=format&amp;fit=crop')] bg-cover bg-center" data-alt="modern gym interior with sleek equipment and bright natural lighting reflecting a premium fitness environment">
+<div class="w-full h-full bg-gradient-to-t from-surface/90 to-transparent flex flex-col justify-end p-4 rounded-lg backdrop-blur-sm">
+<div class="flex justify-between items-end">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Alex's Progress</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Level 12 • Beast Mode</p>
+</div>
+<div class="w-16 h-16 rounded-full bg-secondary-container flex items-center justify-center ambient-shadow">
+<span class="material-symbols-outlined text-3xl text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">trophy</span>
+</div>
+</div>
+<div class="mt-4 h-3 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full w-3/4 bg-primary rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating Badges -->
+<div class="absolute top-1/4 -left-8 bg-surface p-4 rounded-xl ambient-shadow border border-surface-container-highest flex items-center gap-3 animate-[bounce_3s_infinite]">
+<div class="w-10 h-10 rounded-full bg-tertiary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-tertiary-container">psychology</span>
+</div>
+<div>
+<div class="font-label-md text-label-md text-on-surface">AI Workout</div>
+<div class="font-body-md text-body-md text-on-surface-variant text-sm">Generated</div>
+</div>
+</div>
+<div class="absolute bottom-1/4 -right-8 bg-surface p-4 rounded-xl ambient-shadow border border-surface-container-highest flex items-center gap-3 animate-[bounce_4s_infinite_reverse]">
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-error-container" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+</div>
+<div>
+<div class="font-label-md text-label-md text-on-surface">14 Day Streak</div>
+<div class="font-body-md text-body-md text-on-surface-variant text-sm">+500 XP</div>
+</div>
+</div>
+</div>
+</section>
+<!-- How it Works (Bento Grid) -->
+<section class="py-24 bg-surface-container-low px-margin-mobile md:px-margin-desktop" id="product">
+<div class="max-w-7xl mx-auto flex flex-col gap-stack-lg">
+<div class="text-center max-w-2xl mx-auto mb-8">
+<h2 class="font-headline-lg text-headline-lg text-on-background mb-4">How it works</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Three simple steps to transform your facility from a simple gym into an engaging community hub.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Step 1 -->
+<div class="bg-surface rounded-xl p-8 ambient-shadow border border-surface-container flex flex-col gap-4 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-container rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
+<div class="w-12 h-12 bg-primary rounded-lg flex items-center justify-center text-on-primary font-headline-md text-headline-md z-10">1</div>
+<h3 class="font-headline-md text-headline-md text-on-surface z-10 mt-4">Connect Your Gym</h3>
+<p class="font-body-md text-body-md text-on-surface-variant z-10">Integrate our software with your existing access control and member management systems in minutes.</p>
+<div class="mt-auto pt-8 z-10">
+<img alt="Dashboard" class="rounded-lg w-full h-32 object-cover" data-alt="close up of a digital tablet showing gym management dashboard data with charts and graphs in soft lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4NnR0IregnunW8chP-7hdMc7Ats6E-l1K-LmVCqohel1Woch92RELGvjPJ3E4DLC8ZWRlgPeSDRZnyo8uScYmdaxOjZhkZFNALP0T_PJLAw9EfoX6kIQ4Gel0b18mR5dbooFP5ii9AqOZ_v8i8878DxknFfKxKEhXlj_caIQ9-Ed3JI5mGMwg12Bn1sML9XRJK6ApV6U_hKeBiUxNm0W1Asx7Dt5hALzYepmodrRmrH8K210a4zvbsJwEltlTB2Be1xsbITYSBmI"/>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="bg-surface rounded-xl p-8 ambient-shadow border border-surface-container flex flex-col gap-4 relative overflow-hidden group md:translate-y-8">
+<div class="absolute top-0 right-0 w-32 h-32 bg-secondary-container rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
+<div class="w-12 h-12 bg-secondary rounded-lg flex items-center justify-center text-on-primary font-headline-md text-headline-md z-10">2</div>
+<h3 class="font-headline-md text-headline-md text-on-surface z-10 mt-4">Members Download</h3>
+<p class="font-body-md text-body-md text-on-surface-variant z-10">Provide your members with a branded app experience where they can track workouts, book classes, and see their stats.</p>
+<div class="mt-auto pt-8 z-10 flex justify-center">
+<div class="w-24 h-48 bg-surface-container-high rounded-[2rem] border-4 border-surface-variant flex flex-col items-center p-2 relative">
+<div class="w-8 h-1 bg-surface-variant rounded-full mb-2"></div>
+<div class="flex-1 w-full bg-white rounded-xl flex items-center justify-center flex-col gap-2">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">fitness_center</span>
+</div>
+<div class="h-2 w-12 bg-surface-variant rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="bg-surface rounded-xl p-8 ambient-shadow border border-surface-container flex flex-col gap-4 relative overflow-hidden group md:translate-y-16">
+<div class="absolute top-0 right-0 w-32 h-32 bg-tertiary-container rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
+<div class="w-12 h-12 bg-tertiary rounded-lg flex items-center justify-center text-on-tertiary font-headline-md text-headline-md z-10">3</div>
+<h3 class="font-headline-md text-headline-md text-on-surface z-10 mt-4">Gamify &amp; Retain</h3>
+<p class="font-body-md text-body-md text-on-surface-variant z-10">Watch engagement soar as members earn badges, complete challenges, and climb the gym leaderboard.</p>
+<div class="mt-auto pt-8 z-10 flex flex-col gap-2">
+<div class="bg-surface-container-high rounded-lg p-3 flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-md text-label-md text-on-surface">Iron Master Badge Earned</span>
+</div>
+<div class="bg-surface-container-high rounded-lg p-3 flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">trending_up</span>
+<span class="font-label-md text-label-md text-on-surface">Moved to Top 10%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Features Matrix -->
+<section class="py-32 px-margin-mobile md:px-margin-desktop bg-background" id="solutions">
+<div class="max-w-7xl mx-auto flex flex-col gap-24">
+<!-- Feature 1: Gamification -->
+<div class="flex flex-col md:flex-row items-center gap-16">
+<div class="flex-1 flex flex-col gap-4">
+<div class="w-12 h-12 bg-secondary-container rounded-xl flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-secondary-container text-2xl">sports_esports</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-background">Gamification Engine</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Turn routine workouts into quests. Set up custom challenges, award XP for attendance, and create a sense of progression that keeps members coming back.</p>
+<ul class="mt-4 flex flex-col gap-3">
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+<span class="material-symbols-outlined text-primary">check_circle</span> Customizable Badges &amp; Tiers
+                            </li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+<span class="material-symbols-outlined text-primary">check_circle</span> Automated Leaderboards
+                            </li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+<span class="material-symbols-outlined text-primary">check_circle</span> Milestone Rewards System
+                            </li>
+</ul>
+</div>
+<div class="flex-1 w-full bg-surface-container-high rounded-xl p-8 ambient-shadow flex flex-col gap-4">
+<!-- Mockup inner -->
+<div class="bg-surface rounded-lg p-4 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold">1</div>
+<div>
+<div class="font-label-md text-label-md text-on-surface">Sarah J.</div>
+<div class="font-body-md text-body-md text-on-surface-variant text-sm">12,400 XP</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-secondary-fixed-dim" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+</div>
+<div class="bg-surface rounded-lg p-4 flex items-center justify-between shadow-sm border-l-4 border-primary">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface font-bold">2</div>
+<div>
+<div class="font-label-md text-label-md text-on-surface">You</div>
+<div class="font-body-md text-body-md text-on-surface-variant text-sm">11,250 XP</div>
+</div>
+</div>
+<span class="font-label-md text-label-md text-primary">2nd</span>
+</div>
+<div class="bg-surface rounded-lg p-4 flex items-center justify-between shadow-sm opacity-60">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface font-bold">3</div>
+<div>
+<div class="font-label-md text-label-md text-on-surface">Mike T.</div>
+<div class="font-body-md text-body-md text-on-surface-variant text-sm">9,800 XP</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Feature 2: AI Coach -->
+<div class="flex flex-col md:flex-row-reverse items-center gap-16">
+<div class="flex-1 flex flex-col gap-4">
+<div class="w-12 h-12 bg-tertiary-container rounded-xl flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-tertiary-container text-2xl">smart_toy</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-background">AI Coach Integration</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Scale your personal training effortlessly. Our AI generates dynamic, personalized workout plans based on available gym equipment and member goals.</p>
+<ul class="mt-4 flex flex-col gap-3">
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+<span class="material-symbols-outlined text-tertiary">check_circle</span> Equipment-Aware Planning
+                            </li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+<span class="material-symbols-outlined text-tertiary">check_circle</span> Form Correction Tips
+                            </li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface">
+<span class="material-symbols-outlined text-tertiary">check_circle</span> Progressive Overload Tracking
+                            </li>
+</ul>
+</div>
+<div class="flex-1 w-full relative">
+<img alt="AI Coach Mobile App" class="rounded-xl w-full h-[400px] object-cover ambient-shadow" data-alt="person using a fitness app on their smartphone while standing next to gym equipment with modern blue and teal lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgr5xyM5iT4Z2yZki1uflvpQH9PMiJk4W7-JkMdOtiA7l1qOrmyXOW-6vGDxnP7fCbSSnYWAW9OmyEt_M3nk6ImBeRmGm9ssY2faZxQ4k_SwA60w6-F945eDUxKuah1WL96MopOtZ-ZByT2cgP_A64A1OoQGlslqdrpWpTh5xg__LRJPMiJvBC06jMl4hDaAt-VzQ_Bnan4qz3HZh3swcKZaLKqlm5J_NsfW5ZKYLcIoFc18SQl7TzDaAngU1e7nFj4dAV7ssTSKw"/>
+<div class="absolute -bottom-6 -right-6 bg-surface p-4 rounded-xl ambient-shadow border border-surface-container max-w-xs">
+<div class="flex gap-3">
+<span class="material-symbols-outlined text-tertiary">info</span>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Coach Insight</p>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm mt-1">Based on your recent leg press, let's increase squat weight by 5lbs today.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Pricing (Monthly/Annual) -->
+<section class="py-24 bg-surface-container-lowest px-margin-mobile md:px-margin-desktop" id="pricing">
+<div class="max-w-7xl mx-auto flex flex-col items-center">
+<div class="text-center max-w-2xl mb-12">
+<h2 class="font-headline-lg text-headline-lg text-on-background mb-4">Simple, transparent pricing</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Scale your gym's digital presence without breaking the bank.</p>
+</div>
+<!-- Toggle (Visual Only) -->
+<div class="bg-surface-container-high p-1 rounded-full inline-flex mb-12">
+<button class="px-6 py-2 rounded-full bg-surface text-on-surface font-label-md text-label-md shadow-sm">Monthly</button>
+<button class="px-6 py-2 rounded-full text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors">Annually <span class="text-primary text-xs ml-1">-20%</span></button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+<!-- Starter -->
+<div class="bg-surface rounded-xl p-8 border border-surface-container flex flex-col gap-6">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Starter</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">Perfect for boutique studios.</p>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-xl text-headline-xl text-on-surface">$99</span>
+<span class="font-body-md text-body-md text-on-surface-variant">/mo</span>
+</div>
+<a class="w-full py-3 rounded-full border-2 border-outline-variant text-on-surface font-label-md text-label-md text-center hover:bg-surface-variant transition-colors" href="#">Get Started</a>
+<ul class="flex flex-col gap-4 mt-4">
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant"><span class="material-symbols-outlined text-outline">check</span> Up to 500 Members</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant"><span class="material-symbols-outlined text-outline">check</span> Basic Gamification</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant"><span class="material-symbols-outlined text-outline">check</span> Standard App Branding</li>
+</ul>
+</div>
+<!-- Pro (Highlighted) -->
+<div class="bg-primary text-on-primary rounded-xl p-8 flex flex-col gap-6 transform md:-translate-y-4 ambient-shadow relative overflow-hidden">
+<div class="absolute top-0 right-0 bg-secondary text-on-secondary text-xs font-bold px-3 py-1 rounded-bl-lg">MOST POPULAR</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-primary">Pro</h3>
+<p class="font-body-md text-body-md text-primary-container mt-2">For growing fitness centers.</p>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-xl text-headline-xl text-on-primary">$249</span>
+<span class="font-body-md text-body-md text-primary-container">/mo</span>
+</div>
+<a class="w-full py-3 rounded-full bg-secondary-container text-on-secondary-container font-label-md text-label-md text-center btn-pressable shadow-[0_4px_0_theme('colors.secondary')]" href="#">Start Free Trial</a>
+<ul class="flex flex-col gap-4 mt-4">
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-primary"><span class="material-symbols-outlined text-primary-container">check</span> Up to 2,500 Members</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-primary"><span class="material-symbols-outlined text-primary-container">check</span> Advanced AI Coach</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-primary"><span class="material-symbols-outlined text-primary-container">check</span> Full White-labeling</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-primary"><span class="material-symbols-outlined text-primary-container">check</span> Custom Rewards Shop</li>
+</ul>
+</div>
+<!-- Enterprise -->
+<div class="bg-surface rounded-xl p-8 border border-surface-container flex flex-col gap-6">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Enterprise</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">For multi-location chains.</p>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-xl text-headline-xl text-on-surface">Custom</span>
+</div>
+<a class="w-full py-3 rounded-full border-2 border-outline-variant text-on-surface font-label-md text-label-md text-center hover:bg-surface-variant transition-colors" href="#">Contact Sales</a>
+<ul class="flex flex-col gap-4 mt-4">
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant"><span class="material-symbols-outlined text-outline">check</span> Unlimited Members</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant"><span class="material-symbols-outlined text-outline">check</span> API Access</li>
+<li class="flex items-center gap-3 font-body-md text-body-md text-on-surface-variant"><span class="material-symbols-outlined text-outline">check</span> Dedicated Success Manager</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+<!-- Final CTA -->
+<section class="py-24 px-margin-mobile md:px-margin-desktop bg-surface">
+<div class="max-w-4xl mx-auto bg-primary-container rounded-[2rem] p-12 text-center flex flex-col items-center gap-6 ambient-shadow relative overflow-hidden">
+<div class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1540497077202-7c8a3999166f?q=80&amp;w=2070&amp;auto=format&amp;fit=crop')] bg-cover bg-center opacity-10 mix-blend-overlay" data-alt="abstract athletic background showing blurred motion of someone exercising in a bright airy studio"></div>
+<h2 class="font-headline-xl text-headline-xl text-on-primary-container relative z-10">Ready to level up your gym?</h2>
+<p class="font-body-lg text-body-lg text-on-primary-container/80 max-w-xl relative z-10">Join hundreds of facilities that are using LifeFit to increase member retention by over 40%.</p>
+<div class="flex gap-4 mt-4 relative z-10">
+<a class="bg-primary text-on-primary font-label-md text-label-md px-8 py-4 rounded-full btn-pressable" href="#">
+                        Start 14-Day Free Trial
+                    </a>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer (From JSON) -->
+<footer class="bg-gray-50 dark:bg-gray-950 w-full py-12 border-t border-gray-200 dark:border-gray-800 flat z-10 relative">
+<div class="max-w-7xl mx-auto px-8 grid grid-cols-1 md:grid-cols-2 items-center gap-4">
+<!-- Brand / Copyright -->
+<div class="flex flex-col gap-2">
+<span class="font-bold text-gray-900 dark:text-white font-lexend text-xl">LifeFit</span>
+<span class="font-lexend text-xs text-gray-500">© 2024 LifeFit SaaS. Transforming the grind.</span>
+</div>
+<!-- Links -->
+<ul class="flex flex-wrap md:justify-end gap-6 font-lexend text-xs">
+<li><a class="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">Privacy Policy</a></li>
+<li><a class="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">Terms of Service</a></li>
+<li><a class="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">Contact Support</a></li>
+<li><a class="text-gray-400 hover:text-emerald-400 underline transition-all" href="#">API Docs</a></li>
+</ul>
+</div>
+</footer>
+</body></html>

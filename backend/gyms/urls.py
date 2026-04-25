@@ -1,9 +1,10 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import BranchViewSet, GymViewSet
+from .views import BranchViewSet, GymViewSet, PublicGymViewSet
 
 router = DefaultRouter()
+router.register("public", PublicGymViewSet, basename="public-gym")
 router.register("gyms", GymViewSet, basename="gym")
 router.register("branches", BranchViewSet, basename="branch")
 
