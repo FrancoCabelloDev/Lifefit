@@ -40,7 +40,7 @@ export default function SaaSAdminLogin() {
         localStorage.setItem('refresh_token', data.refresh)
         localStorage.setItem('user', JSON.stringify(data.user))
         
-        router.push('/saas-admin')
+        router.push('/panel-saas')
       } else {
         setError(data.detail || 'Credenciales inválidas')
       }

@@ -44,6 +44,8 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         GYM_ADMIN = "gym_admin", "Gym Admin"
         COACH = "coach", "Coach"
         ATHLETE = "athlete", "Athlete"
+        NUTRITIONIST = "nutritionist", "Nutricionista"
+        RECEPTIONIST = "receptionist", "Atención al Cliente"
 
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150)

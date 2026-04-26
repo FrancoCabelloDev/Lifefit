@@ -11,6 +11,7 @@ from .views import (
     RegisterView,
     UserMeView,
     UserViewSet,
+    GymMemberViewSet,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -21,6 +22,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 router = DefaultRouter()
 router.register("users", UserViewSet, basename="user")
+router.register("gym-members", GymMemberViewSet, basename="gym-member")
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),

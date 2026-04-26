@@ -55,7 +55,7 @@ export default function GymSelection({ mode }: GymSelectionProps) {
 
   const handleGymClick = (gymSlug: string) => {
     // Redirige al formulario de login o registro específico del gimnasio
-    router.push(`/${gymSlug}/${mode === 'login' ? 'login' : 'registrarse'}`)
+    router.push(`/${gymSlug}/${mode === 'login' ? 'ingresar' : 'registrarse'}`)
   }
 
   const filteredGyms = gyms.filter((gym) =>

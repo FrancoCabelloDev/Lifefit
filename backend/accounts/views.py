@@ -59,10 +59,41 @@ class IsSuperAdminPermission(IsAuthenticated):
         return super().has_permission(request, view) and request.user.role == User.Role.SUPER_ADMIN
 
 
+class IsGymAdminPermission(IsAuthenticated):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.role == User.Role.GYM_ADMIN
+
+
 class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsSuperAdminPermission]
+
+
+class GymMemberViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para que los administradores de gimnasio gestionen sus propios atletas y coaches.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsGymAdminPermission]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = User.objects.filter(gym=user.gym).exclude(id=user.id)
+        
+        role = self.request.query_params.get('role')
+        if role:
+            queryset = queryset.filter(role=role)
+            
+        return queryset.order_by('first_name', 'last_name')
+
+    def perform_create(self, serializer):
+        # Forzamos que el nuevo miembro sea del mismo gimnasio que el admin
+        # Si no se provee password, usamos uno por defecto o el email (mejora futura: enviar email de invitación)
+        password = self.request.data.get('password', 'Lifefit2024*')
+        user = serializer.save(gym=self.request.user.gym)
+        user.set_password(password)
+        user.save()
 
 
 class GoogleLoginView(APIView):

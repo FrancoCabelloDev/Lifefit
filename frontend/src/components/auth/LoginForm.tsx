@@ -16,22 +16,49 @@ export default function LoginForm({ gymId }: LoginFormProps) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  // Función para capitalizar y formatear el ID del gimnasio
+  // Función para capitalizar y formatear el ID del gimnasio (Visual)
   const formattedGymName = gymId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError('')
     
-    // Aquí iría la lógica de autenticación real
-    // Simulación de carga
-    setTimeout(() => {
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        // Guardar credenciales
+        localStorage.setItem('access_token', data.access)
+        localStorage.setItem('refresh_token', data.refresh)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        
+        // Redirigir según el rol
+        if (data.user.role === 'gym_admin') {
+          router.push(`/${gymId}/panel`)
+        } else if (data.user.role === 'athlete' || data.user.role === 'coach') {
+          router.push(`/${gymId}/panel-atleta`) // O donde sea que vaya el atleta/coach
+        } else {
+          // Si por alguna razón un super_admin entra aquí
+          router.push('/panel-saas')
+        }
+      } else {
+        setError(data.detail || 'Credenciales inválidas')
+      }
+    } catch (err) {
+      setError('Error de conexión con el servidor')
+    } finally {
       setIsLoading(false)
-      // Redirigir al dashboard después de "loguearse"
-      // router.push('/dashboard')
-    }, 1500)
+    }
   }
 
   return (
@@ -53,6 +80,11 @@ export default function LoginForm({ gymId }: LoginFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {error && (
+              <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-sm rounded-lg text-center font-medium">
+                {error}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-slate-700">Correo Electrónico</Label>

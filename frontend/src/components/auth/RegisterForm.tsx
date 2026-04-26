@@ -29,8 +29,8 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
     // Aquí iría la lógica de registro real
     setTimeout(() => {
       setIsLoading(false)
-      // Redirigir al login después de registrarse
-      router.push(`/${gymId}/login`)
+      // Simulamos la redirección
+      router.push(`/${gymId}/ingresar`)
     }, 1500)
   }
 
@@ -49,7 +49,7 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
               Únete a {formattedGymName}
             </CardTitle>
             <CardDescription className="text-slate-500 text-center">
-              Ingresa tus datos para crear tu cuenta y empezar tu entrenamiento.
+              Crea tu cuenta de atleta para comenzar a entrenar.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -66,6 +66,7 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
                   className="bg-white"
                 />
               </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-slate-700">Correo Electrónico</Label>
                 <Input 
@@ -78,6 +79,7 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
                   className="bg-white"
                 />
               </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-slate-700">Contraseña</Label>
                 <Input 
@@ -89,12 +91,13 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
                   className="bg-white"
                 />
               </div>
+
               <Button 
                 type="submit" 
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors mt-2"
                 disabled={isLoading}
               >
-                {isLoading ? 'Registrando...' : 'Crear Cuenta'}
+                {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
               </Button>
             </form>
             
@@ -131,9 +134,9 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
           </CardContent>
           <CardFooter className="flex justify-center">
             <div className="text-sm text-slate-500">
-              ¿Ya tienes una cuenta?{' '}
-              <Link href={`/${gymId}/login`} className="font-semibold text-emerald-600 hover:underline">
-                Ingresa aquí
+              ¿Ya tienes cuenta?{' '}
+              <Link href={`/${gymId}/ingresar`} className="font-semibold text-emerald-600 hover:underline">
+                Inicia sesión
               </Link>
             </div>
           </CardFooter>

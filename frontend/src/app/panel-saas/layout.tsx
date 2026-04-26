@@ -60,19 +60,19 @@ export default function SaaSAdminLayout({
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 px-2">General</div>
           
-          <Link href="/saas-admin" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
+          <Link href="/panel-saas" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
             <LayoutDashboard className="w-5 h-5 text-zinc-400" />
             Resumen
           </Link>
-          <Link href="/saas-admin/gimnasios" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
+          <Link href="/panel-saas/gimnasios" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
             <Building2 className="w-5 h-5 text-zinc-400" />
             Gimnasios
           </Link>
-          <Link href="/saas-admin/usuarios" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
+          <Link href="/panel-saas/usuarios" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
             <Users className="w-5 h-5 text-zinc-400" />
             Usuarios Globales
           </Link>
-          <Link href="/saas-admin/finanzas" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
+          <Link href="/panel-saas/finanzas" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
             <CreditCard className="w-5 h-5 text-zinc-400" />
             Finanzas
           </Link>
