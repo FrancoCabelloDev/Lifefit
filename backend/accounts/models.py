@@ -47,10 +47,20 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         NUTRITIONIST = "nutritionist", "Nutricionista"
         RECEPTIONIST = "receptionist", "Atención al Cliente"
 
+    class Plan(models.TextChoices):
+        MENSUAL = "mensual", "Mensual"
+        TRIMESTRAL = "trimestral", "Trimestral"
+        SEMESTRAL = "semestral", "Semestral"
+        ANUAL = "anual", "Anual"
+        NONE = "none", "Sin Plan"
+
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.ATHLETE)
+    plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.NONE)
+    dni = models.CharField(max_length=20, blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)

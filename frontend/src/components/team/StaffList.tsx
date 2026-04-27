@@ -122,17 +122,17 @@ export default function StaffList({ role, title, description }: StaffListProps) 
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-4">
               <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
-              <p className="animate-pulse font-black uppercase text-xs tracking-widest text-slate-400">Sincronizando Base de Datos...</p>
+              <p className="animate-pulse font-bold uppercase text-xs tracking-widest text-slate-400">Sincronizando Base de Datos...</p>
             </div>
           ) : filteredStaff.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-slate-100">
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Identidad</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Rol Asignado</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Contacto</th>
-                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Gestión</th>
+                    <th className="px-8 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Identidad</th>
+                    <th className="px-8 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Rol Asignado</th>
+                    <th className="px-8 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Contacto</th>
+                    <th className="px-8 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Gestión</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -140,12 +140,12 @@ export default function StaffList({ role, title, description }: StaffListProps) 
                     <tr key={member.id} className="hover:bg-slate-50/80 transition-all group">
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-slate-900 flex items-center justify-center font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+                          <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-slate-900 flex items-center justify-center font-bold text-sm shadow-sm group-hover:scale-105 transition-transform">
                             {member.first_name[0]}{member.last_name[0]}
                           </div>
                           <div>
                             <div className="font-bold text-slate-900 text-base">{member.first_name} {member.last_name}</div>
-                            <div className="text-[10px] text-emerald-600 font-black uppercase tracking-wider">Miembro Activo</div>
+                            <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">Miembro Activo</div>
                           </div>
                         </div>
                       </td>

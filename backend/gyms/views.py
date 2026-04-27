@@ -25,6 +25,10 @@ class GymViewSet(viewsets.ModelViewSet):
         if user.gym_id:
             return Gym.objects.filter(id=user.gym_id)
 
+        slug = self.request.query_params.get('slug')
+        if slug:
+            return Gym.objects.filter(slug=slug)
+
         return Gym.objects.none()
 
     def perform_create(self, serializer):

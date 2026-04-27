@@ -70,7 +70,7 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
       if (!userStr) return
 
       const user = JSON.parse(userStr)
-      const response = await fetch(`http://localhost:8000/api/gyms/gyms/${user.gym}/`, {
+      const response = await fetch(`http://localhost:8000/api/gyms/gyms/?slug=${gymId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -78,10 +78,16 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
       
       if (response.ok) {
         const data = await response.json()
-        setGymData(data)
-        // Agregamos timestamp para evitar cache en la previsualización tras guardar
-        const timestamp = new Date().getTime()
-        setPreviewUrl(data.logo ? `${data.logo}?t=${timestamp}` : null)
+        const gym = data.results ? data.results[0] : data[0]
+        if (gym) {
+          setGymData(gym)
+          // Agregamos timestamp para evitar cache en la previsualización tras guardar
+          const timestamp = new Date().getTime()
+          const logoUrl = gym.logo 
+            ? (gym.logo.startsWith('http') ? gym.logo : `http://localhost:8000${gym.logo}`)
+            : null
+          setPreviewUrl(logoUrl ? `${logoUrl}?t=${timestamp}` : null)
+        }
       }
     } catch (err) {
       console.error('Error fetching gym data:', err)

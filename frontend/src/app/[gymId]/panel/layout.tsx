@@ -75,7 +75,7 @@ export default function GymAdminLayout({
   const { gymId } = use(params)
   
   const [isAuthorized, setIsAuthorized] = useState(false)
-  const [gymName, setGymName] = useState('Mi Gimnasio')
+  const [gymName, setGymName] = useState('')
   const [gymLogo, setGymLogo] = useState<string | null>(null)
   const [gymColor, setGymColor] = useState('#10b981')
   const [userInitial, setUserInitial] = useState('AD')
@@ -102,7 +102,7 @@ export default function GymAdminLayout({
 
       const fetchGymData = async () => {
         try {
-          const res = await fetch('http://localhost:8000/api/gyms/gyms/', {
+          const res = await fetch(`http://localhost:8000/api/gyms/gyms/?slug=${gymId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
           if (res.ok) {
@@ -110,7 +110,13 @@ export default function GymAdminLayout({
             const myGym = data.results ? data.results[0] : data[0]
             if (myGym) {
               setGymName(myGym.name)
-              setGymLogo(myGym.logo)
+              // Asegurar URL absoluta para el logo
+              if (myGym.logo) {
+                const logoUrl = myGym.logo.startsWith('http') 
+                  ? myGym.logo 
+                  : `http://localhost:8000${myGym.logo}`
+                setGymLogo(logoUrl)
+              }
               setGymColor(myGym.brand_color || '#10b981')
             }
           }
@@ -220,11 +226,11 @@ export default function GymAdminLayout({
                   )}
                 </div>
                 <div className="flex flex-col truncate">
-                  <span className="text-[15px] font-bold text-white tracking-tight leading-tight uppercase font-lexend">
+                  <span className="text-[16px] font-semibold text-white tracking-tight leading-tight font-lexend">
                     {gymName}
                   </span>
                   <div className="flex items-center mt-1">
-                    <span className="bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full tracking-widest uppercase font-inter">
+                    <span className="bg-emerald-500/20 text-emerald-400 text-[9px] font-bold px-2 py-0.5 rounded-md tracking-wider uppercase font-inter border border-emerald-500/20">
                       Premium
                     </span>
                   </div>
@@ -235,7 +241,7 @@ export default function GymAdminLayout({
             <SidebarContent className="bg-slate-900">
               {navData.navMain.map((group) => (
                 <SidebarGroup key={group.title}>
-                  <SidebarGroupLabel className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.2em] px-4 mb-2 font-lexend">
+                  <SidebarGroupLabel className="text-slate-500 font-semibold text-[11px] uppercase tracking-[0.1em] px-4 mb-2 font-lexend">
                     {group.title}
                   </SidebarGroupLabel>
                   <SidebarGroupContent>
