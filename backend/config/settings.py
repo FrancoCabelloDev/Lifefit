@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'challenges',
     'nutrition',
     'subscriptions',
+    'gamification',
 ]
 
 MIDDLEWARE = [

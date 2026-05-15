@@ -87,15 +87,26 @@ class NutritionPlanSerializer(serializers.ModelSerializer):
         return meals_by_day
 
     def get_total_meals(self, obj):
-        return obj.meal_templates.count()
+        return len(obj.meal_templates.all())
     
     def get_user_assignment(self, obj):
+        assignments = getattr(obj, "_user_assignments", None)
+        if assignments is not None:
+            if assignments:
+                assignment = assignments[0]
+                return {
+                    'id': str(assignment.id),
+                    'status': assignment.status,
+                    'compliance_percentage': float(assignment.compliance_percentage),
+                    'start_date': assignment.start_date.isoformat(),
+                    'end_date': assignment.end_date.isoformat() if assignment.end_date else None,
+                }
+            return None
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
         
         try:
-            # Buscar asignación activa o completada más reciente
             assignment = UserNutritionPlan.objects.filter(
                 user=request.user,
                 plan=obj

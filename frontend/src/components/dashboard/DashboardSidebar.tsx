@@ -16,7 +16,7 @@ type SidebarProps = {
   active: string
 }
 
-const baseRoutes = [
+const baseRoutes: { href: string; label: string; disabled?: boolean }[] = [
   { href: '/resumen', label: 'Resumen' },
   { href: '/retos', label: 'Retos' },
   { href: '/ranking', label: 'Ranking' },

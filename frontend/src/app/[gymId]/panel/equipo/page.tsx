@@ -31,14 +31,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-interface StaffMember {
-  id: number
-  email: string
-  first_name: string
-  last_name: string
-  role: string
-  date_joined: string
-}
+import { api } from '@/lib/api'
+import type { StaffMember, PaginatedResponse } from '@/lib/types'
 
 export default function EquipoPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
@@ -57,27 +51,16 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
   const fetchStaff = async () => {
     try {
       setIsLoading(true)
-      const token = localStorage.getItem('access_token')
-      let url = `http://localhost:8000/api/accounts/gym-members/`
-      
-      // Si el filtro no es 'all', lo añadimos a la query
+      const params: Record<string, string> = {}
       if (roleFilter !== 'all') {
-        url += `?role=${roleFilter}`
+        params.role = roleFilter
       }
-      
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        // Si no filtramos en el backend (porque no pasamos role), filtramos aquí para excluir atletas
-        const filteredData = roleFilter === 'all' 
-          ? data.filter((m: StaffMember) => m.role !== 'athlete')
-          : data
-        setStaff(filteredData)
-      }
+      const data = await api.get<any>("/api/accounts/gym-members/", { params })
+      const members: StaffMember[] = Array.isArray(data) ? data : data?.results ?? []
+      const filteredData = roleFilter === 'all'
+        ? members.filter((m) => m.role !== 'athlete')
+        : members
+      setStaff(filteredData)
     } catch (error) {
       console.error('Error fetching staff:', error)
     } finally {

@@ -3,6 +3,10 @@
 import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+import { api } from '@/lib/api'
+import { setTokens, setStoredUser, dispatchAuthEvent } from '@/lib/auth'
+import type { User } from '@/lib/types'
+
 export default function GoogleCallbackPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -12,39 +16,27 @@ export default function GoogleCallbackPage() {
     const refresh = searchParams.get('refresh')
 
     if (access && refresh) {
-      // Guardar tokens inmediatamente
-      localStorage.setItem('access_token', access)
-      localStorage.setItem('refresh_token', refresh)
+      setTokens(access, refresh)
+      dispatchAuthEvent()
 
-      // Obtener datos del usuario con el nuevo token
-      fetch('http://localhost:8000/api/accounts/me/', {
-        headers: {
-          'Authorization': `Bearer ${access}`
-        }
-      })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch user')
-        return res.json()
-      })
-      .then(user => {
-        // Guardar usuario
-        localStorage.setItem('user', JSON.stringify(user))
-        
-        // Redirigir dinámicamente según el rol y el slug del gimnasio
-        const gymSlug = user.gym_slug || user.gym
-        
-        if (user.role === 'gym_admin') {
-          router.push(`/${gymSlug}/panel`)
-        } else if (user.role === 'athlete' || user.role === 'coach') {
-          router.push(`/${gymSlug}/panel-atleta`)
-        } else {
-          router.push('/panel-saas')
-        }
-      })
-      .catch(err => {
-        console.error('Error fetching user data after Google login:', err)
-        router.push('/')
-      })
+      api.get<User>("/api/accounts/me/")
+        .then(user => {
+          setStoredUser(user)
+
+          const gymSlug = (user as any).gym_slug || user.gym
+
+          if (user.role === 'gym_admin') {
+            router.push(`/${gymSlug}/panel`)
+          } else if (user.role === 'athlete' || user.role === 'coach') {
+            router.push(`/${gymSlug}/panel-atleta`)
+          } else {
+            router.push('/panel-saas')
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching user data after Google login:', err)
+          router.push('/')
+        })
     } else {
       console.warn('No tokens found in URL, redirecting to home')
       router.push('/')

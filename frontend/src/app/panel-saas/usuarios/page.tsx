@@ -5,24 +5,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Search, ShieldAlert, User as UserIcon } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
+import { api } from '@/lib/api'
+import type { User, PaginatedResponse } from '@/lib/types'
+
 export default function UsersPage() {
-  const [users, setUsers] = useState([])
+  const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const token = localStorage.getItem('access_token')
-        const res = await fetch('http://localhost:8000/api/auth/users/', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const usersList = data.results || data
-          setUsers(usersList.filter((u: any) => u.role !== 'super_admin'))
-        }
+        const data = await api.get<PaginatedResponse<User>>("/api/auth/users/")
+        const usersList = data.results || (Array.isArray(data) ? data : [])
+        setUsers(usersList.filter((u) => u.role !== 'super_admin'))
       } catch (e) {
         console.error(e)
       } finally {

@@ -2,12 +2,12 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
-from django.db import models
-from django.db.models import Q
+from django.db.models import Prefetch
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.filters import global_or_user_gym_filter
 from .models import MealTemplate, NutritionItem, NutritionMeal, NutritionPlan, UserMealLog, UserNutritionPlan
 from .serializers import (
     MealTemplateSerializer,
@@ -22,13 +22,6 @@ from .serializers import (
 User = get_user_model()
 
 
-def global_or_user_gym_filter(user, gym_field="gym"):
-    filters = Q(**{f"{gym_field}__isnull": True})
-    if user.gym_id:
-        filters |= Q(**{f"{gym_field}_id": user.gym_id})
-    return filters
-
-
 class NutritionPlanViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -39,7 +32,12 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = NutritionPlan.objects.select_related("gym").prefetch_related("meal_templates")
+        user_assignments = Prefetch(
+            "assignments",
+            queryset=UserNutritionPlan.objects.filter(user=user).order_by("-created_at"),
+            to_attr="_user_assignments",
+        )
+        queryset = NutritionPlan.objects.select_related("gym").prefetch_related("meal_templates", user_assignments)
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
@@ -351,13 +349,14 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        base = UserNutritionPlan.objects.select_related("plan", "user", "assigned_by")
         if user.role in ["super_admin", "gym_admin", "coach"]:
             if user.gym:
-                return UserNutritionPlan.objects.filter(
+                return base.filter(
                     Q(user__gym=user.gym) | Q(user=user)
                 )
-            return UserNutritionPlan.objects.all()
-        return UserNutritionPlan.objects.filter(user=user)
+            return base.all()
+        return base.filter(user=user)
 
     def perform_create(self, serializer):
         user = self.request.user

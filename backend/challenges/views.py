@@ -1,10 +1,10 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from core.filters import global_or_user_gym_filter
 from .models import Badge, Challenge, ChallengeParticipation, UserBadge, UserProgress
 from .serializers import (
     BadgeSerializer,
@@ -17,24 +17,11 @@ from .serializers import (
 User = get_user_model()
 
 
-class IsCoachOrBetter(permissions.BasePermission):
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        return request.user.role in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}
-
-
 class ChallengeViewSet(viewsets.ModelViewSet):
     serializer_class = ChallengeSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "description", "type", "status"]
-
-    def _global_or_user_gym_filter(self, user):
-        filters = Q(gym__isnull=True)
-        if user.gym_id:
-            filters |= Q(gym_id=user.gym_id)
-        return filters
 
     def get_queryset(self):
         user = self.request.user
@@ -43,10 +30,10 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
             if user.gym_id:
-                return queryset.filter(self._global_or_user_gym_filter(user))
+                return queryset.filter(global_or_user_gym_filter(user))
             return queryset.filter(gym__isnull=True)
         if user.role == User.Role.ATHLETE:
-            return queryset.filter(self._global_or_user_gym_filter(user), status=Challenge.Status.ACTIVE)
+            return queryset.filter(global_or_user_gym_filter(user), status=Challenge.Status.ACTIVE)
         return queryset.filter(gym__isnull=True, status=Challenge.Status.ACTIVE)
 
     def perform_create(self, serializer):

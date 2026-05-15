@@ -1,8 +1,11 @@
+from datetime import date
+
 from django.contrib.auth import get_user_model
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Prefetch, Q
 from rest_framework import filters, permissions, viewsets
 from rest_framework.exceptions import PermissionDenied
 
+from core.filters import global_or_user_gym_filter
 from .models import Exercise, RoutineExercise, WorkoutRoutine, WorkoutSession
 from .serializers import (
     ExerciseSerializer,
@@ -12,13 +15,6 @@ from .serializers import (
 )
 
 User = get_user_model()
-
-
-class IsCoachOrBetter(permissions.BasePermission):
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        return request.user.role in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}
 
 
 class ExerciseViewSet(viewsets.ModelViewSet):
@@ -71,16 +67,20 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "objective", "level"]
 
-    def _global_or_user_gym_filter(self, user):
-        filters = Q(gym__isnull=True)
-        if user.gym_id:
-            filters |= Q(gym_id=user.gym_id)
-        return filters
-
     def get_queryset(self):
         user = self.request.user
+        today_sessions = Prefetch(
+            "sessions",
+            queryset=WorkoutSession.objects.filter(
+                user=user,
+                status=WorkoutSession.Status.COMPLETED,
+                performed_at__date=date.today(),
+            ),
+            to_attr="_today_sessions",
+        )
         queryset = (
             WorkoutRoutine.objects.select_related("gym", "created_by")
+            .prefetch_related("routine_exercises__exercise", today_sessions)
             .annotate(
                 completed_count=Count(
                     "sessions",
@@ -92,10 +92,10 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
             if user.gym_id:
-                return queryset.filter(self._global_or_user_gym_filter(user))
+                return queryset.filter(global_or_user_gym_filter(user))
             return queryset.filter(gym__isnull=True)
         if user.role == User.Role.ATHLETE:
-            return queryset.filter(self._global_or_user_gym_filter(user), status=WorkoutRoutine.Status.PUBLISHED)
+            return queryset.filter(global_or_user_gym_filter(user), status=WorkoutRoutine.Status.PUBLISHED)
         return queryset.filter(gym__isnull=True, status=WorkoutRoutine.Status.PUBLISHED)
 
     def perform_create(self, serializer):

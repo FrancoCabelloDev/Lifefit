@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useState } from 'react'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { api } from '@/lib/api'
 
 type FoodItem = {
   id: number
@@ -42,17 +42,6 @@ export function NutritionPlanDay({ day, initialFoods, onUpdate }: MealPlanDayPro
   const handleSave = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/nutrition/plan/day/${day}/`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ foods }),
-      })
-      if (!response.ok) {
-        throw new Error('Error al guardar el plan de comidas')
-      }
       onUpdate(day, foods)
     } catch (error) {
       console.error(error)

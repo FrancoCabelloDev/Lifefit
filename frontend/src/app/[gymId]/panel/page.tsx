@@ -4,39 +4,33 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Users, Dumbbell, Activity, TrendingUp, Calendar, CreditCard } from 'lucide-react'
 
+import { api } from '@/lib/api'
+import { getStoredUser } from '@/lib/auth'
+import type { User, Gym, PaginatedResponse } from '@/lib/types'
+
 export default function GymAdminDashboard() {
   const [gymName, setGymName] = useState('tu Gimnasio')
   const [adminName, setAdminName] = useState('')
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    const token = localStorage.getItem('access_token')
-
-    if (userStr) {
-      const user = JSON.parse(userStr)
+    const user = getStoredUser<User>()
+    if (user) {
       setAdminName(user.first_name || 'Admin')
     }
 
     const fetchGymData = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/gyms/gyms/', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const myGym = data.results ? data.results[0] : data[0]
-          if (myGym) {
-            setGymName(myGym.name)
-          }
+        const data = await api.get<PaginatedResponse<Gym>>("/api/gyms/gyms/")
+        const myGym = data.results?.[0] || (Array.isArray(data) ? data[0] : null)
+        if (myGym) {
+          setGymName(myGym.name)
         }
       } catch (error) {
         console.error("Error fetching gym", error)
       }
     }
-    
-    if (token) {
-      fetchGymData()
-    }
+
+    fetchGymData()
   }, [])
 
   return (

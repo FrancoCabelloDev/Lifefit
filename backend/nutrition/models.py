@@ -31,6 +31,9 @@ class NutritionPlan(BaseModel):
 
     class Meta:
         ordering = ["name"]
+        indexes = [
+            models.Index(fields=["gym", "status"]),
+        ]
 
     def __str__(self) -> str:
         return self.name

@@ -6,17 +6,11 @@ import { Search, MapPin, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 
+import { api } from '@/lib/api'
+import type { Gym, PaginatedResponse } from '@/lib/types'
+
 type GymSelectionProps = {
   mode: 'login' | 'register'
-}
-
-type Gym = {
-  id: string
-  name: string
-  slug: string
-  location: string
-  logo: string | null
-  brand_color: string
 }
 
 export default function GymSelection({ mode }: GymSelectionProps) {
@@ -39,11 +33,8 @@ export default function GymSelection({ mode }: GymSelectionProps) {
   useEffect(() => {
     const fetchGyms = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/gyms/public/')
-        if (res.ok) {
-          const data = await res.json()
-          setGyms(data.results || data)
-        }
+        const data = await api.get<PaginatedResponse<Gym>>("/api/gyms/public/", { authenticated: false })
+        setGyms(data.results || (Array.isArray(data) ? data : []))
       } catch (error) {
         console.error('Error fetching gyms:', error)
       } finally {

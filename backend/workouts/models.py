@@ -70,6 +70,9 @@ class WorkoutRoutine(BaseModel):
 
     class Meta:
         ordering = ["name"]
+        indexes = [
+            models.Index(fields=["gym", "status"]),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -124,6 +127,10 @@ class WorkoutSession(BaseModel):
 
     class Meta:
         ordering = ["-performed_at"]
+        indexes = [
+            models.Index(fields=["user", "status", "performed_at"]),
+            models.Index(fields=["gym", "performed_at"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user.email} - {self.performed_at:%Y-%m-%d}"

@@ -91,6 +91,9 @@ class WorkoutRoutineSerializer(serializers.ModelSerializer):
     
     def get_completed_today(self, obj):
         """Verifica si el usuario completó esta rutina hoy"""
+        today_sessions = getattr(obj, "_today_sessions", None)
+        if today_sessions is not None:
+            return len(today_sessions) > 0
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False

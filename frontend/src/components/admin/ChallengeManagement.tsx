@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+import { api } from '@/lib/api'
 
 type Challenge = {
   id: string
@@ -64,13 +64,8 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
   const fetchChallenges = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/challenges/challenges/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setChallenges(Array.isArray(data) ? data : data.results ?? [])
-      }
+      const data = await api.get<any>("/api/challenges/challenges/")
+      setChallenges(Array.isArray(data) ? data : data?.results ?? [])
       setError('')
     } catch (err) {
       setError('Error al cargar retos')
@@ -78,21 +73,16 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [])
 
   const fetchGyms = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/gyms/gyms/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setGyms(Array.isArray(data) ? data : data.results ?? [])
-      }
+      const data = await api.get<any>("/api/gyms/gyms/")
+      setGyms(Array.isArray(data) ? data : data?.results ?? [])
     } catch (err) {
       console.error('Error loading gyms:', err)
     }
-  }, [token])
+  }, [])
 
   useEffect(() => {
     fetchChallenges()
@@ -120,13 +110,8 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
   const handleDelete = async (id: string) => {
     if (!confirm('¿Estás seguro de eliminar este reto?')) return
     try {
-      const response = await fetch(`${API_BASE_URL}/api/challenges/challenges/${id}/`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (response.ok) {
-        setChallenges((prev) => prev.filter((c) => c.id !== id))
-      }
+      await api.delete(`/api/challenges/challenges/${id}/`)
+      setChallenges((prev) => prev.filter((c) => c.id !== id))
     } catch (err) {
       setError('Error al eliminar reto')
       console.error(err)
@@ -390,27 +375,14 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
     setError('')
 
     try {
-      const url = challenge
-        ? `${API_BASE_URL}/api/challenges/challenges/${challenge.id}/`
-        : `${API_BASE_URL}/api/challenges/challenges/`
-
-      const response = await fetch(url, {
-        method: challenge ? 'PUT' : 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(form),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.detail || 'Error al guardar reto')
+      if (challenge) {
+        await api.put(`/api/challenges/challenges/${challenge.id}/`, form)
+      } else {
+        await api.post("/api/challenges/challenges/", form)
       }
-
       onSave()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar')
+    } catch (err: any) {
+      setError(err?.message || 'Error al guardar')
     } finally {
       setSaving(false)
     }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, Users, CreditCard, Settings, Building2, LogOut, GalleryVerticalEnd } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, Settings, Building2, LogOut, GalleryVerticalEnd, Package } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +18,8 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { getToken, getStoredUser, clearAuth } from '@/lib/auth'
+import type { User } from '@/lib/types'
 
 export default function SaaSAdminLayout({
   children,
@@ -29,30 +31,23 @@ export default function SaaSAdminLayout({
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    const userStr = localStorage.getItem('user')
-    
-    if (!token || !userStr) {
+    const token = getToken()
+    const user = getStoredUser<User>()
+
+    if (!token || !user) {
       router.push('/ingresar')
       return
     }
 
-    try {
-      const user = JSON.parse(userStr)
-      if (user.role !== 'super_admin') {
-        router.push('/ingresar')
-        return
-      }
-      setIsAuthenticated(true)
-    } catch (e) {
+    if (user.role !== 'super_admin') {
       router.push('/ingresar')
+      return
     }
+    setIsAuthenticated(true)
   }, [router])
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
+    clearAuth()
     router.push('/ingresar')
   }
 
@@ -110,11 +105,27 @@ export default function SaaSAdminLayout({
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>Finanzas</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/finanzas')} tooltip="Finanzas">
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/planes')} tooltip="Planes de Precio">
+                    <Link href="/panel-saas/planes">
+                      <Package />
+                      <span>Planes de Precio</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/finanzas')} tooltip="Facturación">
                     <Link href="/panel-saas/finanzas">
                       <CreditCard />
-                      <span>Finanzas</span>
+                      <span>Facturación</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from core.permissions import IsGymAdmin, IsSuperAdmin
 from .serializers import PasswordChangeSerializer, RegisterSerializer, UserSerializer, UserUpdateSerializer
 
 
@@ -54,32 +55,19 @@ class UserMeView(APIView):
         return Response(UserSerializer(request.user).data)
 
 
-class IsSuperAdminPermission(IsAuthenticated):
-    def has_permission(self, request, view):
-        return super().has_permission(request, view) and request.user.role == User.Role.SUPER_ADMIN
-
-
-class IsGymAdminPermission(IsAuthenticated):
-    def has_permission(self, request, view):
-        return super().has_permission(request, view) and request.user.role == User.Role.GYM_ADMIN
-
-
 class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
-    queryset = User.objects.all()
+    queryset = User.objects.all().select_related("gym")
     serializer_class = UserSerializer
-    permission_classes = [IsSuperAdminPermission]
+    permission_classes = [IsSuperAdmin]
 
 
 class GymMemberViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para que los administradores de gimnasio gestionen sus propios atletas y coaches.
-    """
     serializer_class = UserSerializer
-    permission_classes = [IsGymAdminPermission]
+    permission_classes = [IsGymAdmin]
 
     def get_queryset(self):
         user = self.request.user
-        queryset = User.objects.filter(gym=user.gym).exclude(id=user.id)
+        queryset = User.objects.filter(gym=user.gym).exclude(id=user.id).select_related("gym")
         
         role = self.request.query_params.get('role')
         if role:

@@ -32,20 +32,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-interface GymData {
-  id: string
-  name: string
-  logo: string | null
-  brand_color: string
-  status: string
-  slug: string
-}
+import { api } from '@/lib/api'
+import type { Gym, PaginatedResponse } from '@/lib/types'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
 export default function ConfigPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
   
-  const [gymData, setGymData] = useState<GymData | null>(null)
+  const [gymData, setGymData] = useState<Gym | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
@@ -65,29 +61,17 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
   const fetchGymData = async () => {
     try {
       setIsLoading(true)
-      const token = localStorage.getItem('access_token')
-      const userStr = localStorage.getItem('user')
-      if (!userStr) return
-
-      const user = JSON.parse(userStr)
-      const response = await fetch(`http://localhost:8000/api/gyms/gyms/?slug=${gymId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const data = await api.get<PaginatedResponse<Gym>>("/api/gyms/gyms/", {
+        params: { slug: gymId }
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        const gym = data.results ? data.results[0] : data[0]
-        if (gym) {
-          setGymData(gym)
-          // Agregamos timestamp para evitar cache en la previsualización tras guardar
-          const timestamp = new Date().getTime()
-          const logoUrl = gym.logo 
-            ? (gym.logo.startsWith('http') ? gym.logo : `http://localhost:8000${gym.logo}`)
-            : null
-          setPreviewUrl(logoUrl ? `${logoUrl}?t=${timestamp}` : null)
-        }
+      const gym = data.results?.[0] || (Array.isArray(data) ? data[0] : null)
+      if (gym) {
+        setGymData(gym)
+        const timestamp = new Date().getTime()
+        const logoUrl = gym.logo
+          ? (gym.logo.startsWith('http') ? gym.logo : `${API_BASE}${gym.logo}`)
+          : null
+        setPreviewUrl(logoUrl ? `${logoUrl}?t=${timestamp}` : null)
       }
     } catch (err) {
       console.error('Error fetching gym data:', err)
@@ -157,33 +141,20 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
       setIsSaving(true)
       setError('')
       setSuccessMessage('')
-      
-      const token = localStorage.getItem('access_token')
+
       const formData = new FormData()
       formData.append('name', gymData.name)
       formData.append('brand_color', gymData.brand_color || '#10b981')
-      
+
       if (selectedFile) {
         formData.append('logo', selectedFile)
       }
 
-      const response = await fetch(`http://localhost:8000/api/gyms/gyms/${gymData.id}/`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData
-      })
+      await api.patch(`/api/gyms/gyms/${gymData.id}/`, formData, { formData: true })
 
-      if (response.ok) {
-        setSuccessMessage('¡Configuración actualizada con éxito!')
-        await fetchGymData() // Recargamos para obtener la URL final del logo
-        setSelectedFile(null)
-      } else {
-        const errorData = await response.json()
-        console.error('Save error:', errorData)
-        setError('Error al guardar los cambios en el servidor.')
-      }
+      setSuccessMessage('¡Configuración actualizada con éxito!')
+      await fetchGymData()
+      setSelectedFile(null)
     } catch (err) {
       console.error('Unexpected error:', err)
       setError('Ocurrió un error inesperado al intentar guardar.')

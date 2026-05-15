@@ -85,6 +85,9 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         ordering = ["-date_joined"]
+        indexes = [
+            models.Index(fields=["gym", "role"]),
+        ]
 
     def __str__(self) -> str:
         return self.email

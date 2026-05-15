@@ -44,7 +44,10 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 
-// Interfaces para tipado estricto de la navegación
+import { api } from '@/lib/api'
+import { getToken, getStoredUser, clearAuth } from '@/lib/auth'
+import type { User, Gym, PaginatedResponse } from '@/lib/types'
+
 interface NavSubItem {
   title: string
   url: string
@@ -82,59 +85,48 @@ export default function GymAdminLayout({
   const [userName, setUserName] = useState('Admin')
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    const userStr = localStorage.getItem('user')
-    
-    if (!token || !userStr) {
+    const token = getToken()
+    const user = getStoredUser<User>()
+
+    if (!token || !user) {
       router.push('/tugimnasio')
       return
     }
 
-    try {
-      const user = JSON.parse(userStr)
-      if (user.role !== 'gym_admin') {
-        router.push('/tugimnasio')
-        return
-      }
-      setIsAuthorized(true)
-      setUserName(`${user.first_name} ${user.last_name}`)
-      setUserInitial(user.first_name?.[0]?.toUpperCase() || 'AD')
-
-      const fetchGymData = async () => {
-        try {
-          const res = await fetch(`http://localhost:8000/api/gyms/gyms/?slug=${gymId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const myGym = data.results ? data.results[0] : data[0]
-            if (myGym) {
-              setGymName(myGym.name)
-              // Asegurar URL absoluta para el logo
-              if (myGym.logo) {
-                const logoUrl = myGym.logo.startsWith('http') 
-                  ? myGym.logo 
-                  : `http://localhost:8000${myGym.logo}`
-                setGymLogo(logoUrl)
-              }
-              setGymColor(myGym.brand_color || '#10b981')
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching gym", error)
-        }
-      }
-      
-      fetchGymData()
-    } catch (e) {
+    if (user.role !== 'gym_admin') {
       router.push('/tugimnasio')
+      return
     }
-  }, [router])
+    setIsAuthorized(true)
+    setUserName(`${user.first_name} ${user.last_name}`)
+    setUserInitial(user.first_name?.[0]?.toUpperCase() || 'AD')
+
+    const fetchGymData = async () => {
+      try {
+        const data = await api.get<PaginatedResponse<Gym>>("/api/gyms/gyms/", {
+          params: { slug: gymId }
+        })
+        const myGym = data.results?.[0] || (Array.isArray(data) ? data[0] : null)
+        if (myGym) {
+          setGymName(myGym.name)
+          if (myGym.logo) {
+            const logoUrl = myGym.logo.startsWith('http')
+              ? myGym.logo
+              : `${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'}${myGym.logo}`
+            setGymLogo(logoUrl)
+          }
+          setGymColor(myGym.brand_color || '#10b981')
+        }
+      } catch (error) {
+        console.error("Error fetching gym", error)
+      }
+    }
+
+    fetchGymData()
+  }, [router, gymId])
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
+    clearAuth()
     router.push('/tugimnasio')
   }
 

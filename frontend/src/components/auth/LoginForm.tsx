@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
+import { api } from '@/lib/api'
+import { setTokens, setStoredUser, dispatchAuthEvent } from '@/lib/auth'
+import type { LoginResponse } from '@/lib/types'
+
 interface LoginFormProps {
   gymId: string
 }
@@ -19,43 +23,29 @@ export default function LoginForm({ gymId }: LoginFormProps) {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  // Función para capitalizar y formatear el ID del gimnasio (Visual)
   const formattedGymName = gymId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
-    
+
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
-      
-      const data = await response.json()
-      
-      if (response.ok) {
-        // Guardar credenciales
-        localStorage.setItem('access_token', data.access)
-        localStorage.setItem('refresh_token', data.refresh)
-        localStorage.setItem('user', JSON.stringify(data.user))
-        
-        // Redirigir según el rol
-        if (data.user.role === 'gym_admin') {
-          router.push(`/${gymId}/panel`)
-        } else if (data.user.role === 'athlete' || data.user.role === 'coach') {
-          router.push(`/${gymId}/panel-atleta`) // O donde sea que vaya el atleta/coach
-        } else {
-          // Si por alguna razón un super_admin entra aquí
-          router.push('/panel-saas')
-        }
+      const data = await api.post<LoginResponse>("/api/auth/login/", { email, password })
+
+      setTokens(data.access, data.refresh)
+      setStoredUser(data.user)
+      dispatchAuthEvent()
+
+      if (data.user.role === 'gym_admin') {
+        router.push(`/${gymId}/panel`)
+      } else if (data.user.role === 'athlete' || data.user.role === 'coach') {
+        router.push(`/${gymId}/panel-atleta`)
       } else {
-        setError(data.detail || 'Credenciales inválidas')
+        router.push('/panel-saas')
       }
-    } catch (err) {
-      setError('Error de conexión con el servidor')
+    } catch (err: any) {
+      setError(err?.message || 'Error de conexión con el servidor')
     } finally {
       setIsLoading(false)
     }
@@ -63,13 +53,11 @@ export default function LoginForm({ gymId }: LoginFormProps) {
 
   const handleGoogleLogin = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/accounts/google/login/')
-      const data = await res.json()
+      const data = await api.get<{ authorization_url: string }>("/api/accounts/google/login/", { authenticated: false })
       if (data.authorization_url) {
         window.location.href = data.authorization_url
       }
-    } catch (e) {
-      console.error('Error fetching Google auth URL:', e)
+    } catch {
       setError('Error al conectar con Google')
     }
   }

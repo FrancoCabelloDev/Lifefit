@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+import { api } from '@/lib/api'
 
 type Badge = {
   id: string
@@ -139,13 +138,8 @@ export default function BadgeManagement({ token }: BadgeManagementProps) {
   const fetchBadges = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/challenges/badges/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setBadges(Array.isArray(data) ? data : data.results ?? [])
-      }
+      const data = await api.get<any>("/api/challenges/badges/")
+      setBadges(Array.isArray(data) ? data : data?.results ?? [])
       setError('')
     } catch (err) {
       console.error(err)
@@ -153,24 +147,16 @@ export default function BadgeManagement({ token }: BadgeManagementProps) {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [])
 
   const fetchUserBadges = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/challenges/user-badges/`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      )
-      if (response.ok) {
-        const data = await response.json()
-        setUserBadges(Array.isArray(data) ? data : data.results ?? [])
-      }
+      const data = await api.get<any>("/api/challenges/user-badges/")
+      setUserBadges(Array.isArray(data) ? data : data?.results ?? [])
     } catch (err) {
       console.error('Error loading user badges:', err)
     }
-  }, [token])
+  }, [])
 
   useEffect(() => {
     fetchBadges()

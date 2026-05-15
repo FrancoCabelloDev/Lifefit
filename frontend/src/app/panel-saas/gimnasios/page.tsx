@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Plus, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+
+import { api } from '@/lib/api'
+import type { Gym, PaginatedResponse } from '@/lib/types'
 
 const MODULES = [
   { id: 'rutinas', label: 'Rutinas', icon: '🏋️' },
@@ -17,11 +21,10 @@ const MODULES = [
 ]
 
 export default function GymsPage() {
-  const [gyms, setGyms] = useState([])
+  const [gyms, setGyms] = useState<Gym[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   
-  // Form State
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -36,21 +39,15 @@ export default function GymsPage() {
     max_athletes: 100,
     max_coaches: 2,
     max_nutritionists: 2,
+    saas_plan: 'Pro',
+    billing_cycle: 'monthly',
   })
   const [logoFile, setLogoFile] = useState<File | null>(null)
 
   const fetchGyms = async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('http://localhost:8000/api/gyms/gyms/', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setGyms(data.results || data)
-      }
+      const data = await api.get<PaginatedResponse<Gym>>("/api/gyms/gyms/")
+      setGyms(data.results || (Array.isArray(data) ? data : []))
     } catch (e) {
       console.error(e)
     } finally {
@@ -61,6 +58,33 @@ export default function GymsPage() {
   useEffect(() => {
     fetchGyms()
   }, [])
+
+  // Auto-ajustar los límites según el plan SaaS seleccionado
+  useEffect(() => {
+    setFormData(prev => {
+      // Evitar re-renders infinitos si los valores ya son correctos
+      let newLimits = { max_athletes: prev.max_athletes, max_coaches: prev.max_coaches, max_nutritionists: prev.max_nutritionists }
+      
+      switch (prev.saas_plan) {
+        case 'Básico':
+          newLimits = { max_athletes: 500, max_coaches: 2, max_nutritionists: 2 }
+          break
+        case 'Pro':
+          newLimits = { max_athletes: 2500, max_coaches: 10, max_nutritionists: 10 }
+          break
+        case 'Empresarial':
+          newLimits = { max_athletes: 99999, max_coaches: 50, max_nutritionists: 20 } // Ilimitado en la práctica
+          break
+      }
+
+      if (prev.max_athletes !== newLimits.max_athletes || 
+          prev.max_coaches !== newLimits.max_coaches || 
+          prev.max_nutritionists !== newLimits.max_nutritionists) {
+        return { ...prev, ...newLimits }
+      }
+      return prev
+    })
+  }, [formData.saas_plan])
 
   const handleModuleToggle = (moduleId: string) => {
     setFormData(prev => {
@@ -76,7 +100,6 @@ export default function GymsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const token = localStorage.getItem('access_token')
     
     const payload = new FormData()
     payload.append('name', formData.name)
@@ -86,51 +109,35 @@ export default function GymsPage() {
     payload.append('contact_email', formData.contact_email)
     payload.append('brand_color', formData.brand_color)
     payload.append('status', 'active')
-    
-    // Módulos
     payload.append('metrics', JSON.stringify({ enabled_modules: formData.modules }))
     
-    // Imagen
     if (logoFile) {
       payload.append('logo', logoFile)
     }
 
-    // Datos del Admin
     payload.append('admin_first_name', formData.admin_first_name)
     payload.append('admin_last_name', formData.admin_last_name)
     payload.append('admin_email', formData.admin_email)
-
-    // Límites de Capacidad
     payload.append('max_athletes', String(formData.max_athletes))
     payload.append('max_coaches', String(formData.max_coaches))
     payload.append('max_nutritionists', String(formData.max_nutritionists))
+    payload.append('saas_plan', formData.saas_plan)
+    payload.append('billing_cycle', formData.billing_cycle)
 
     try {
-      const res = await fetch('http://localhost:8000/api/gyms/gyms/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-          // No se envía Content-Type explícito; fetch lo hace por nosotros con el boundary correcto para FormData
-        },
-        body: payload
+      await api.post("/api/gyms/gyms/", payload, { formData: true })
+      setIsModalOpen(false)
+      setFormData({ 
+        name: '', slug: '', ruc: '', location: '', contact_email: '', 
+        brand_color: '#10b981', modules: [], 
+        admin_first_name: '', admin_last_name: '', admin_email: '',
+        max_athletes: 100, max_coaches: 2, max_nutritionists: 2,
+        saas_plan: 'Pro', billing_cycle: 'monthly'
       })
-
-      if (res.ok) {
-        setIsModalOpen(false)
-        setFormData({ 
-          name: '', slug: '', ruc: '', location: '', contact_email: '', 
-          brand_color: '#10b981', modules: [], 
-          admin_first_name: '', admin_last_name: '', admin_email: '',
-          max_athletes: 100, max_coaches: 2, max_nutritionists: 2
-        })
-        setLogoFile(null)
-        fetchGyms() // Recargar la lista
-      } else {
-        const errData = await res.json()
-        alert('Error al crear gimnasio: ' + JSON.stringify(errData))
-      }
-    } catch (e) {
-      alert('Error de conexión')
+      setLogoFile(null)
+      fetchGyms()
+    } catch (e: any) {
+      alert('Error al crear gimnasio: ' + (e?.message || 'Error de conexión'))
     }
   }
 
@@ -299,9 +306,49 @@ export default function GymsPage() {
 
                 <hr className="border-slate-100" />
 
-                {/* SECCIÓN 3: LÍMITES DE CAPACIDAD */}
+                {/* SECCIÓN 3: PLAN DE SUSCRIPCIÓN SAAS */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">3. Límites de Uso (Tier)</h3>
+                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">3. Plan de Suscripción (SaaS)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="saas_plan">Plan Seleccionado</Label>
+                      <Select 
+                        value={formData.saas_plan} 
+                        onValueChange={(value) => setFormData({...formData, saas_plan: value})}
+                      >
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Selecciona un plan" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200 shadow-md z-[100]">
+                          <SelectItem value="Básico">Básico</SelectItem>
+                          <SelectItem value="Pro">Pro</SelectItem>
+                          <SelectItem value="Empresarial">Empresarial</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="billing_cycle">Ciclo de Facturación</Label>
+                      <Select 
+                        value={formData.billing_cycle} 
+                        onValueChange={(value) => setFormData({...formData, billing_cycle: value})}
+                      >
+                        <SelectTrigger className="bg-white">
+                          <SelectValue placeholder="Selecciona el ciclo" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border-slate-200 shadow-md z-[100]">
+                          <SelectItem value="monthly">Mensual</SelectItem>
+                          <SelectItem value="annual">Anual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* SECCIÓN 4: LÍMITES DE CAPACIDAD */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">4. Límites de Uso (Tier)</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="max_athletes">Atletas Máximos</Label>
@@ -320,9 +367,9 @@ export default function GymsPage() {
 
                 <hr className="border-slate-100" />
 
-                {/* SECCIÓN 4: ADMIN DEL GIMNASIO */}
+                {/* SECCIÓN 5: ADMIN DEL GIMNASIO */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">4. Acceso del Administrador</h3>
+                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">5. Acceso del Administrador</h3>
                   <p className="text-xs text-slate-500">Se enviará un correo automático de invitación para que el dueño cree su propia contraseña.</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">

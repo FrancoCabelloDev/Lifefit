@@ -44,24 +44,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-interface Athlete {
-  id: number
-  email: string
-  first_name: string
-  last_name: string
-  dni?: string
-  phone?: string
-  date_joined: string
-  nivel: number
-  puntos: number
-  plan: string
-}
+import { api } from '@/lib/api'
+import type { User, PaginatedResponse } from '@/lib/types'
 
 export default function AthletesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
   
-  const [athletes, setAthletes] = useState<Athlete[]>([])
+  const [athletes, setAthletes] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -84,30 +74,12 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
     e.preventDefault()
     try {
       setIsSubmitting(true)
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`http://localhost:8000/api/auth/gym-members/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...formData,
-          role: 'athlete'
-        })
-      })
-
-      if (response.ok) {
-        setIsModalOpen(false)
-        setFormData({ first_name: '', last_name: '', dni: '', phone: '', email: '', password: '', plan: 'mensual' })
-        fetchAthletes()
-      } else {
-        const errorData = await response.json()
-        alert(errorData.detail || 'Error al crear atleta')
-      }
-    } catch (error) {
-      console.error('Error creating athlete:', error)
-      alert('Error de conexión')
+      await api.post("/api/auth/gym-members/", { ...formData, role: 'athlete' })
+      setIsModalOpen(false)
+      setFormData({ first_name: '', last_name: '', dni: '', phone: '', email: '', password: '', plan: 'mensual' })
+      fetchAthletes()
+    } catch (error: any) {
+      alert(error?.message || 'Error al crear atleta')
     } finally {
       setIsSubmitting(false)
     }
@@ -116,18 +88,10 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   const fetchAthletes = async () => {
     try {
       setIsLoading(true)
-      const token = localStorage.getItem('access_token')
-      // Corregido: La ruta correcta es /api/auth/gym-members/
-      const response = await fetch(`http://localhost:8000/api/auth/gym-members/?role=athlete`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const data = await api.get<PaginatedResponse<User>>("/api/auth/gym-members/", {
+        params: { role: 'athlete' }
       })
-      if (response.ok) {
-        const data = await response.json()
-        // Manejar datos paginados o arrays planos
-        setAthletes(Array.isArray(data) ? data : data.results || [])
-      }
+      setAthletes(Array.isArray(data) ? data : data.results || [])
     } catch (error) {
       console.error('Error fetching athletes:', error)
     } finally {
@@ -346,7 +310,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                       <td className="px-8 py-5">
                         <div className="text-sm font-medium text-slate-500 flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5 text-slate-300" />
-                          {new Date(athlete.date_joined).toLocaleDateString()}
+                          {athlete.date_joined ? new Date(athlete.date_joined).toLocaleDateString() : '-'}
                         </div>
                       </td>
                       <td className="px-8 py-5 text-right">

@@ -18,8 +18,12 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             "currency",
             "billing_cycle",
             "user_limit",
+            "max_athletes",
+            "max_coaches",
+            "max_nutritionists",
             "features",
             "is_active",
+            "display_order",
             "created_at",
             "updated_at",
         ]

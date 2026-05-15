@@ -19,15 +19,17 @@ class GymViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Gym.objects.none()
 
+        qs = Gym.objects.prefetch_related("branches")
+
         if user.role == User.Role.SUPER_ADMIN:
-            return Gym.objects.all()
+            return qs
 
         if user.gym_id:
-            return Gym.objects.filter(id=user.gym_id)
+            return Gym.objects.filter(id=user.gym_id).prefetch_related("branches")
 
         slug = self.request.query_params.get('slug')
         if slug:
-            return Gym.objects.filter(slug=slug)
+            return Gym.objects.filter(slug=slug).prefetch_related("branches")
 
         return Gym.objects.none()
 
@@ -82,10 +84,56 @@ class GymViewSet(viewsets.ModelViewSet):
                 })
                 invite_link = f"{frontend_url}/unirse?{params}"
 
+                # Lógica de Suscripción (SaaS)
+                saas_plan_name = self.request.data.get('saas_plan', 'Pro')
+                billing_cycle = self.request.data.get('billing_cycle', 'monthly')
+                
+                from subscriptions.models import SubscriptionPlan, Subscription
+                from django.utils import timezone
+                from datetime import timedelta
+                import calendar
+                
+                # Obtener o crear el Plan de Suscripción si no existe
+                # (Idealmente los planes ya deben existir, pero para evitar errores en desarrollo lo creamos)
+                plan, created = SubscriptionPlan.objects.get_or_create(
+                    name=saas_plan_name,
+                    billing_cycle=billing_cycle,
+                    defaults={
+                        'currency': 'PEN',
+                        'price': 249 if saas_plan_name == 'Pro' else 99,
+                        'description': f'Plan {saas_plan_name} creado automáticamente'
+                    }
+                )
+                
+                # Calcular fechas de la suscripción
+                start_date = timezone.now().date()
+                if billing_cycle == 'monthly':
+                    # Sumar un mes (aproximado, usando timedelta o calendar)
+                    days_in_month = calendar.monthrange(start_date.year, start_date.month)[1]
+                    end_date = start_date + timedelta(days=days_in_month)
+                else:
+                    # Anual
+                    try:
+                        end_date = start_date.replace(year=start_date.year + 1)
+                    except ValueError:
+                        # Si es 29 de febrero en bisiesto, pasar al 28 de febrero
+                        end_date = start_date.replace(year=start_date.year + 1, month=2, day=28)
+                
+                # Crear la Suscripción vinculada al Gimnasio
+                Subscription.objects.create(
+                    owner_gym=gym,
+                    plan=plan,
+                    status=Subscription.Status.ACTIVE,
+                    start_date=start_date,
+                    end_date=end_date,
+                    next_billing_date=end_date
+                )
+                print(f"✅ Suscripción '{plan.name}' ({billing_cycle}) creada para {gym.name}")
+
                 # Simular envío de correo por consola (hasta configurar Resend)
                 print("="*50)
                 print(f"📧 EMAIL DE INVITACIÓN PARA: {admin_email}")
-                print(f"¡Bienvenido a LifeFit, {admin_first_name}! Tu gimnasio '{gym.name}' ha sido registrado.")
+                print(f"¡Bienvenido a LifeFit, {admin_first_name}! Tu gimnasio '{gym.name}' ha sido registrado con el plan {saas_plan_name}.")
                 print(f"Por favor, haz clic en el siguiente enlace para crear tu contraseña y acceder a tu panel:")
                 print(f"👉 {invite_link}")
                 print("="*50)

@@ -1,4 +1,4 @@
-from rest_framework import permissions, viewsets
+from rest_framework import permissions, viewsets, filters
 from rest_framework.exceptions import PermissionDenied
 
 from .models import Payment, Subscription, SubscriptionPlan
@@ -7,16 +7,20 @@ from .serializers import PaymentSerializer, SubscriptionPlanSerializer, Subscrip
 
 class SubscriptionPlanViewSet(viewsets.ModelViewSet):
     serializer_class = SubscriptionPlanSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["name", "description"]
+    ordering_fields = ["display_order", "price", "name", "created_at"]
+    ordering = ["display_order", "price"]
 
     def get_queryset(self):
         queryset = SubscriptionPlan.objects.all()
-        if self.request.user.role == self.request.user.Role.SUPER_ADMIN:
+        if self.request.user.is_authenticated and self.request.user.role == self.request.user.Role.SUPER_ADMIN:
             return queryset
         return queryset.filter(is_active=True)
 
     def has_admin_permission(self):
-        return self.request.user.role == self.request.user.Role.SUPER_ADMIN
+        return self.request.user.is_authenticated and self.request.user.role == self.request.user.Role.SUPER_ADMIN
 
     def perform_create(self, serializer):
         if not self.has_admin_permission():
@@ -30,8 +34,45 @@ class SubscriptionPlanViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         if not self.has_admin_permission():
+            raise PermissionDenied("Solo los super administradores pueden archivar planes.")
+        instance.is_active = False
+        instance.save(update_fields=["is_active", "updated_at"])
+
+    from rest_framework.decorators import action
+    from rest_framework.response import Response
+    from rest_framework import status
+
+    @action(detail=True, methods=["delete"])
+    def hard_delete(self, request, pk=None):
+        if not self.has_admin_permission():
             raise PermissionDenied("Solo los super administradores pueden eliminar planes.")
-        instance.delete()
+        plan = self.get_object()
+        if plan.subscriptions.exists():
+            return Response(
+                {"detail": "No puedes eliminar este plan porque tiene suscripciones activas. Por favor, archívalo en su lugar."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        plan.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["post"])
+    def reorder(self, request):
+        if not self.has_admin_permission():
+            raise PermissionDenied("Solo los super administradores pueden ordenar planes.")
+        
+        orders = request.data
+        if not isinstance(orders, list):
+            return Response({"detail": "Se esperaba una lista de objetos con id y display_order."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from django.db import transaction
+        with transaction.atomic():
+            for item in orders:
+                plan_id = item.get("id")
+                order = item.get("display_order")
+                if plan_id is not None and order is not None:
+                    SubscriptionPlan.objects.filter(id=plan_id).update(display_order=order)
+        
+        return Response({"detail": "Orden actualizado exitosamente."})
 
 
 class SubscriptionViewSet(viewsets.ModelViewSet):

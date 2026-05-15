@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { api } from '@/lib/api'
 
 function SetPasswordForm() {
   const router = useRouter()
@@ -45,32 +46,20 @@ function SetPasswordForm() {
     setIsLoading(true)
 
     try {
-      const res = await fetch('http://localhost:8000/api/accounts/set-password/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          uid,
-          token,
-          password
-        })
-      })
+      const data = await api.post<{ detail: string; gym_slug?: string }>(
+        "/api/accounts/set-password/",
+        { uid, token, password },
+        { authenticated: false }
+      )
 
-      const data = await res.json()
-
-      if (res.ok) {
-        alert('Contraseña configurada con éxito. Ya puedes iniciar sesión.')
-        if (data.gym_slug) {
-          router.push(`/${data.gym_slug}/ingresar`)
-        } else {
-          router.push('/ingresar')
-        }
+      alert('Contraseña configurada con éxito. Ya puedes iniciar sesión.')
+      if (data.gym_slug) {
+        router.push(`/${data.gym_slug}/ingresar`)
       } else {
-        setError(data.detail || 'Error al configurar la contraseña')
+        router.push('/ingresar')
       }
-    } catch (e) {
-      setError('Error de conexión con el servidor')
+    } catch (err: any) {
+      setError(err?.message || 'Error de conexión con el servidor')
     } finally {
       setIsLoading(false)
     }
@@ -78,13 +67,12 @@ function SetPasswordForm() {
 
   const handleGoogleLogin = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/accounts/google/login/')
-      const data = await res.json()
+      const data = await api.get<{ authorization_url: string }>("/api/accounts/google/login/", { authenticated: false })
       if (data.authorization_url) {
         window.location.href = data.authorization_url
       }
-    } catch (e) {
-      console.error('Error fetching Google auth URL:', e)
+    } catch {
+      console.error('Error fetching Google auth URL:')
     }
   }
 

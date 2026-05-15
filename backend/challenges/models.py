@@ -36,6 +36,9 @@ class Challenge(BaseModel):
 
     class Meta:
         ordering = ["-start_date", "name"]
+        indexes = [
+            models.Index(fields=["gym", "status"]),
+        ]
 
     def __str__(self) -> str:
         return self.name

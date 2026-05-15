@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
+import { api, ApiError } from '@/lib/api'
+import { setTokens, setStoredUser, dispatchAuthEvent } from '@/lib/auth'
+import type { LoginResponse } from '@/lib/types'
+
 export default function SaaSAdminLogin() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -19,33 +23,23 @@ export default function SaaSAdminLogin() {
     e.preventDefault()
     setIsLoading(true)
     setError('')
-    
+
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
-      
-      const data = await response.json()
-      
-      if (response.ok) {
-        if (data.user?.role !== 'super_admin') {
-           setError('Acceso denegado: Se requieren privilegios de Super Administrador.')
-           setIsLoading(false)
-           return
-        }
-        
-        localStorage.setItem('access_token', data.access)
-        localStorage.setItem('refresh_token', data.refresh)
-        localStorage.setItem('user', JSON.stringify(data.user))
-        
-        router.push('/panel-saas')
-      } else {
-        setError(data.detail || 'Credenciales inválidas')
+      const data = await api.post<LoginResponse>("/api/auth/login/", { email, password })
+
+      if (data.user?.role !== 'super_admin') {
+        setError('Acceso denegado: Se requieren privilegios de Super Administrador.')
+        setIsLoading(false)
+        return
       }
+
+      setTokens(data.access, data.refresh)
+      setStoredUser(data.user)
+      dispatchAuthEvent()
+
+      router.push('/panel-saas')
     } catch (err) {
-      setError('Error de conexión con el servidor')
+      setError(err instanceof ApiError ? err.message : 'Error de conexión con el servidor')
     } finally {
       setIsLoading(false)
     }

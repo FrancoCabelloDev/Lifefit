@@ -28,14 +28,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-interface StaffMember {
-  id: number
-  email: string
-  first_name: string
-  last_name: string
-  role: string
-  date_joined: string
-}
+import { api } from '@/lib/api'
+import type { StaffMember, PaginatedResponse } from '@/lib/types'
 
 interface StaffListProps {
   role: 'coach' | 'nutritionist' | 'receptionist'
@@ -55,17 +49,10 @@ export default function StaffList({ role, title, description }: StaffListProps) 
   const fetchStaff = async () => {
     try {
       setIsLoading(true)
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`http://localhost:8000/api/auth/gym-members/?role=${role}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const data = await api.get<StaffMember[]>("/api/auth/gym-members/", {
+        params: { role }
       })
-      if (response.ok) {
-        const data = await response.json()
-        // Manejar datos paginados o arrays planos
-        setStaff(Array.isArray(data) ? data : data.results || [])
-      }
+      setStaff(Array.isArray(data) ? data : (data as any)?.results || [])
     } catch (error) {
       console.error('Error fetching staff:', error)
     } finally {
