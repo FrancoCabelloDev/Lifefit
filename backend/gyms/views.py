@@ -35,23 +35,60 @@ class GymViewSet(viewsets.ModelViewSet):
         if self.request.user.role != User.Role.SUPER_ADMIN:
             raise PermissionDenied("Solo los super administradores pueden crear gimnasios.")
         
-        gym = serializer.save()
-
         admin_email = self.request.data.get('admin_email')
-        admin_password = self.request.data.get('admin_password')
-        admin_first_name = self.request.data.get('admin_first_name', '')
-        admin_last_name = self.request.data.get('admin_last_name', '')
+        print("\n" + "="*50)
+        print(f"DEBUG: Intentando crear gimnasio. admin_email: '{admin_email}'")
+        print("="*50 + "\n")
+        
+        if admin_email and User.objects.filter(email=admin_email).exists():
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"admin_email": "Ya existe un usuario con este correo electrónico."})
 
-        if admin_email and admin_password:
-            User.objects.create_user(
-                email=admin_email,
-                password=admin_password,
-                first_name=admin_first_name,
-                last_name=admin_last_name,
-                role=User.Role.GYM_ADMIN,
-                gym=gym,
-                is_active=True
-            )
+        from django.db import transaction
+        with transaction.atomic():
+            gym = serializer.save()
+
+            admin_first_name = self.request.data.get('admin_first_name', '')
+            admin_last_name = self.request.data.get('admin_last_name', '')
+
+            if admin_email:
+                from django.contrib.auth.tokens import default_token_generator
+                from django.utils.http import urlsafe_base64_encode
+                from django.utils.encoding import force_bytes
+                from django.conf import settings
+
+                user = User.objects.create(
+                    email=admin_email,
+                    first_name=admin_first_name,
+                    last_name=admin_last_name,
+                    role=User.Role.GYM_ADMIN,
+                    gym=gym,
+                    is_active=True
+                )
+                user.set_unusable_password()
+                user.save()
+
+                # Generar token y link
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000').rstrip('/')
+                
+                from urllib.parse import urlencode
+                params = urlencode({
+                    'uid': uid,
+                    'token': token,
+                    'gymSlug': gym.slug,
+                    'gymName': gym.name
+                })
+                invite_link = f"{frontend_url}/unirse?{params}"
+
+                # Simular envío de correo por consola (hasta configurar Resend)
+                print("="*50)
+                print(f"📧 EMAIL DE INVITACIÓN PARA: {admin_email}")
+                print(f"¡Bienvenido a LifeFit, {admin_first_name}! Tu gimnasio '{gym.name}' ha sido registrado.")
+                print(f"Por favor, haz clic en el siguiente enlace para crear tu contraseña y acceder a tu panel:")
+                print(f"👉 {invite_link}")
+                print("="*50)
 
     def perform_update(self, serializer):
         user = self.request.user

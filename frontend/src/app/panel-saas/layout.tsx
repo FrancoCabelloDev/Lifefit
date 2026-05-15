@@ -1,9 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, Users, CreditCard, Settings, Building2, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, Settings, Building2, LogOut, GalleryVerticalEnd } from 'lucide-react'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
 
 export default function SaaSAdminLayout({
   children,
@@ -11,6 +25,7 @@ export default function SaaSAdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
@@ -42,62 +57,99 @@ export default function SaaSAdminLayout({
   }
 
   if (!isAuthenticated) {
-    // Evita renderizar el layout si no está autenticado (evita parpadeos)
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white">Verificando sesión...</div>
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 antialiased font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-zinc-950 text-slate-300 flex flex-col hidden md:flex border-r border-zinc-800 shadow-xl z-20">
-        <div className="h-16 flex items-center px-6 border-b border-zinc-800 bg-zinc-950">
-          <span className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-emerald-500" />
-            LifeFit Admin
-          </span>
-        </div>
+    <SidebarProvider>
+      <Sidebar variant="sidebar" collapsible="icon">
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild>
+                <Link href="/panel-saas">
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-emerald-500 text-white">
+                    <Building2 className="size-4" />
+                  </div>
+                  <div className="flex flex-col gap-0.5 leading-none">
+                    <span className="font-semibold">LifeFit Admin</span>
+                    <span className="text-xs text-muted-foreground">Panel SaaS</span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
         
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 px-2">General</div>
-          
-          <Link href="/panel-saas" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
-            <LayoutDashboard className="w-5 h-5 text-zinc-400" />
-            Resumen
-          </Link>
-          <Link href="/panel-saas/gimnasios" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
-            <Building2 className="w-5 h-5 text-zinc-400" />
-            Gimnasios
-          </Link>
-          <Link href="/panel-saas/usuarios" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
-            <Users className="w-5 h-5 text-zinc-400" />
-            Usuarios Globales
-          </Link>
-          <Link href="/panel-saas/finanzas" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
-            <CreditCard className="w-5 h-5 text-zinc-400" />
-            Finanzas
-          </Link>
-        </nav>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Platform</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/panel-saas'} tooltip="Resumen">
+                    <Link href="/panel-saas">
+                      <LayoutDashboard />
+                      <span>Resumen</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/gimnasios')} tooltip="Gimnasios">
+                    <Link href="/panel-saas/gimnasios">
+                      <Building2 />
+                      <span>Gimnasios</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/usuarios')} tooltip="Usuarios Globales">
+                    <Link href="/panel-saas/usuarios">
+                      <Users />
+                      <span>Usuarios Globales</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/finanzas')} tooltip="Finanzas">
+                    <Link href="/panel-saas/finanzas">
+                      <CreditCard />
+                      <span>Finanzas</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
-        <div className="p-4 border-t border-zinc-800">
-          <Link href="#" className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-900 rounded-lg transition-colors">
-            <Settings className="w-5 h-5 text-zinc-400" />
-            Ajustes
-          </Link>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors mt-1 text-left"
-          >
-            <LogOut className="w-5 h-5 text-zinc-400" />
-            Cerrar Sesión
-          </button>
-        </div>
-      </aside>
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Ajustes">
+                <Link href="#">
+                  <Settings />
+                  <span>Ajustes</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleLogout} tooltip="Cerrar Sesión">
+                <LogOut />
+                <span>Cerrar Sesión</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-50">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-800">Panel de Control</h2>
-          <div className="flex items-center gap-4">
+      <main className="flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 shadow-sm shrink-0">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="-ml-1" />
+            <h2 className="text-lg font-semibold text-slate-800 ml-2">Panel de Control</h2>
+          </div>
+          <div className="ml-auto flex items-center gap-4">
             <div className="w-8 h-8 bg-zinc-900 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-emerald-500/20">
               AD
             </div>
@@ -109,6 +161,6 @@ export default function SaaSAdminLayout({
           </div>
         </div>
       </main>
-    </div>
+    </SidebarProvider>
   )
 }

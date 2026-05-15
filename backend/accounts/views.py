@@ -228,3 +228,38 @@ class ChangePasswordView(APIView):
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save(update_fields=["password"])
         return Response({"detail": "Contraseña actualizada correctamente."})
+
+
+class SetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        from .serializers import SetPasswordSerializer
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.http import urlsafe_base64_decode
+
+        serializer = SetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uid_b64 = serializer.validated_data["uid"]
+        token = serializer.validated_data["token"]
+        password = serializer.validated_data["password"]
+
+        try:
+            uid = urlsafe_base64_decode(uid_b64).decode()
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({"detail": "Enlace inválido o usuario no encontrado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({"detail": "El enlace ha expirado o es inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(password)
+        user.save(update_fields=["password"])
+
+        gym_slug = user.gym.slug if hasattr(user, 'gym') and user.gym else None
+
+        return Response({
+            "detail": "Contraseña configurada exitosamente. Ya puedes iniciar sesión.",
+            "gym_slug": gym_slug
+        })

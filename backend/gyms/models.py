@@ -19,6 +19,10 @@ class Gym(BaseModel):
     website = models.URLField(blank=True)
     contact_email = models.EmailField(blank=True)
     metrics = models.JSONField(default=dict, blank=True)
+    
+    max_athletes = models.IntegerField(default=100, help_text="Límite de atletas activos")
+    max_coaches = models.IntegerField(default=2, help_text="Límite de coaches activos")
+    max_nutritionists = models.IntegerField(default=2, help_text="Límite de nutricionistas activos")
 
     class Meta:
         ordering = ["name"]

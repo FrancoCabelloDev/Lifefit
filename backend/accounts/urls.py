@@ -12,6 +12,7 @@ from .views import (
     UserMeView,
     UserViewSet,
     GymMemberViewSet,
+    SetPasswordView,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -30,6 +31,7 @@ urlpatterns = [
     path("refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("me/", UserMeView.as_view(), name="user_me"),
     path("change-password/", ChangePasswordView.as_view(), name="change_password"),
+    path("set-password/", SetPasswordView.as_view(), name="set_password"),
     path("google/login/", GoogleLoginView.as_view(), name="google_login"),
     path("google/callback/", GoogleCallbackView.as_view(), name="google_callback"),
     path("google/disconnect/", GoogleDisconnectView.as_view(), name="google_disconnect"),

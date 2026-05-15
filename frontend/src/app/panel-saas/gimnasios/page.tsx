@@ -33,7 +33,9 @@ export default function GymsPage() {
     admin_first_name: '',
     admin_last_name: '',
     admin_email: '',
-    admin_password: '',
+    max_athletes: 100,
+    max_coaches: 2,
+    max_nutritionists: 2,
   })
   const [logoFile, setLogoFile] = useState<File | null>(null)
 
@@ -97,7 +99,11 @@ export default function GymsPage() {
     payload.append('admin_first_name', formData.admin_first_name)
     payload.append('admin_last_name', formData.admin_last_name)
     payload.append('admin_email', formData.admin_email)
-    payload.append('admin_password', formData.admin_password)
+
+    // Límites de Capacidad
+    payload.append('max_athletes', String(formData.max_athletes))
+    payload.append('max_coaches', String(formData.max_coaches))
+    payload.append('max_nutritionists', String(formData.max_nutritionists))
 
     try {
       const res = await fetch('http://localhost:8000/api/gyms/gyms/', {
@@ -114,7 +120,8 @@ export default function GymsPage() {
         setFormData({ 
           name: '', slug: '', ruc: '', location: '', contact_email: '', 
           brand_color: '#10b981', modules: [], 
-          admin_first_name: '', admin_last_name: '', admin_email: '', admin_password: '' 
+          admin_first_name: '', admin_last_name: '', admin_email: '',
+          max_athletes: 100, max_coaches: 2, max_nutritionists: 2
         })
         setLogoFile(null)
         fetchGyms() // Recargar la lista
@@ -292,11 +299,32 @@ export default function GymsPage() {
 
                 <hr className="border-slate-100" />
 
-                {/* SECCIÓN 3: ADMIN DEL GIMNASIO */}
+                {/* SECCIÓN 3: LÍMITES DE CAPACIDAD */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">3. Acceso del Administrador</h3>
-                  <p className="text-xs text-slate-500">Se creará automáticamente el usuario dueño del gimnasio (Role: GYM_ADMIN).</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">3. Límites de Uso (Tier)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="max_athletes">Atletas Máximos</Label>
+                      <Input id="max_athletes" type="number" min="1" required value={formData.max_athletes} onChange={e => setFormData({...formData, max_athletes: parseInt(e.target.value) || 0})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max_coaches">Coaches Máximos</Label>
+                      <Input id="max_coaches" type="number" min="0" required value={formData.max_coaches} onChange={e => setFormData({...formData, max_coaches: parseInt(e.target.value) || 0})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="max_nutritionists">Nutricionistas Máximos</Label>
+                      <Input id="max_nutritionists" type="number" min="0" required value={formData.max_nutritionists} onChange={e => setFormData({...formData, max_nutritionists: parseInt(e.target.value) || 0})} />
+                    </div>
+                  </div>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* SECCIÓN 4: ADMIN DEL GIMNASIO */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">4. Acceso del Administrador</h3>
+                  <p className="text-xs text-slate-500">Se enviará un correo automático de invitación para que el dueño cree su propia contraseña.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="admin_first_name">Nombre</Label>
                       <Input id="admin_first_name" required value={formData.admin_first_name} onChange={e => setFormData({...formData, admin_first_name: e.target.value})} placeholder="Ej. Juan" />
@@ -308,10 +336,6 @@ export default function GymsPage() {
                     <div className="space-y-2">
                       <Label htmlFor="admin_email">Email (Login)</Label>
                       <Input id="admin_email" type="email" required value={formData.admin_email} onChange={e => setFormData({...formData, admin_email: e.target.value})} placeholder="admin@gym.com" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="admin_password">Contraseña Temporal</Label>
-                      <Input id="admin_password" type="password" required value={formData.admin_password} onChange={e => setFormData({...formData, admin_password: e.target.value})} placeholder="••••••••" />
                     </div>
                   </div>
                 </div>

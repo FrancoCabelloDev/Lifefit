@@ -7,6 +7,8 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    gym_slug = serializers.CharField(source='gym.slug', read_only=True)
+
     class Meta:
         model = User
         fields = [
@@ -18,6 +20,7 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "role",
             "gym",
+            "gym_slug",
             "plan",
             "puntos",
             "nivel",
@@ -25,7 +28,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_google_account",
             "google_picture",
         ]
-        read_only_fields = ["id", "date_joined", "puntos", "nivel", "is_google_account", "google_picture"]
+        read_only_fields = ["id", "date_joined", "puntos", "nivel", "is_google_account", "google_picture", "gym_slug"]
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
@@ -91,3 +94,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         data["user"] = UserSerializer(self.user).data
         return data
+
+
+class SetPasswordSerializer(serializers.Serializer):
+    uid = serializers.CharField(required=True)
+    token = serializers.CharField(required=True)
+    password = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value

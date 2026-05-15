@@ -61,6 +61,19 @@ export default function LoginForm({ gymId }: LoginFormProps) {
     }
   }
 
+  const handleGoogleLogin = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/accounts/google/login/')
+      const data = await res.json()
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url
+      }
+    } catch (e) {
+      console.error('Error fetching Google auth URL:', e)
+      setError('Error al conectar con Google')
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
       <div className="w-full max-w-md">
@@ -132,7 +145,7 @@ export default function LoginForm({ gymId }: LoginFormProps) {
               </div>
             </div>
             
-            <Button variant="outline" className="w-full" type="button">
+            <Button variant="outline" className="w-full" type="button" onClick={handleGoogleLogin}>
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
