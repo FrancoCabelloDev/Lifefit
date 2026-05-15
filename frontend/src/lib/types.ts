@@ -96,3 +96,37 @@ export type StaffMember = {
   role: string
   date_joined: string
 }
+
+export type PaymentStatus = 'success' | 'pending' | 'failed'
+
+export type Payment = {
+  id: string
+  subscription: string
+  subscription_detail: Subscription
+  gym_name: string
+  gym_slug: string
+  plan_name: string
+  amount: string
+  currency: string
+  status: PaymentStatus
+  paid_at: string
+  provider: string
+  external_id: string
+  created_at: string
+  updated_at: string
+}
+
+export type PaymentMetrics = {
+  mrr: number
+  arr: number
+  monthly_income: number
+  mrr_change: number
+  pending_payments: number
+  total_gyms_with_subscriptions: number
+  currency: string
+}
+
+export type RevenuePoint = {
+  month: string
+  total: number
+}

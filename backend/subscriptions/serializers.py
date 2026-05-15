@@ -54,6 +54,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     subscription_detail = SubscriptionSerializer(source="subscription", read_only=True)
+    gym_name = serializers.CharField(source="subscription.owner_gym.name", read_only=True)
+    gym_slug = serializers.CharField(source="subscription.owner_gym.slug", read_only=True)
+    plan_name = serializers.CharField(source="subscription.plan.name", read_only=True)
 
     class Meta:
         model = Payment
@@ -61,6 +64,9 @@ class PaymentSerializer(serializers.ModelSerializer):
             "id",
             "subscription",
             "subscription_detail",
+            "gym_name",
+            "gym_slug",
+            "plan_name",
             "amount",
             "currency",
             "status",
@@ -70,4 +76,4 @@ class PaymentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "subscription_detail"]
+        read_only_fields = ["id", "created_at", "updated_at", "subscription_detail", "gym_name", "gym_slug", "plan_name"]
