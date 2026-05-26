@@ -251,3 +251,50 @@ class SetPasswordView(APIView):
             "detail": "Contraseña configurada exitosamente. Ya puedes iniciar sesión.",
             "gym_slug": gym_slug
         })
+
+class ImpersonateView(APIView):
+    """
+    Permite a un SuperAdmin iniciar sesión temporalmente como el administrador de un gimnasio.
+    """
+    permission_classes = [IsSuperAdmin]
+
+    def post(self, request, *args, **kwargs):
+        gym_id = request.data.get("gym_id")
+        if not gym_id:
+            return Response({"detail": "Se requiere gym_id."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        gym_admin = User.objects.filter(gym_id=gym_id, role=User.Role.GYM_ADMIN).first()
+        
+        if not gym_admin:
+            return Response(
+                {"detail": "No se encontró un administrador para este gimnasio."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        from core.models import AuditLog
+        
+        # Guardar en base de datos la auditoría
+        AuditLog.objects.create(
+            user=request.user,
+            action="IMPERSONATE",
+            target_object_id=str(gym_admin.id),
+            target_object_repr=f"GymAdmin: {gym_admin.email} (Gym: {gym_admin.gym.name if gym_admin.gym else 'N/A'})",
+            details={
+                "gym_id": gym_id,
+                "reason": "Soporte Técnico"
+            },
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        print(f"🔒 AUDITORÍA GUARDADA: SuperAdmin '{request.user.email}' inició sesión como '{gym_admin.email}' (Gimnasio ID: {gym_id})")
+        
+        refresh = RefreshToken.for_user(gym_admin)
+        
+        from .serializers import UserSerializer
+        data = {
+            "user": UserSerializer(gym_admin).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "gym_slug": gym_admin.gym.slug if hasattr(gym_admin, 'gym') and gym_admin.gym else None
+        }
+        return Response(data)

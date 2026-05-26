@@ -156,11 +156,15 @@ export default function GymAdminLayout({
           {
             title: "Gestión",
             icon: Users,
-            isActive: pathname.includes('/atletas'),
+            isActive: pathname.includes('/atletas') || pathname.includes('/planes'),
             items: [
               {
                 title: "Atletas",
                 url: `/${gymId}/panel/atletas`,
+              },
+              {
+                title: "Planes de Membresía",
+                url: `/${gymId}/panel/planes`,
               },
             ],
           },

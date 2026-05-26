@@ -80,10 +80,23 @@ class SubscriptionPlanViewSet(viewsets.ModelViewSet):
 class SubscriptionViewSet(viewsets.ModelViewSet):
     serializer_class = SubscriptionSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["owner_gym__name", "plan__name", "owner_user__email"]
+    ordering_fields = ["start_date", "next_billing_date", "plan__price"]
+    ordering = ["-start_date"]
 
     def get_queryset(self):
         user = self.request.user
         queryset = Subscription.objects.select_related("plan", "owner_gym", "owner_user")
+
+        filter_status = self.request.query_params.get("status")
+        if filter_status:
+            queryset = queryset.filter(status=filter_status)
+
+        filter_plan = self.request.query_params.get("plan")
+        if filter_plan:
+            queryset = queryset.filter(plan_id=filter_plan)
+
         if user.role == user.Role.SUPER_ADMIN:
             return queryset
         if user.role == user.Role.GYM_ADMIN and user.gym_id:
@@ -92,13 +105,9 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role == user.Role.SUPER_ADMIN:
-            serializer.save()
-            return
-        if user.role == user.Role.GYM_ADMIN and user.gym_id:
-            serializer.save(owner_gym=user.gym)
-            return
-        serializer.save(owner_user=user)
+        if user.role not in [user.Role.SUPER_ADMIN, user.Role.GYM_ADMIN]:
+            raise PermissionDenied("No tienes permisos para crear suscripciones.")
+        serializer.save()
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -113,6 +122,91 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             serializer.save(owner_user=user)
             return
         raise PermissionDenied("No puedes modificar esta suscripción.")
+
+    def perform_destroy(self, instance):
+        if self.request.user.role != self.request.user.Role.SUPER_ADMIN:
+            raise PermissionDenied("Solo super_admin puede eliminar suscripciones.")
+        instance.delete()
+
+    @action(detail=True, methods=["post"])
+    def change_plan(self, request, pk=None):
+        """Cambiar el plan de una suscripción activa"""
+        subscription = self.get_object()
+        if subscription.status not in ["active", "past_due"]:
+            return Response(
+                {"detail": "Solo se puede cambiar el plan de suscripciones activas o con pago atrasado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_plan_id = request.data.get("plan_id")
+        if not new_plan_id:
+            return Response({"detail": "Se requiere plan_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            new_plan = SubscriptionPlan.objects.get(id=new_plan_id, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({"detail": "Plan no encontrado o inactivo."}, status=status.HTTP_404_NOT_FOUND)
+
+        old_plan_name = subscription.plan.name
+        subscription.plan = new_plan
+        subscription.save(update_fields=["plan", "updated_at"])
+
+        # Registrar cambio de plan (para auditoría)
+        print(f"📝 Cambio de plan: {subscription.owner_gym} cambió de {old_plan_name} a {new_plan.name}")
+
+        return Response({
+            "detail": f"Plan cambiado de {old_plan_name} a {new_plan.name} exitosamente.",
+            "subscription": self.get_serializer(subscription).data,
+        })
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Cancelar suscripción al final del período actual"""
+        subscription = self.get_object()
+        if subscription.status != "active":
+            return Response({"detail": "La suscripción no está activa."}, status=status.HTTP_400_BAD_REQUEST)
+
+        subscription.cancel_at_period_end = True
+        subscription.save(update_fields=["cancel_at_period_end", "updated_at"])
+
+        return Response({
+            "detail": "La suscripción se cancelará al final del período actual.",
+            "subscription": self.get_serializer(subscription).data,
+        })
+
+    @action(detail=True, methods=["post"])
+    def renew(self, request, pk=None):
+        """Reactivar suscripción cancelada o renovar período"""
+        subscription = self.get_object()
+
+        if subscription.cancel_at_period_end:
+            subscription.cancel_at_period_end = False
+            subscription.save(update_fields=["cancel_at_period_end", "updated_at"])
+            return Response({
+                "detail": "Cancelación revertida. La suscripción continuará activa.",
+                "subscription": self.get_serializer(subscription).data,
+            })
+
+        if subscription.status == "canceled":
+            from datetime import date, timedelta
+            subscription.status = "active"
+            subscription.start_date = date.today()
+            subscription.end_date = None
+            subscription.next_billing_date = date.today() + timedelta(days=30)
+            subscription.cancel_at_period_end = False
+            subscription.save(update_fields=[
+                "status", "start_date", "end_date",
+                "next_billing_date", "cancel_at_period_end", "updated_at"
+            ])
+            return Response({
+                "detail": "Suscripción reactivada exitosamente.",
+                "subscription": self.get_serializer(subscription).data,
+            })
+
+        return Response(
+            {"detail": "Esta suscripción ya está activa."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class PaymentViewSet(viewsets.ModelViewSet):

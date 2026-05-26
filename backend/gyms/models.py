@@ -55,3 +55,33 @@ class Branch(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.name} - {self.gym.name}"
+
+
+class GymMembershipPlan(BaseModel):
+    gym = models.ForeignKey(Gym, related_name="membership_plans", on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_days = models.IntegerField(default=30)
+    features = models.JSONField(default=list, blank=True, help_text="Lista de beneficios a mostrar")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["price", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} - {self.gym.name} (S/{self.price})"
+
+
+class GymFeatureFlag(BaseModel):
+    gym = models.ForeignKey(Gym, related_name="feature_flags", on_delete=models.CASCADE)
+    feature_flag = models.ForeignKey("core.FeatureFlag", related_name="gym_flags", on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("gym", "feature_flag")
+        ordering = ["feature_flag__name"]
+
+    def __str__(self) -> str:
+        status = "ON" if self.is_active else "OFF"
+        return f"{self.gym.name} - {self.feature_flag.name} ({status})"

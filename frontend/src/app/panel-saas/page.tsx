@@ -1,18 +1,40 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrendingUp, Building2, Users } from 'lucide-react'
+import { api } from '@/lib/api'
 
-const MOCK_METRICS = {
-  mrr: '$12,450',
-  mrrGrowth: '+14%',
-  activeGyms: 48,
-  activeGymsGrowth: '+3 este mes',
-  totalAthletes: 12450,
-  totalAthletesGrowth: '+850 esta semana'
+interface DashboardMetrics {
+  mrr: number;
+  mrrGrowth: string;
+  activeGyms: number;
+  totalAthletes: number;
+  totalAthletesGrowth: string;
 }
 
 export default function SaaSAdminDashboard() {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await api.get('/api/system/analytics/dashboard/')
+        setMetrics(response as any)
+      } catch (error) {
+        console.error('Error fetching dashboard metrics', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchMetrics()
+  }, [])
+
+  if (loading || !metrics) {
+    return <div className="p-8 text-slate-500">Cargando métricas...</div>
+  }
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
@@ -31,9 +53,11 @@ export default function SaaSAdminDashboard() {
             <TrendingUp className="w-4 h-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{MOCK_METRICS.mrr}</div>
+            <div className="text-3xl font-bold text-slate-900">
+              ${metrics.mrr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
             <p className="text-xs text-emerald-600 mt-1 font-medium bg-emerald-50 inline-flex px-2 py-0.5 rounded-full">
-              {MOCK_METRICS.mrrGrowth} respecto al mes pasado
+              {metrics.mrrGrowth} respecto al mes pasado
             </p>
           </CardContent>
         </Card>
@@ -44,9 +68,9 @@ export default function SaaSAdminDashboard() {
             <Building2 className="w-4 h-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{MOCK_METRICS.activeGyms}</div>
+            <div className="text-3xl font-bold text-slate-900">{metrics.activeGyms}</div>
             <p className="text-xs text-slate-500 mt-1">
-              {MOCK_METRICS.activeGymsGrowth}
+              Gimnasios dados de alta
             </p>
           </CardContent>
         </Card>
@@ -57,9 +81,9 @@ export default function SaaSAdminDashboard() {
             <Users className="w-4 h-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{MOCK_METRICS.totalAthletes.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-slate-900">{metrics.totalAthletes.toLocaleString()}</div>
             <p className="text-xs text-slate-500 mt-1">
-              {MOCK_METRICS.totalAthletesGrowth}
+              {metrics.totalAthletesGrowth}
             </p>
           </CardContent>
         </Card>

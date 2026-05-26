@@ -32,6 +32,8 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan_detail = SubscriptionPlanSerializer(source="plan", read_only=True)
+    gym_name = serializers.CharField(source="owner_gym.name", read_only=True)
+    gym_slug = serializers.CharField(source="owner_gym.slug", read_only=True)
 
     class Meta:
         model = Subscription
@@ -41,6 +43,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "owner_user",
             "plan",
             "plan_detail",
+            "gym_name",
+            "gym_slug",
             "status",
             "start_date",
             "end_date",
@@ -49,7 +53,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "plan_detail"]
+        read_only_fields = ["id", "created_at", "updated_at", "plan_detail", "gym_name", "gym_slug"]
 
 
 class PaymentSerializer(serializers.ModelSerializer):

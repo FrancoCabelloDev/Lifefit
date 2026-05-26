@@ -3,8 +3,8 @@ from rest_framework import viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from .models import Branch, Gym
-from .serializers import BranchSerializer, GymSerializer, PublicGymSerializer
+from .models import Branch, Gym, GymMembershipPlan, GymFeatureFlag
+from .serializers import BranchSerializer, GymSerializer, PublicGymSerializer, GymMembershipPlanSerializer, GymFeatureFlagSerializer
 
 User = get_user_model()
 
@@ -48,7 +48,20 @@ class GymViewSet(viewsets.ModelViewSet):
 
         from django.db import transaction
         with transaction.atomic():
+            
+            # Extract metrics and handle enabled_modules manually to create FeatureFlags
+            metrics = serializer.validated_data.get('metrics', {})
+            enabled_modules = metrics.pop('enabled_modules', [])
+            serializer.validated_data['metrics'] = metrics
+            
             gym = serializer.save()
+
+            if enabled_modules:
+                from core.models import FeatureFlag
+                from gyms.models import GymFeatureFlag
+                flags = FeatureFlag.objects.filter(code__in=enabled_modules)
+                for flag in flags:
+                    GymFeatureFlag.objects.create(gym=gym, feature_flag=flag, is_active=True)
 
             admin_first_name = self.request.data.get('admin_first_name', '')
             admin_last_name = self.request.data.get('admin_last_name', '')
@@ -85,25 +98,23 @@ class GymViewSet(viewsets.ModelViewSet):
                 invite_link = f"{frontend_url}/unirse?{params}"
 
                 # Lógica de Suscripción (SaaS)
-                saas_plan_name = self.request.data.get('saas_plan', 'Pro')
-                billing_cycle = self.request.data.get('billing_cycle', 'monthly')
+                saas_plan_id = self.request.data.get('saas_plan_id')
                 
                 from subscriptions.models import SubscriptionPlan, Subscription
                 from django.utils import timezone
                 from datetime import timedelta
                 import calendar
+                from rest_framework.exceptions import ValidationError
                 
-                # Obtener o crear el Plan de Suscripción si no existe
-                # (Idealmente los planes ya deben existir, pero para evitar errores en desarrollo lo creamos)
-                plan, created = SubscriptionPlan.objects.get_or_create(
-                    name=saas_plan_name,
-                    billing_cycle=billing_cycle,
-                    defaults={
-                        'currency': 'PEN',
-                        'price': 249 if saas_plan_name == 'Pro' else 99,
-                        'description': f'Plan {saas_plan_name} creado automáticamente'
-                    }
-                )
+                if not saas_plan_id:
+                    raise ValidationError({"saas_plan_id": "Debe seleccionar un plan de suscripción SaaS."})
+                    
+                try:
+                    plan = SubscriptionPlan.objects.get(id=saas_plan_id)
+                except SubscriptionPlan.DoesNotExist:
+                    raise ValidationError({"saas_plan_id": "El plan seleccionado no existe."})
+                
+                billing_cycle = plan.billing_cycle
                 
                 # Calcular fechas de la suscripción
                 start_date = timezone.now().date()
@@ -128,15 +139,33 @@ class GymViewSet(viewsets.ModelViewSet):
                     end_date=end_date,
                     next_billing_date=end_date
                 )
-                print(f"✅ Suscripción '{plan.name}' ({billing_cycle}) creada para {gym.name}")
+                print(f"✅ Suscripción '{plan.name}' creada para {gym.name}")
 
-                # Simular envío de correo por consola (hasta configurar Resend)
-                print("="*50)
-                print(f"📧 EMAIL DE INVITACIÓN PARA: {admin_email}")
-                print(f"¡Bienvenido a LifeFit, {admin_first_name}! Tu gimnasio '{gym.name}' ha sido registrado con el plan {saas_plan_name}.")
-                print(f"Por favor, haz clic en el siguiente enlace para crear tu contraseña y acceder a tu panel:")
-                print(f"👉 {invite_link}")
-                print("="*50)
+                # Envío de correo real usando la plantilla HTML
+                from django.core.mail import send_mail
+                from django.template.loader import render_to_string
+                from django.utils.html import strip_tags
+                from django.conf import settings
+                
+                context = {
+                    'gym_name': gym.name,
+                    'set_password_url': invite_link,
+                }
+                html_message = render_to_string('emails/welcome_gym.html', context)
+                plain_message = strip_tags(html_message)
+                
+                try:
+                    send_mail(
+                        subject='¡Bienvenido a LifeFit! Crea tu contraseña',
+                        message=plain_message,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'onboarding@resend.dev'),
+                        recipient_list=[admin_email],
+                        html_message=html_message,
+                        fail_silently=False,
+                    )
+                    print(f"📧 Correo real enviado a: {admin_email}")
+                except Exception as e:
+                    print(f"❌ Error al enviar el correo a {admin_email}: {e}")
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -219,4 +248,101 @@ class PublicGymViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Gym.objects.filter(status=Gym.Status.ACTIVE).order_by("name")
     serializer_class = PublicGymSerializer
     permission_classes = [AllowAny]
+
+
+class GymMembershipPlanViewSet(viewsets.ModelViewSet):
+    serializer_class = GymMembershipPlanSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = GymMembershipPlan.objects.select_related("gym")
+        
+        gym_slug = self.request.query_params.get("gym_slug")
+        if gym_slug:
+            queryset = queryset.filter(gym__slug=gym_slug, is_active=True)
+
+        if not user.is_authenticated:
+            return queryset.filter(is_active=True)
+
+        if user.role == User.Role.SUPER_ADMIN:
+            return queryset
+
+        if user.role == User.Role.GYM_ADMIN and user.gym_id:
+            return queryset.filter(gym_id=user.gym_id)
+            
+        return queryset.filter(is_active=True)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user.is_authenticated:
+            raise PermissionDenied("Debe autenticarse.")
+        if user.role == User.Role.SUPER_ADMIN:
+            serializer.save()
+            return
+        if user.role == User.Role.GYM_ADMIN and user.gym_id:
+            serializer.save(gym=user.gym)
+            return
+        raise PermissionDenied("No tienes permisos para crear planes de membresía.")
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        if not user.is_authenticated:
+            raise PermissionDenied("Debe autenticarse.")
+        plan = self.get_object()
+        if user.role == User.Role.SUPER_ADMIN:
+            serializer.save()
+            return
+        if user.role == User.Role.GYM_ADMIN and plan.gym_id == user.gym_id:
+            serializer.save()
+            return
+        raise PermissionDenied("No tienes permisos para modificar este plan.")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not user.is_authenticated:
+            raise PermissionDenied("Debe autenticarse.")
+        if user.role == User.Role.SUPER_ADMIN:
+            instance.delete()
+            return
+        if user.role == User.Role.GYM_ADMIN and instance.gym_id == user.gym_id:
+            instance.delete()
+            return
+        raise PermissionDenied("No tienes permisos para eliminar este plan.")
+
+
+class GymFeatureFlagViewSet(viewsets.ModelViewSet):
+    serializer_class = GymFeatureFlagSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = GymFeatureFlag.objects.select_related("gym", "feature_flag")
+
+        gym_id = self.request.query_params.get("gym_id")
+        if gym_id:
+            queryset = queryset.filter(gym_id=gym_id)
+
+        if user.role == User.Role.SUPER_ADMIN:
+            return queryset
+
+        if user.role == User.Role.GYM_ADMIN and user.gym_id:
+            return queryset.filter(gym_id=user.gym_id)
+
+        return queryset.none()
+
+    def perform_create(self, serializer):
+        if self.request.user.role != User.Role.SUPER_ADMIN:
+            raise PermissionDenied("Solo los super administradores pueden asignar módulos.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if self.request.user.role != User.Role.SUPER_ADMIN:
+            raise PermissionDenied("Solo los super administradores pueden modificar módulos.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if self.request.user.role != User.Role.SUPER_ADMIN:
+            raise PermissionDenied("Solo los super administradores pueden eliminar módulos.")
+        instance.delete()
 

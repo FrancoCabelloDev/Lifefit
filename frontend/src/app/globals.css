@@ -62,6 +62,19 @@
   --spacing-stack-lg: 32px;
   --spacing-gutter: 16px;
 
+  /* Shadcn UI Variables Mapping */
+  --color-primary-foreground: var(--color-on-primary);
+  --color-secondary-foreground: var(--color-on-secondary);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: var(--color-on-error);
+  --color-muted: var(--color-surface-variant);
+  --color-muted-foreground: var(--color-on-surface-variant);
+  --color-accent: var(--color-secondary-container);
+  --color-accent-foreground: var(--color-on-secondary-container);
+  --color-input: var(--color-outline-variant);
+  --color-border: var(--color-outline-variant);
+  --color-ring: var(--color-primary);
+
   /* Typography mapping for the utility classes */
   --font-inter: "Inter", sans-serif;
   --font-lexend: "Lexend", sans-serif;
@@ -79,6 +92,22 @@
   body {
     background-color: var(--color-background);
     color: var(--color-on-background);
+  }
+
+  /* Custom Global Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.7); /* slate-500 with 70% opacity for better visibility */
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.9);
   }
 }
 

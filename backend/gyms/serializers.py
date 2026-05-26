@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from .models import Branch, Gym
+from core.serializers import FeatureFlagSerializer
+from .models import Branch, Gym, GymMembershipPlan, GymFeatureFlag
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -68,3 +69,41 @@ class PublicGymSerializer(serializers.ModelSerializer):
             "brand_color",
         ]
         read_only_fields = fields
+
+
+class GymMembershipPlanSerializer(serializers.ModelSerializer):
+    gym_name = serializers.CharField(source="gym.name", read_only=True)
+
+    class Meta:
+        model = GymMembershipPlan
+        fields = [
+            "id",
+            "gym",
+            "gym_name",
+            "name",
+            "description",
+            "price",
+            "duration_days",
+            "features",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "gym_name"]
+
+
+class GymFeatureFlagSerializer(serializers.ModelSerializer):
+    feature_flag_detail = FeatureFlagSerializer(source="feature_flag", read_only=True)
+
+    class Meta:
+        model = GymFeatureFlag
+        fields = [
+            "id",
+            "gym",
+            "feature_flag",
+            "feature_flag_detail",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]

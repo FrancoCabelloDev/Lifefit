@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, Users, CreditCard, Settings, Building2, LogOut, GalleryVerticalEnd, Package } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, Settings, Building2, LogOut, Package, FileText, Megaphone, ToggleLeft, BarChart3, Settings2 } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +18,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { getToken, getStoredUser, clearAuth } from '@/lib/auth'
 import type { User } from '@/lib/types'
 
@@ -77,8 +78,9 @@ export default function SaaSAdminLayout({
         </SidebarHeader>
         
         <SidebarContent>
+          <ScrollArea className="flex-1 w-full bg-transparent">
           <SidebarGroup>
-            <SidebarGroupLabel>Platform</SidebarGroupLabel>
+            <SidebarGroupLabel>HOME</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -89,6 +91,14 @@ export default function SaaSAdminLayout({
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>CLIENTES</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/gimnasios')} tooltip="Gimnasios">
                     <Link href="/panel-saas/gimnasios">
@@ -110,9 +120,17 @@ export default function SaaSAdminLayout({
           </SidebarGroup>
 
           <SidebarGroup>
-            <SidebarGroupLabel>Finanzas</SidebarGroupLabel>
+            <SidebarGroupLabel>FINANZAS</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/suscripciones')} tooltip="Suscripciones">
+                    <Link href="/panel-saas/suscripciones">
+                      <FileText />
+                      <span>Suscripciones</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/planes')} tooltip="Planes de Precio">
                     <Link href="/panel-saas/planes">
@@ -132,6 +150,55 @@ export default function SaaSAdminLayout({
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>OPERACIONES</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/anuncios')} tooltip="Anuncios Globales">
+                    <Link href="/panel-saas/anuncios">
+                      <Megaphone />
+                      <span>Anuncios Globales</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>SISTEMA</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/modulos')} tooltip="Módulos (Feature Flags)">
+                    <Link href="/panel-saas/modulos">
+                      <ToggleLeft />
+                      <span>Módulos (Feature Flags)</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/analitica')} tooltip="Analítica de Uso">
+                    <Link href="/panel-saas/analitica">
+                      <BarChart3 />
+                      <span>Analítica de Uso</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/panel-saas/configuracion')} tooltip="Configuración">
+                    <Link href="/panel-saas/configuracion">
+                      <Settings2 />
+                      <span>Configuración</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          </ScrollArea>
         </SidebarContent>
 
         <SidebarFooter>

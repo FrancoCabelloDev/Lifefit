@@ -3,27 +3,31 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, UserCheck } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useRouter } from 'next/navigation'
 
 import { api } from '@/lib/api'
 import type { Gym, PaginatedResponse } from '@/lib/types'
+import { setTokens, setStoredUser, dispatchAuthEvent } from '@/lib/auth'
 
-const MODULES = [
-  { id: 'rutinas', label: 'Rutinas', icon: '🏋️' },
-  { id: 'nutricion', label: 'Nutrición', icon: '🍎' },
-  { id: 'retos', label: 'Retos', icon: '🎯' },
-  { id: 'ranking', label: 'Ranking', icon: '🏆' },
-  { id: 'checkin', label: 'Check-in', icon: '📍' },
-  { id: 'coach', label: 'LifeFit Coach', icon: '🤖' },
-]
+import { Switch } from '@/components/ui/switch'
 
 export default function GymsPage() {
   const [gyms, setGyms] = useState<Gym[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [availableModules, setAvailableModules] = useState<any[]>([])
+  const [plans, setPlans] = useState<any[]>([])
+  const router = useRouter()
+  
+  // Gestión de Módulos (Nivel 2)
+  const [isManageModulesOpen, setIsManageModulesOpen] = useState(false)
+  const [selectedGym, setSelectedGym] = useState<Gym | null>(null)
+  const [gymModules, setGymModules] = useState<any[]>([])
+  const [isLoadingModules, setIsLoadingModules] = useState(false)
   
   const [formData, setFormData] = useState({
     name: '',
@@ -39,7 +43,7 @@ export default function GymsPage() {
     max_athletes: 100,
     max_coaches: 2,
     max_nutritionists: 2,
-    saas_plan: 'Pro',
+    saas_plan_id: '',
     billing_cycle: 'monthly',
   })
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -57,34 +61,77 @@ export default function GymsPage() {
 
   useEffect(() => {
     fetchGyms()
+    fetchAvailableModules()
+    fetchPlans()
   }, [])
 
-  // Auto-ajustar los límites según el plan SaaS seleccionado
-  useEffect(() => {
-    setFormData(prev => {
-      // Evitar re-renders infinitos si los valores ya son correctos
-      let newLimits = { max_athletes: prev.max_athletes, max_coaches: prev.max_coaches, max_nutritionists: prev.max_nutritionists }
-      
-      switch (prev.saas_plan) {
-        case 'Básico':
-          newLimits = { max_athletes: 500, max_coaches: 2, max_nutritionists: 2 }
-          break
-        case 'Pro':
-          newLimits = { max_athletes: 2500, max_coaches: 10, max_nutritionists: 10 }
-          break
-        case 'Empresarial':
-          newLimits = { max_athletes: 99999, max_coaches: 50, max_nutritionists: 20 } // Ilimitado en la práctica
-          break
-      }
+  const fetchPlans = async () => {
+    try {
+      const res = await api.get('/api/subscriptions/plans/')
+      setPlans((res as any).results || res)
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
-      if (prev.max_athletes !== newLimits.max_athletes || 
-          prev.max_coaches !== newLimits.max_coaches || 
-          prev.max_nutritionists !== newLimits.max_nutritionists) {
-        return { ...prev, ...newLimits }
+  const fetchAvailableModules = async () => {
+    try {
+      const res = await api.get('/api/system/feature-flags/')
+      const allModules = (res as any).results || res
+      // Solo mostrar módulos que están activos globalmente
+      setAvailableModules(allModules.filter((m: any) => m.is_active_globally))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const openManageModules = async (gym: Gym) => {
+    setSelectedGym(gym)
+    setIsManageModulesOpen(true)
+    setIsLoadingModules(true)
+    try {
+      const res = await api.get(`/api/gyms/feature-flags/?gym_id=${gym.id}`)
+      setGymModules((res as any).results || res)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsLoadingModules(false)
+    }
+  }
+
+  const toggleGymModule = async (gymId: string, featureFlagId: string, currentFlagId: string | null, isActive: boolean) => {
+    try {
+      if (currentFlagId) {
+        // Toggle existing GymFeatureFlag
+        await api.patch(`/api/gyms/feature-flags/${currentFlagId}/`, { is_active: !isActive })
+      } else {
+        // Create new GymFeatureFlag
+        await api.post(`/api/gyms/feature-flags/`, { gym: gymId, feature_flag: featureFlagId, is_active: true })
       }
-      return prev
-    })
-  }, [formData.saas_plan])
+      // Refresh
+      const res = await api.get(`/api/gyms/feature-flags/?gym_id=${gymId}`)
+      setGymModules((res as any).results || res)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleImpersonate = async (gymId: string) => {
+    try {
+      const res: any = await api.post('/api/auth/impersonate/', { gym_id: gymId })
+      setTokens(res.access, res.refresh)
+      setStoredUser(res.user)
+      dispatchAuthEvent()
+      if (res.gym_slug) {
+        router.push(`/${res.gym_slug}/panel`)
+      }
+    } catch (e) {
+      console.error(e)
+      alert("Error al entrar como administrador. Asegúrate de que este gimnasio tiene un admin creado.")
+    }
+  }
+
+  // Removed auto-ajustar to keep it simple since we use dynamic plans now.
 
   const handleModuleToggle = (moduleId: string) => {
     setFormData(prev => {
@@ -214,9 +261,14 @@ export default function GymsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                          Gestionar
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => openManageModules(gym)} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+                            Módulos
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleImpersonate(gym.id)} className="text-slate-600 hover:text-indigo-600 hover:bg-indigo-50" title="Entrar como Admin">
+                            <UserCheck className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -282,11 +334,11 @@ export default function GymsPage() {
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">2. Módulos Contratados</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {MODULES.map(module => (
+                    {availableModules.map(module => (
                       <label 
                         key={module.id} 
                         className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${
-                          formData.modules.includes(module.id) 
+                          formData.modules.includes(module.code) 
                             ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500' 
                             : 'border-slate-200 hover:border-emerald-200 hover:bg-slate-50'
                         }`}
@@ -294,11 +346,13 @@ export default function GymsPage() {
                         <input 
                           type="checkbox" 
                           className="sr-only"
-                          checked={formData.modules.includes(module.id)}
-                          onChange={() => handleModuleToggle(module.id)}
+                          checked={formData.modules.includes(module.code)}
+                          onChange={() => handleModuleToggle(module.code)}
                         />
-                        <span className="text-xl">{module.icon}</span>
-                        <span className="text-sm font-medium text-slate-700">{module.label}</span>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-slate-700">{module.name}</span>
+                          <span className="text-xs text-slate-500">{module.code}</span>
+                        </div>
                       </label>
                     ))}
                   </div>
@@ -309,23 +363,20 @@ export default function GymsPage() {
                 {/* SECCIÓN 3: PLAN DE SUSCRIPCIÓN SAAS */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">3. Plan de Suscripción (SaaS)</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="saas_plan">Plan Seleccionado</Label>
-                      <Select 
-                        value={formData.saas_plan} 
-                        onValueChange={(value) => setFormData({...formData, saas_plan: value})}
-                      >
-                        <SelectTrigger className="bg-white">
-                          <SelectValue placeholder="Selecciona un plan" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white border-slate-200 shadow-md z-[100]">
-                          <SelectItem value="Básico">Básico</SelectItem>
-                          <SelectItem value="Pro">Pro</SelectItem>
-                          <SelectItem value="Empresarial">Empresarial</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-slate-600 mb-2 block">Plan Seleccionado</Label>
+                    <Select value={formData.saas_plan_id} onValueChange={(val) => setFormData({...formData, saas_plan_id: val})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un plan SaaS" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {plans.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name} - S/{p.price}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                     <div className="space-y-2">
                       <Label htmlFor="billing_cycle">Ciclo de Facturación</Label>
                       <Select 
@@ -394,6 +445,49 @@ export default function GymsPage() {
               <Button type="submit" form="create-gym-form" className="bg-emerald-600 hover:bg-emerald-700 text-white">
                 Crear Cliente B2B y Administrador
               </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+      {isManageModulesOpen && selectedGym && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <Card className="w-full max-w-lg bg-white shadow-2xl border-0 overflow-hidden">
+            <CardHeader className="bg-slate-50 border-b border-slate-100">
+              <CardTitle className="text-xl">Módulos: {selectedGym.name}</CardTitle>
+              <CardDescription>Activa o desactiva funciones exclusivas para este cliente.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              {isLoadingModules ? (
+                <p className="text-center text-slate-500 py-8">Cargando módulos...</p>
+              ) : (
+                <div className="space-y-4">
+                  {availableModules.map(flag => {
+                    const gymFlag = gymModules.find(m => m.feature_flag === flag.id)
+                    const isActive = gymFlag ? gymFlag.is_active : false
+                    
+                    return (
+                      <div key={flag.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-lg bg-slate-50/50">
+                        <div>
+                          <p className="font-medium text-slate-900">{flag.name}</p>
+                          <p className="text-xs text-slate-500 font-mono">{flag.code}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-semibold ${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {isActive ? 'ACTIVO' : 'INACTIVO'}
+                          </span>
+                          <Switch 
+                            checked={isActive} 
+                            onCheckedChange={() => toggleGymModule(selectedGym.id, flag.id, gymFlag?.id || null, isActive)} 
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <Button variant="outline" onClick={() => setIsManageModulesOpen(false)}>Cerrar</Button>
             </div>
           </Card>
         </div>

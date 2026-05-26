@@ -204,3 +204,18 @@ AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
 )
 SOCIAL_AUTH_JSONFIELD_ENABLED = True
+
+# Correo Electrónico (Resend)
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
+
+if RESEND_API_KEY and RESEND_API_KEY != "re_pon_tu_clave_aqui":
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.resend.com"
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = "resend"
+    EMAIL_HOST_PASSWORD = RESEND_API_KEY
+    DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="onboarding@resend.dev")
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL = "testing@lifefit.local"

@@ -57,9 +57,11 @@ function RevenueChart({ data }: { data: RevenuePoint[] }) {
                 width={80}
               />
               <Tooltip
-                formatter={(value: number) => [formatPrice(value), 'Ingresos']}
-                labelFormatter={(label: string) => {
-                  const [y, m] = label.split('-')
+                formatter={(value: any) => [formatPrice(Number(value)), 'Ingresos']}
+                labelFormatter={(label: any) => {
+                  const labelStr = String(label || '')
+                  if (!labelStr.includes('-')) return labelStr
+                  const [y, m] = labelStr.split('-')
                   return `${MONTH_LABELS[m] || m} ${y}`
                 }}
               />

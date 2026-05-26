@@ -21,7 +21,7 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "gym",
             "gym_slug",
-            "plan",
+            "membership_plan",
             "puntos",
             "nivel",
             "date_joined",
@@ -48,7 +48,8 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
-    password2 = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
+    gym_slug = serializers.CharField(write_only=True, required=True)
+    membership_plan_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -57,9 +58,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "role",
-            "gym",
+            "gym_slug",
+            "membership_plan_id",
             "password",
-            "password2",
         ]
 
     def validate_email(self, value):
@@ -69,12 +70,24 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         password = attrs.get("password")
-        password2 = attrs.pop("password2", None)
-
-        if password != password2:
-            raise serializers.ValidationError({"password": "Passwords do not match."})
-
         validate_password(password)
+        
+        gym_slug = attrs.pop("gym_slug", None)
+        if gym_slug:
+            from gyms.models import Gym
+            gym = Gym.objects.filter(slug=gym_slug).first()
+            if not gym:
+                raise serializers.ValidationError({"gym_slug": "Gimnasio no encontrado."})
+            attrs["gym"] = gym
+
+        membership_plan_id = attrs.pop("membership_plan_id", None)
+        if membership_plan_id:
+            from gyms.models import GymMembershipPlan
+            plan = GymMembershipPlan.objects.filter(id=membership_plan_id, is_active=True).first()
+            if not plan:
+                raise serializers.ValidationError({"membership_plan_id": "Plan no válido."})
+            attrs["membership_plan"] = plan
+
         return attrs
 
     def create(self, validated_data):

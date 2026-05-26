@@ -1,12 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { api } from '@/lib/api'
+import { GymMembershipPlan } from '@/lib/types'
+import { toast } from 'sonner'
 
 interface RegisterFormProps {
   gymId: string
@@ -14,133 +18,227 @@ interface RegisterFormProps {
 
 export default function RegisterForm({ gymId }: RegisterFormProps) {
   const router = useRouter()
+  
+  // Pasos: 1 = Seleccionar Plan, 2 = Datos Personales
+  const [step, setStep] = useState<1 | 2>(1)
+  
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true)
+  
+  const [plans, setPlans] = useState<GymMembershipPlan[]>([])
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
 
-  // Función para capitalizar y formatear el ID del gimnasio
   const formattedGymName = gymId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        setIsLoadingPlans(true)
+        const res = await api.get(`/api/gyms/membership-plans/?gym_slug=${gymId}`)
+        setPlans((res as any).results || res)
+        if ((res as any).results?.length === 0 && (res as any).length === 0) {
+          // Si no hay planes, saltar directo al paso 2
+          setStep(2)
+        }
+      } catch (error) {
+        console.error("Error al cargar los planes:", error)
+        // Fallback al paso 2
+        setStep(2)
+      } finally {
+        setIsLoadingPlans(false)
+      }
+    }
+    fetchPlans()
+  }, [gymId])
+
+  const handleNextStep = () => {
+    if (!selectedPlanId && plans.length > 0) {
+      toast.error('Por favor, selecciona un plan para continuar.')
+      return
+    }
+    setStep(2)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     
-    // Aquí iría la lógica de registro real
-    setTimeout(() => {
-      setIsLoading(false)
-      // Simulamos la redirección
+    try {
+      const payload = {
+        email,
+        password,
+        first_name: name.split(' ')[0] || '',
+        last_name: name.split(' ').slice(1).join(' ') || '',
+        gym_slug: gymId,
+        membership_plan_id: selectedPlanId
+      }
+      
+      // Llamada real al backend para registrar al usuario
+      await api.post('/api/auth/register/', payload)
+      toast.success('Cuenta creada exitosamente')
       router.push(`/${gymId}/ingresar`)
-    }, 1500)
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Error al crear la cuenta. Intenta de nuevo.')
+      setIsLoading(false)
+    }
+  }
+
+  if (isLoadingPlans) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans py-12">
+      <div className={`w-full ${step === 1 ? 'max-w-4xl' : 'max-w-md'}`}>
         <div className="text-center mb-8">
           <Link href="/" className="text-2xl font-bold text-emerald-800 tracking-tight">
             LifeFit SaaS
           </Link>
         </div>
 
-        <Card className="shadow-lg border-slate-200/60 bg-white/80 backdrop-blur-xl">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight text-center">
-              Únete a {formattedGymName}
-            </CardTitle>
-            <CardDescription className="text-slate-500 text-center">
-              Crea tu cuenta de atleta para comenzar a entrenar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-slate-700">Nombre Completo</Label>
-                <Input 
-                  id="name" 
-                  type="text" 
-                  placeholder="Ej: Ana García" 
-                  required 
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="bg-white"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700">Correo Electrónico</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="tu@email.com" 
-                  required 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-white"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-700">Contraseña</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  required 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-white"
-                />
-              </div>
+        {step === 1 && plans.length > 0 ? (
+          // PASO 1: SELECCIONAR PLAN
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Elige tu Plan en {formattedGymName}</h2>
+              <p className="text-slate-500 mt-2">Selecciona la membresía que mejor se adapte a tus objetivos.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {plans.map((plan) => (
+                <Card 
+                  key={plan.id} 
+                  className={`cursor-pointer transition-all duration-200 border-2 ${
+                    selectedPlanId === plan.id 
+                      ? 'border-emerald-500 shadow-emerald-100 bg-emerald-50/30 shadow-lg scale-105' 
+                      : 'border-slate-200 hover:border-emerald-300 hover:shadow-md'
+                  }`}
+                  onClick={() => setSelectedPlanId(plan.id)}
+                >
+                  <CardHeader>
+                    <CardTitle className="text-xl">{plan.name}</CardTitle>
+                    <CardDescription>{plan.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-6">
+                      <span className="text-4xl font-bold text-slate-900">S/ {plan.price}</span>
+                      <span className="text-slate-500 font-medium"> / {plan.duration_days} días</span>
+                    </div>
+                    <ul className="space-y-3">
+                      {plan.features?.map((f, i) => (
+                        <li key={i} className="flex items-start text-sm text-slate-700">
+                          <Check className="h-5 w-5 text-emerald-500 mr-2 shrink-0" />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
 
+            <div className="flex justify-center mt-8">
               <Button 
-                type="submit" 
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors mt-2"
-                disabled={isLoading}
+                onClick={handleNextStep} 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white w-full max-w-sm"
+                size="lg"
+                disabled={!selectedPlanId}
               >
-                {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
+                Continuar con el registro
               </Button>
-            </form>
-            
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-500">O regístrate con</span>
-              </div>
             </div>
-            
-            <Button variant="outline" className="w-full" type="button">
-              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Google
-            </Button>
-          </CardContent>
-          <CardFooter className="flex justify-center">
-            <div className="text-sm text-slate-500">
-              ¿Ya tienes cuenta?{' '}
-              <Link href={`/${gymId}/ingresar`} className="font-semibold text-emerald-600 hover:underline">
-                Inicia sesión
-              </Link>
-            </div>
-          </CardFooter>
-        </Card>
+          </div>
+        ) : (
+          // PASO 2: DATOS PERSONALES
+          <Card className="shadow-lg border-slate-200/60 bg-white/80 backdrop-blur-xl animate-in fade-in slide-in-from-right-4 duration-300">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight text-center">
+                Únete a {formattedGymName}
+              </CardTitle>
+              <CardDescription className="text-slate-500 text-center">
+                {selectedPlanId && plans.length > 0 
+                  ? `Estás por registrarte con el plan: ${plans.find(p => p.id === selectedPlanId)?.name}` 
+                  : 'Crea tu cuenta de atleta para comenzar a entrenar.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-slate-700">Nombre Completo</Label>
+                  <Input 
+                    id="name" 
+                    type="text" 
+                    placeholder="Ej: Ana García" 
+                    required 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-slate-700">Correo Electrónico</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="tu@email.com" 
+                    required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-slate-700">Contraseña</Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+
+                <div className="flex gap-2 mt-4">
+                  {plans.length > 0 && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setStep(1)}
+                      disabled={isLoading}
+                    >
+                      Atrás
+                    </Button>
+                  )}
+                  <Button 
+                    type="submit" 
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+            <CardFooter className="flex justify-center">
+              <div className="text-sm text-slate-500">
+                ¿Ya tienes cuenta?{' '}
+                <Link href={`/${gymId}/ingresar`} className="font-semibold text-emerald-600 hover:underline">
+                  Inicia sesión
+                </Link>
+              </div>
+            </CardFooter>
+          </Card>
+        )}
         
         <div className="mt-8 text-center">
           <Link href="/unirse" className="text-sm text-slate-500 hover:text-slate-800 transition-colors">

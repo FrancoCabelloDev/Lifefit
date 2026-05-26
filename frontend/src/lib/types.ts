@@ -32,7 +32,7 @@ export type User = {
   is_google_account?: boolean
   phone?: string | null
   dni?: string | null
-  plan?: string
+  membership_plan?: number | null
   date_joined?: string
 }
 
@@ -97,6 +97,25 @@ export type StaffMember = {
   date_joined: string
 }
 
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'incomplete'
+
+export type Subscription = {
+  id: string
+  owner_gym: string | null
+  owner_user: string | null
+  plan: string
+  plan_detail: SubscriptionPlan
+  gym_name: string | null
+  gym_slug: string | null
+  status: SubscriptionStatus
+  start_date: string
+  end_date: string | null
+  next_billing_date: string | null
+  cancel_at_period_end: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type PaymentStatus = 'success' | 'pending' | 'failed'
 
 export type Payment = {
@@ -129,4 +148,18 @@ export type PaymentMetrics = {
 export type RevenuePoint = {
   month: string
   total: number
+}
+
+export type GymMembershipPlan = {
+  id: number
+  gym: string
+  gym_name: string
+  name: string
+  description: string
+  price: string
+  duration_days: number
+  features: string[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
