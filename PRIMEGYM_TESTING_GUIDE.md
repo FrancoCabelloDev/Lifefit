@@ -7,17 +7,19 @@
 
 ## 1. Datos de Acceso
 
-| Rol | Email | Contrasena |
-|-----|-------|------------|
-| Super Admin | `admin@lifefit.com` | (la que creaste en `createsuperuser`) |
-| Gym Admin (PrimeGym) | `franco_alex_07@hotmail.com` | `test1234` |
-| Coach | `coach@primegym.com` | `test1234` |
-| Nutricionista | `nutricionista@primegym.com` | `test1234` |
-| Recepcion | `recepcion@primegym.com` | `test1234` |
-| Atleta 1 | `atleta1@primegym.com` | `test1234` |
-| Atleta 2 | `atleta2@primegym.com` | `test1234` |
-| Atleta 3 | `atleta3@primegym.com` | `test1234` |
-| Atleta 4 | `atleta4@primegym.com` | `test1234` |
+| Rol | Email | Como acceder |
+|-----|-------|-------------|
+| Super Admin | `admin@lifefit.com` | Login directo (password de `createsuperuser`) |
+| Gym Admin (PrimeGym) | `franco_alex_07@hotmail.com` | Super Admin -> "Entrar como Admin" |
+| Coach | `coach@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Mi Equipo |
+| Nutricionista | `nutricionista@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Mi Equipo |
+| Recepcion | `recepcion@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Mi Equipo |
+| Atleta 1 | `atleta1@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Atletas |
+| Atleta 2 | `atleta2@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Atletas |
+| Atleta 3 | `atleta3@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Atletas |
+| Atleta 4 | `atleta4@primegym.com` | Super Admin -> "Entrar como Admin" -> boton "Entrar como" en Atletas |
+
+> **Importante:** Ningun usuario distinto del Super Admin tiene contrasena configurable. Todos los accesos se realizan mediante la cadena de impersonacion. No es necesario conocer las contrasenas de estos usuarios.
 
 ---
 
@@ -61,7 +63,7 @@
 
 ### 2.2 Gym Admin - PrimeGym (`/primegym/panel`)
 
-> Accede via login directo O via "Entrar como Admin" desde Super Admin.
+> Accede como Super Admin, ve a Gimnasios Asociados y haz clic en "Entrar como Admin" en PrimeGym.
 
 **Sidebar:**
 - [ ] Verifica que se ven todas las secciones:
@@ -141,7 +143,7 @@
 - Cuenta: Perfil
 
 **Pruebas:**
-- [ ] Ingresa con `coach@primegym.com`
+- [ ] Estando impersonando al Gym Admin, ve a Mi Equipo y haz clic en "Entrar como" junto a `coach@primegym.com`
 - [ ] Verifica el sidebar (debe ser mas limitado que el admin)
 - [ ] Ve a Gestion > Atletas
   - [ ] Verifica los atletas asignados (Pedro, Lucia, Diego)
@@ -161,7 +163,7 @@
 - Cuenta: Perfil
 
 **Pruebas:**
-- [ ] Ingresa con `nutricionista@primegym.com`
+- [ ] Estando impersonando al Gym Admin, ve a Mi Equipo y haz clic en "Entrar como" junto a `nutricionista@primegym.com`
 - [ ] Ve a Gestion > Atletas (verifica los asignados)
 - [ ] Ve a Nutricion > Planes Nutricionales
 - [ ] Revisa las comidas de los planes
@@ -177,7 +179,7 @@
 - Cuenta: Perfil
 
 **Pruebas:**
-- [ ] Ingresa con `recepcion@primegym.com`
+- [ ] Estando impersonando al Gym Admin, ve a Mi Equipo y haz clic en "Entrar como" junto a `recepcion@primegym.com`
 - [ ] Ve a Operaciones > Check-in
 - [ ] Registra un check-in manual para un atleta
 - [ ] Ve a Gestion > Atletas (solo lectura)
@@ -194,7 +196,7 @@
 - Cuenta: Perfil
 
 **Pruebas:**
-- [ ] Ingresa con `atleta1@primegym.com`
+- [ ] Estando impersonando al Gym Admin, ve a Gestion > Atletas y haz clic en "Entrar como" junto a `atleta1@primegym.com`
 - [ ] Verifica el dashboard del atleta (resumen personal)
 - [ ] Ve a Mis Rutinas
   - [ ] Verifica la rutina asignada "Full Body Principiante"
@@ -217,19 +219,36 @@
 ## 3. Pruebas de Funcionalidades Cruzadas
 
 ### 3.1 Verificacion de Permisos (403 esperado)
-- [ ] Como **Atleta**, intenta acceder a `/primegym/panel/gestion/atletas` (debe mostrar error o redirigir)
-- [ ] Como **Coach**, intenta crear un nuevo plan de membresia
-- [ ] Como **Recepcionista**, intenta editar un ejercicio
+- [ ] Impersona un **Atleta** e intenta acceder a `/primegym/panel/gestion/atletas` (debe mostrar error o redirigir)
+- [ ] Impersona un **Coach** e intenta crear un nuevo plan de membresia
+- [ ] Impersona un **Recepcionista** e intenta editar un ejercicio
 
 ### 3.2 Notificaciones
-- [ ] Inicia sesion como coach (`coach@primegym.com`)
+- [ ] Impersona al coach (Super Admin -> Gym Admin -> "Entrar como" en coach)
 - [ ] Verifica que tienes una notificacion de bienvenida (campana)
 - [ ] Haz clic en "Marcar todas leidas"
 
-### 3.3 Impersonacion
-- [ ] Como Super Admin, usa "Entrar como Admin" en PrimeGym
-- [ ] Una vez dentro, verifica el boton "Volver a Admin" en la barra superior
+### 3.3 Cadena de Impersonacion
+
+**Super Admin -> Gym Admin:**
+- [ ] Como Super Admin, en Gimnasios Asociados haz clic en "Entrar como Admin" en PrimeGym
+- [ ] Verifica el boton "Volver a Admin" en la barra superior
 - [ ] Haz clic en "Volver a Admin" para regresar al panel SaaS
+
+**Gym Admin -> Coach/Nutricionista/Recepcion:**
+- [ ] Estando como Gym Admin, ve a Mi Equipo
+- [ ] Junto a cada miembro del staff, haz clic en "Entrar como"
+- [ ] Verifica que el sidebar se actualiza al rol correspondiente
+- [ ] Haz clic en "Volver" para regresar al panel de Gym Admin
+
+**Gym Admin -> Atleta:**
+- [ ] Estando como Gym Admin, ve a Gestion > Atletas
+- [ ] Junto a cada atleta, haz clic en "Entrar como"
+- [ ] Verifica el dashboard del atleta y sus funcionalidades limitadas
+- [ ] Haz clic en "Volver" para regresar al panel de Gym Admin
+
+**Volver a Super Admin desde cualquier punto:**
+- [ ] Si estas dentro de PrimeGym (como Gym Admin o impersonando staff/atleta), haz clic en "Volver a Admin" repetidamente hasta regresar al panel SaaS
 
 ---
 

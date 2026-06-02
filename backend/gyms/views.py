@@ -686,6 +686,7 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
                 "email": athlete_info.get("email", ""),
                 "nivel": athlete_info.get("nivel", 0),
                 "puntos": athlete_info.get("puntos", 0),
+                "date_joined": athlete_info.get("date_joined"),
                 "has_active_routine": routine is not None,
                 "routine_name": routine.routine.name if routine else None,
                 "routine_id": str(routine.routine_id) if routine else None,
@@ -868,7 +869,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
         athlete_ids_filter = [a.id for a in athletes_page]
         athletes_values = athletes_qs.filter(id__in=athlete_ids_filter).values(
-            "id", "first_name", "last_name", "email", "nivel", "puntos", "is_active"
+            "id", "first_name", "last_name", "email", "nivel", "puntos", "is_active", "date_joined"
         )
         athlete_map = {str(a["id"]): a for a in athletes_values}
 
@@ -899,6 +900,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
                 "email": athlete_info.get("email", ""),
                 "nivel": athlete_info.get("nivel", 0),
                 "puntos": athlete_info.get("puntos", 0),
+                "date_joined": athlete_info.get("date_joined"),
                 "has_active_plan": plan is not None,
                 "plan_name": plan.plan.name if plan else None,
                 "plan_id": str(plan.plan_id) if plan else None,

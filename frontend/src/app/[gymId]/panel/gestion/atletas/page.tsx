@@ -107,13 +107,19 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetchAthletes()
-    fetchCoaches()
+    if (isStaffPage) {
+      fetchAthletes()
+      fetchCoaches()
+      fetchNutritionists()
+    } else if (isCoach) {
+      fetchCoachAthletes()
+    } else if (isNutritionist) {
+      fetchNutriAthletes()
+    } else {
+      setIsLoading(false)
+    }
     fetchAssignments()
-    fetchNutritionists()
     fetchNutritionAssignments()
-    if (isCoach) fetchCoachAthletes()
-    if (isNutritionist) fetchNutriAthletes()
   }, [])
 
   const fetchCoaches = async () => {
@@ -173,20 +179,28 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   const fetchCoachAthletes = async () => {
     try {
       const data = await api.get<any>("/api/gyms/coach-assignments/my_athletes/")
-      const ids = new Set<string>((Array.isArray(data) ? data : []).map((a: any) => a.id))
+      const items = data?.results ?? (Array.isArray(data) ? data : [])
+      const ids = new Set<string>(items.map((a: any) => a.id))
       setCoachAthleteIds(ids)
+      if (isCoach) setAthletes(items)
     } catch (error) {
       console.error('Error fetching coach athletes:', error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const fetchNutriAthletes = async () => {
     try {
       const data = await api.get<any>("/api/gyms/nutritionist-assignments/my_athletes/")
-      const ids = new Set<string>((Array.isArray(data) ? data : []).map((a: any) => a.id))
+      const items = data?.results ?? (Array.isArray(data) ? data : [])
+      const ids = new Set<string>(items.map((a: any) => a.id))
       setNutriAthleteIds(ids)
+      if (isNutritionist) setAthletes(items)
     } catch (error) {
       console.error('Error fetching nutritionist athletes:', error)
+    } finally {
+      setIsLoading(false)
     }
   }
 

@@ -153,14 +153,15 @@ class Command(BaseCommand):
         )
         admin_user.role = User.Role.GYM_ADMIN
         admin_user.gym = gym
-        admin_user.set_password("test1234")
+        # Sin contraseña accesible: se accede via Impersonación desde Super Admin
+        admin_user.set_unusable_password()
         admin_user.save()
 
         # Eliminar usuario admin anterior si existe sin gym
         User.objects.filter(email="kerbeusxd.xd.07@gmail.com").delete()
         User.objects.filter(email="franco@gmail.com", gym__isnull=True).delete()
 
-        self.stdout.write(f"[OK] Admin del gym: {admin_user.email} / pass: test1234")
+        self.stdout.write(f"[OK] Admin del gym: {admin_user.email} (sin contraseña - acceso via impersonación)")
 
         # ============================================================
         # 6. USUARIOS POR ROL
@@ -191,10 +192,11 @@ class Command(BaseCommand):
             u.last_name = last
             u.role = role
             u.gym = gym
-            u.set_password("test1234")
+            # Sin contraseña accesible: se accede via Impersonación desde Gym Admin
+            u.set_unusable_password()
             u.save()
             created_users[role] = created_users.get(role, []) + [u]
-            self.stdout.write(f"  [USER] {email} ({role}) / pass: test1234")
+            self.stdout.write(f"  [USER] {email} ({role}) - sin contraseña - acceso via impersonación")
 
         coach = created_users.get(User.Role.COACH, [None])[0]
         nutritionist = created_users.get(User.Role.NUTRITIONIST, [None])[0]
@@ -591,7 +593,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("*** DATOS DE PRUEBA CREADOS EXITOSAMENTE"))
         self.stdout.write(self.style.SUCCESS("=" * 60))
         self.stdout.write(f"\n  Gimnasio: {gym.name}")
-        self.stdout.write(f"  Admin: {admin_user.email} / pass: test1234")
+        self.stdout.write(f"  Admin: {admin_user.email} (sin contraseña - acceso via impersonación desde Super Admin)")
         self.stdout.write(f"  Plan SaaS: {pro_plan.name}")
         self.stdout.write(f"  Usuarios creados: {User.objects.filter(gym=gym).count()}")
         self.stdout.write(f"  Ejercicios: {Exercise.objects.filter(gym=gym).count()}")
@@ -601,4 +603,4 @@ class Command(BaseCommand):
         self.stdout.write(f"  Badges: {Badge.objects.filter(gym=gym).count()}")
         self.stdout.write(f"  Sesiones: {WorkoutSession.objects.filter(gym=gym).count()}")
         self.stdout.write(f"  Check-ins: {CheckIn.objects.filter(gym=gym).count()}")
-        self.stdout.write(f"\n  Contraseña general de prueba: test1234")
+        self.stdout.write(f"\n  NOTA: Todos los usuarios (excepto Super Admin) usan set_unusable_password() - se accede SOLO via impersonación.")
