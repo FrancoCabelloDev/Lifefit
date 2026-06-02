@@ -421,8 +421,8 @@ class Command(BaseCommand):
         # ============================================================
         challenges_data = [
             ("30 Días de Entrenamiento", "Completa 30 días de entrenamiento en el mes", "workouts", 30, 200),
-            ("Reto de Asistencia", "Asiste al gimnasio 20 días este mes", "asistencia", 20, 150),
-            ("Desafío de Proteína", "Cumple tu consumo de proteína por 15 días", "nutricion", 15, 100),
+            ("Reto de Asistencia", "Asiste al gimnasio 20 días este mes", "attendance", 20, 150),
+            ("Desafío de Proteína", "Cumple tu consumo de proteína por 15 días", "nutrition", 15, 100),
         ]
         challenges = []
         for name, desc, ctype, goal, points in challenges_data:
