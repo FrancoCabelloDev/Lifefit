@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bienvenido a LifeFit - Invitación de Staff</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 0;
+            color: #334155;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background-color: #0f172a; /* slate-900 */
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: -0.5px;
+        }
+        .content {
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .content h2 {
+            color: #0f172a;
+            font-size: 20px;
+            margin-top: 0;
+        }
+        .content p {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+            color: #475569;
+        }
+        .role-badge {
+            display: inline-block;
+            background-color: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 9999px;
+            padding: 6px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 24px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #10b981; /* emerald-500 */
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        .footer {
+            background-color: #f1f5f9;
+            padding: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>LifeFit</h1>
+        </div>
+        <div class="content">
+            <h2>¡Hola, {{ staff_name }}!</h2>
+            <p>
+                Has sido invitado por el administrador de <strong>{{ gym_name }}</strong> para unirte a su equipo de trabajo en nuestra plataforma en el rol de:
+            </p>
+            <div class="role-badge">
+                {{ role_name }}
+            </div>
+            <p>
+                A partir de ahora podrás acceder a tu panel, dar seguimiento a tus atletas, prescribir entrenamientos/dietas y crear divertidos retos de gamificación.
+            </p>
+            <p>
+                Para comenzar, haz clic en el siguiente botón para configurar tu contraseña de acceso:
+            </p>
+            <a href="{{ set_password_url }}" class="button">Configurar mi contraseña</a>
+            <p style="margin-top: 30px; font-size: 14px; color: #94a3b8;">
+                Si tienes problemas con el botón, copia y pega este enlace en tu navegador:<br>
+                <a href="{{ set_password_url }}" style="color: #10b981;">{{ set_password_url }}</a>
+            </p>
+        </div>
+        <div class="footer">
+            &copy; 2026 LifeFit. Todos los derechos reservados.<br>
+            Este correo es automático, por favor no respondas a este mensaje.
+        </div>
+    </div>
+</body>
+</html>

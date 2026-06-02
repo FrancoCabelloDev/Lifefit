@@ -1,5 +1,23 @@
 export type Role = "super_admin" | "gym_admin" | "coach" | "athlete" | "nutritionist" | "receptionist"
 
+export const ROLE_LABELS: Record<Role, string> = {
+  super_admin: 'Super Admin',
+  gym_admin: 'Administrador',
+  coach: 'Coach',
+  athlete: 'Atleta',
+  nutritionist: 'Nutricionista',
+  receptionist: 'Atención al Cliente',
+}
+
+export const ROLE_HEADERS: Record<Role, string> = {
+  super_admin: 'Panel Super Admin',
+  gym_admin: 'Panel Admin',
+  coach: 'Panel Coach',
+  athlete: 'Mi Espacio',
+  nutritionist: 'Panel Nutricionista',
+  receptionist: 'Panel Recepción',
+}
+
 export type BillingCycle = 'monthly' | 'quarterly' | 'annual' | 'custom'
 
 export type SubscriptionPlan = {
@@ -33,6 +51,7 @@ export type User = {
   phone?: string | null
   dni?: string | null
   membership_plan?: number | null
+  plan?: string
   date_joined?: string
 }
 
@@ -53,6 +72,14 @@ export type Gym = {
   location?: string
   contact_email?: string
   website?: string
+  active_plan?: {
+    name: string
+    price: number
+    billing_cycle: string
+    start_date: string
+  } | null
+  created_at?: string
+  deleted_at?: string | null
 }
 
 export type PaginatedResponse<T> = {
@@ -69,7 +96,11 @@ export type Challenge = {
   description: string
   type: "attendance" | "distance" | "workouts" | "nutrition" | "mixed"
   start_date: string
+  start_time: string | null
   end_date: string
+  responsible: string | null
+  responsible_name: string | null
+  responsible_role: string | null
   reward_points: number
   goal_value: number
   status: "draft" | "active" | "completed" | "archived"
@@ -160,6 +191,324 @@ export type GymMembershipPlan = {
   duration_days: number
   features: string[]
   is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type GymSubscriptionStatus = 'active' | 'expired' | 'canceled'
+
+export type GymSubscription = {
+  id: string
+  athlete: string
+  athlete_name: string
+  gym: string
+  plan: number | null
+  plan_name: string | null
+  plan_price: number | null
+  status: GymSubscriptionStatus
+  start_date: string
+  end_date: string | null
+  auto_renew: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type GymPaymentStatus = 'success' | 'pending' | 'failed' | 'refunded'
+
+export type GymPayment = {
+  id: string
+  gym: string
+  subscription: string | null
+  athlete: string | null
+  athlete_name: string | null
+  plan: number | null
+  plan_name: string | null
+  amount: string
+  currency: string
+  status: GymPaymentStatus
+  paid_at: string
+  due_date: string | null
+  payment_method: string
+  reference: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type GymPaymentMetrics = {
+  total_collected: number
+  this_month: number
+  pending_count: number
+  failed_count: number
+}
+
+export type CheckIn = {
+  id: string
+  user: string
+  user_name: string
+  user_role: string
+  gym: string
+  branch: string | null
+  branch_name: string | null
+  method: 'manual' | 'qr' | 'self'
+  timestamp: string
+  created_at: string
+}
+
+export type NutritionistAssignment = {
+  id: string
+  nutritionist: string
+  nutritionist_name: string
+  athlete: string
+  athlete_name: string
+  gym: string
+  is_active: boolean
+  assigned_at: string
+  created_at: string
+}
+
+export type CoachAthlete = {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  nivel: number
+  puntos: number
+  has_active_routine: boolean
+  routine_name: string | null
+  routine_id: string | null
+  has_active_plan: boolean
+  plan_name: string | null
+  sessions_last_7_days: number
+  assigned_at: string | null
+}
+
+export type NutritionistAthlete = {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  nivel: number
+  puntos: number
+  has_active_plan: boolean
+  plan_name: string | null
+  plan_id: string | null
+  meals_completed_today: number
+  compliance_percentage: number
+}
+
+export type CoachDashboard = {
+  total_athletes: number
+  with_active_routine: number
+  with_active_plan: number
+  sessions_today: number
+  sessions_week: number
+  active_challenges: number
+}
+
+export type NutritionistDashboard = {
+  total_athletes: number
+  with_active_plan: number
+  completed_plans: number
+  avg_compliance_percentage: number
+  meals_logged_week: number
+  low_compliance_athletes: number
+}
+
+export type CoachAssignment = {
+  id: string
+  coach: string
+  coach_name: string
+  athlete: string
+  athlete_name: string
+  gym: string
+  is_active: boolean
+  assigned_at: string
+  created_at: string
+}
+
+export type Notification = {
+  id: string
+  recipient: string
+  recipient_name: string
+  actor: string | null
+  actor_name: string | null
+  notification_type: string
+  title: string
+  message: string
+  gym: string | null
+  is_read: boolean
+  link: string
+  created_at: string
+  updated_at: string
+}
+
+export type ComplianceDay = {
+  date: string
+  compliance: number
+  completed: number
+  total: number
+}
+
+export type DashboardStats = {
+  total_athletes: number
+  active_athletes: number
+  inactive_athletes: number
+  checkins_today: number
+  checkins_week: number
+  checkins_month: number
+  athletes_joined_month: number
+  growth_rate: number
+  sessions_today: number
+  active_coaches: number
+  active_nutritionists: number
+  expiring_memberships: { id: string; name: string; plan: string }[]
+  date: string
+}
+
+export type Exercise = {
+  id: string
+  gym: string | null
+  name: string
+  category: 'strength' | 'cardio' | 'mobility' | 'flexibility' | 'hiit'
+  equipment: string
+  muscle_group: string
+  description: string
+  media_url: string
+  created_at: string
+  updated_at: string
+}
+
+export type WorkoutRoutine = {
+  id: string
+  gym: string | null
+  name: string
+  objective: string
+  level: 'beginner' | 'intermediate' | 'advanced'
+  duration_minutes: number
+  status: 'draft' | 'published' | 'archived'
+  points_reward: number
+  created_by: string | null
+  is_public: boolean
+  notes: string
+  routine_exercises: RoutineExercise[]
+  completed_by_me: boolean
+  completed_today: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type RoutineExercise = {
+  id: string
+  routine: string
+  exercise: string
+  exercise_detail: Exercise
+  order: number
+  sets: number
+  reps: number
+  rest_seconds: number
+  tempo: string
+  weight_kg: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type NutritionPlan = {
+  id: string
+  gym: string | null
+  name: string
+  description: string
+  calories_per_day: number
+  protein_g: number
+  carbs_g: number
+  fats_g: number
+  duration_days: number
+  status: 'draft' | 'active' | 'archived'
+  points_reward: number
+  meals_by_day: Record<string, MealTemplate[]>
+  total_meals: number
+  user_assignment: any | null
+  created_at: string
+  updated_at: string
+}
+
+export type MealTemplate = {
+  id: string
+  plan: string
+  day_number: number
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type_display: string
+  name: string
+  description: string
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fats_g: number
+  ingredients: string
+  instructions: string
+  order: number
+  created_at: string
+  updated_at: string
+}
+
+export type UserRoutineAssignment = {
+  id: string
+  user: string
+  routine: string
+  routine_detail: WorkoutRoutine | null
+  assigned_by: string | null
+  start_date: string
+  end_date: string | null
+  status: 'active' | 'paused' | 'completed'
+  compliance_percentage: number
+  created_at: string
+  updated_at: string
+}
+
+export type ChallengeParticipation = {
+  id: string
+  challenge: string
+  challenge_detail: Challenge | null
+  user: string
+  user_detail: { id: string; email: string; first_name?: string; last_name?: string } | null
+  progress: number
+  status: string
+  points_earned: number
+  last_update: string
+  created_at: string
+  updated_at: string
+}
+
+export type UserBadge = {
+  id: string
+  user: string
+  badge: string
+  badge_detail: Badge | null
+  awarded_at: string
+}
+
+export type UserNutritionPlan = {
+  id: string
+  user: string
+  plan: string
+  plan_detail: NutritionPlan | null
+  assigned_by: string | null
+  start_date: string
+  end_date: string | null
+  status: string
+  compliance_percentage: number
+  created_at: string
+  updated_at: string
+}
+
+export type UserProgress = {
+  id: string
+  user: string
+  user_detail: { id: string; email: string } | null
+  level: number
+  total_points: number
+  current_xp: number
+  next_level_xp: number
   created_at: string
   updated_at: string
 }

@@ -9,11 +9,13 @@ from .views import (
     GoogleDisconnectView,
     GoogleLoginView,
     RegisterView,
+    RoleRedirectView,
     UserMeView,
     UserViewSet,
     GymMemberViewSet,
     SetPasswordView,
     ImpersonateView,
+    ImpersonateStaffView,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -37,5 +39,7 @@ urlpatterns = [
     path("google/callback/", GoogleCallbackView.as_view(), name="google_callback"),
     path("google/disconnect/", GoogleDisconnectView.as_view(), name="google_disconnect"),
     path("impersonate/", ImpersonateView.as_view(), name="impersonate"),
+    path("impersonate-staff/", ImpersonateStaffView.as_view(), name="impersonate_staff"),
+    path("role-redirect/", RoleRedirectView.as_view(), name="role_redirect"),
     path("", include(router.urls)),
 ]

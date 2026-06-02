@@ -2,14 +2,17 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.db.models import Count, F, Prefetch, Q
-from rest_framework import filters, permissions, viewsets
+from rest_framework import filters, permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.response import Response
 
 from core.filters import global_or_user_gym_filter
-from .models import Exercise, RoutineExercise, WorkoutRoutine, WorkoutSession
+from .models import Exercise, RoutineExercise, UserRoutineAssignment, WorkoutRoutine, WorkoutSession
 from .serializers import (
     ExerciseSerializer,
     RoutineExerciseSerializer,
+    UserRoutineAssignmentSerializer,
     WorkoutRoutineSerializer,
     WorkoutSessionSerializer,
 )
@@ -125,6 +128,57 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar esta rutina.")
+
+    @action(detail=True, methods=["post"])
+    def assign_to_user(self, request, pk=None):
+        routine = self.get_object()
+        user = request.user
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
+            return Response({"detail": "No tienes permisos para asignar rutinas."}, status=status.HTTP_403_FORBIDDEN)
+        if user.role != User.Role.SUPER_ADMIN and routine.gym_id != user.gym_id:
+            return Response({"detail": "Esta rutina no pertenece a tu gimnasio."}, status=status.HTTP_403_FORBIDDEN)
+
+        athlete_id = request.data.get("user_id")
+        if not athlete_id:
+            return Response({"detail": "Debes especificar user_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            athlete = User.objects.get(id=athlete_id, gym_id=user.gym_id, role=User.Role.ATHLETE)
+        except User.DoesNotExist:
+            return Response({"detail": "Atleta no encontrado en tu gimnasio."}, status=status.HTTP_404_NOT_FOUND)
+
+        from datetime import date
+        assignment, created = UserRoutineAssignment.objects.get_or_create(
+            user=athlete,
+            routine=routine,
+            status=UserRoutineAssignment.AssignmentStatus.ACTIVE,
+            defaults={"assigned_by": user, "start_date": date.today()},
+        )
+        if not created:
+            return Response({"detail": "El atleta ya tiene esta rutina asignada."}, status=status.HTTP_409_CONFLICT)
+
+        serializer = UserRoutineAssignmentSerializer(assignment, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
+    def my_assigned(self, request):
+        user = request.user
+        if user.role == User.Role.ATHLETE:
+            assignments = UserRoutineAssignment.objects.filter(
+                user=user,
+                status=UserRoutineAssignment.AssignmentStatus.ACTIVE
+            ).select_related('routine', 'routine__gym', 'routine__created_by', 'assigned_by')
+        elif user.role in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
+            if not user.gym_id:
+                return Response({"detail": "No perteneces a un gimnasio."}, status=status.HTTP_400_BAD_REQUEST)
+            assignments = UserRoutineAssignment.objects.filter(
+                routine__gym_id=user.gym_id,
+                status=UserRoutineAssignment.AssignmentStatus.ACTIVE
+            ).select_related('routine', 'routine__gym', 'user', 'assigned_by')
+        else:
+            return Response({"detail": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+        serializer = UserRoutineAssignmentSerializer(assignments, many=True, context={"request": request})
+        return Response(serializer.data)
 
 
 class RoutineExerciseViewSet(viewsets.ModelViewSet):

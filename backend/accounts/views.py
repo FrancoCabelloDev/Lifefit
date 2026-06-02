@@ -67,7 +67,7 @@ class GymMemberViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = User.objects.filter(gym=user.gym).exclude(id=user.id).select_related("gym")
+        queryset = User.objects.filter(gym=user.gym, gym__deleted_at__isnull=True).exclude(id=user.id).select_related("gym")
         
         role = self.request.query_params.get('role')
         if role:
@@ -76,12 +76,53 @@ class GymMemberViewSet(viewsets.ModelViewSet):
         return queryset.order_by('first_name', 'last_name')
 
     def perform_create(self, serializer):
-        # Forzamos que el nuevo miembro sea del mismo gimnasio que el admin
-        # Si no se provee password, usamos uno por defecto o el email (mejora futura: enviar email de invitación)
-        password = self.request.data.get('password', 'Lifefit2024*')
-        user = serializer.save(gym=self.request.user.gym)
-        user.set_password(password)
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+        from django.conf import settings
+        from django.utils.html import strip_tags
+        from django.utils import timezone
+        from urllib.parse import urlencode
+        from rest_framework.exceptions import ValidationError
+
+        gym = self.request.user.gym
+        role = serializer.validated_data.get("role", "athlete")
+        if role == "athlete" and User.objects.filter(gym=gym, role="athlete").count() >= gym.max_athletes:
+            raise ValidationError("El gimnasio ha alcanzado el límite máximo de atletas.")
+        if role == "coach" and User.objects.filter(gym=gym, role="coach").count() >= gym.max_coaches:
+            raise ValidationError("El gimnasio ha alcanzado el límite máximo de coaches.")
+        if role == "nutritionist" and User.objects.filter(gym=gym, role="nutritionist").count() >= gym.max_nutritionists:
+            raise ValidationError("El gimnasio ha alcanzado el límite máximo de nutricionistas.")
+
+        user = serializer.save(gym=gym, is_active=True)
+        user.set_unusable_password()
         user.save()
+
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000').rstrip('/')
+
+        params = urlencode({
+            'uid': uid,
+            'token': token,
+            'gymSlug': gym.slug,
+            'gymName': gym.name
+        })
+        invite_link = f"{frontend_url}/unirse?{params}"
+
+        from core.tasks import send_welcome_athlete_async, send_welcome_staff_async
+
+        if user.role == 'athlete':
+            send_welcome_athlete_async(user.email, user.first_name, gym.name, invite_link)
+        else:
+            roles_dict = {
+                'coach': 'Entrenador (Coach)',
+                'nutritionist': 'Nutricionista',
+                'receptionist': 'Personal de Recepción / Soporte',
+                'gym_admin': 'Administrador del Gimnasio',
+            }
+            role_name = roles_dict.get(user.role, user.role.capitalize())
+            send_welcome_staff_async(user.email, user.first_name, gym.name, role_name, invite_link)
 
 
 class GoogleLoginView(APIView):
@@ -289,12 +330,88 @@ class ImpersonateView(APIView):
         print(f"🔒 AUDITORÍA GUARDADA: SuperAdmin '{request.user.email}' inició sesión como '{gym_admin.email}' (Gimnasio ID: {gym_id})")
         
         refresh = RefreshToken.for_user(gym_admin)
-        
+        refresh['is_impersonating'] = True
+        refresh['impersonated_by_id'] = str(request.user.id)
+        refresh['impersonated_by_email'] = request.user.email
+
         from .serializers import UserSerializer
         data = {
             "user": UserSerializer(gym_admin).data,
             "refresh": str(refresh),
             "access": str(refresh.access_token),
-            "gym_slug": gym_admin.gym.slug if hasattr(gym_admin, 'gym') and gym_admin.gym else None
+            "gym_slug": gym_admin.gym.slug if hasattr(gym_admin, 'gym') and gym_admin.gym else None,
+            "impersonated_by": {
+                "id": str(request.user.id),
+                "email": request.user.email,
+                "role": request.user.role,
+            },
         }
         return Response(data)
+
+
+class RoleRedirectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role == User.Role.SUPER_ADMIN:
+            return Response({"redirect": "/panel-saas"})
+        if user.gym_id and hasattr(user, 'gym') and user.gym:
+            slug = user.gym.slug if hasattr(user.gym, 'slug') else str(user.gym_id)
+            return Response({"redirect": f"/{slug}/panel"})
+        return Response({"redirect": "/tugimnasio"})
+
+
+class ImpersonateStaffView(APIView):
+    """
+    Permite a un GymAdmin ver la perspectiva de cualquier miembro de su equipo (coach, nutricionista, etc.)
+    sin necesitar su contraseña. Requiere que el usuario objetivo sea del mismo gimnasio.
+    """
+    permission_classes = [IsGymAdmin]
+
+    def post(self, request, *args, **kwargs):
+        staff_id = request.data.get("staff_id")
+        if not staff_id:
+            return Response({"detail": "Se requiere staff_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Solo puede impersonar a miembros de su mismo gimnasio
+        staff_member = User.objects.filter(
+            id=staff_id,
+            gym=request.user.gym
+        ).exclude(role=User.Role.GYM_ADMIN).first()
+
+        if not staff_member:
+            return Response(
+                {"detail": "No se encontró este miembro de staff en tu gimnasio."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Auditoría del acceso
+        from core.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user,
+            action="IMPERSONATE_STAFF",
+            target_object_id=str(staff_member.id),
+            target_object_repr=f"{staff_member.role.upper()}: {staff_member.email} (Gym: {request.user.gym.name})",
+            details={"reason": "Vista de perspectiva del admin"},
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        print(f"🔒 AUDITORÍA: GymAdmin '{request.user.email}' viendo perspectiva de '{staff_member.email}' ({staff_member.role})")
+
+        refresh = RefreshToken.for_user(staff_member)
+        refresh['is_impersonating'] = True
+        refresh['impersonated_by_id'] = str(request.user.id)
+        refresh['impersonated_by_email'] = request.user.email
+
+        from .serializers import UserSerializer
+        return Response({
+            "user": UserSerializer(staff_member).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "gym_slug": staff_member.gym.slug if staff_member.gym else None,
+            "impersonated_by": {
+                "id": str(request.user.id),
+                "email": request.user.email,
+                "role": request.user.role,
+            },
+        })

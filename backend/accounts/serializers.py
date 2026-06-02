@@ -73,12 +73,22 @@ class RegisterSerializer(serializers.ModelSerializer):
         validate_password(password)
         
         gym_slug = attrs.pop("gym_slug", None)
+        gym = None
         if gym_slug:
             from gyms.models import Gym
             gym = Gym.objects.filter(slug=gym_slug).first()
             if not gym:
                 raise serializers.ValidationError({"gym_slug": "Gimnasio no encontrado."})
             attrs["gym"] = gym
+
+        if gym:
+            role = attrs.get("role", "athlete")
+            if role == "athlete" and User.objects.filter(gym=gym, role="athlete").count() >= gym.max_athletes:
+                raise serializers.ValidationError("El gimnasio ha alcanzado el límite máximo de atletas.")
+            if role == "coach" and User.objects.filter(gym=gym, role="coach").count() >= gym.max_coaches:
+                raise serializers.ValidationError("El gimnasio ha alcanzado el límite máximo de coaches.")
+            if role == "nutritionist" and User.objects.filter(gym=gym, role="nutritionist").count() >= gym.max_nutritionists:
+                raise serializers.ValidationError("El gimnasio ha alcanzado el límite máximo de nutricionistas.")
 
         membership_plan_id = attrs.pop("membership_plan_id", None)
         if membership_plan_id:

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Search, UserCheck } from 'lucide-react'
+import { Plus, Search, UserCheck, Power, PowerOff } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 
 import { api } from '@/lib/api'
 import type { Gym, PaginatedResponse } from '@/lib/types'
-import { setTokens, setStoredUser, dispatchAuthEvent } from '@/lib/auth'
+import { setTokens, setStoredUser, dispatchAuthEvent, backupAdminTokens } from '@/lib/auth'
 
 import { Switch } from '@/components/ui/switch'
 
@@ -47,6 +47,7 @@ export default function GymsPage() {
     billing_cycle: 'monthly',
   })
   const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ gym: Gym; action: 'deactivate' | 'activate' } | null>(null)
 
   const fetchGyms = async () => {
     try {
@@ -118,6 +119,7 @@ export default function GymsPage() {
 
   const handleImpersonate = async (gymId: string) => {
     try {
+      backupAdminTokens()
       const res: any = await api.post('/api/auth/impersonate/', { gym_id: gymId })
       setTokens(res.access, res.refresh)
       setStoredUser(res.user)
@@ -131,7 +133,54 @@ export default function GymsPage() {
     }
   }
 
-  // Removed auto-ajustar to keep it simple since we use dynamic plans now.
+  const handleToggleStatus = async (gym: Gym, action: 'deactivate' | 'activate') => {
+    try {
+      await api.post(`/api/gyms/gyms/${gym.id}/${action}/`, {})
+      setConfirmDelete(null)
+      fetchGyms()
+    } catch (e) {
+      console.error(e)
+      alert('Error al cambiar el estado del gimnasio.')
+    }
+  }
+
+  // Auto-ajustar límites y módulos según el plan SaaS seleccionado
+  useEffect(() => {
+    if (formData.saas_plan_id && plans.length > 0) {
+      const selectedPlan = plans.find(p => p.id === formData.saas_plan_id)
+      if (selectedPlan) {
+        // Extraer los módulos que están en true en el plan
+        const activeModules: string[] = []
+        if (selectedPlan.features) {
+          for (const [key, value] of Object.entries(selectedPlan.features)) {
+            if (value === true) {
+              activeModules.push(key)
+            }
+          }
+        }
+        
+        setFormData(prev => {
+          // Evitar re-renders infinitos
+          const prevModulesStr = [...prev.modules].sort().join(',')
+          const activeModulesStr = [...activeModules].sort().join(',')
+          
+          if (prev.max_athletes !== selectedPlan.max_athletes || 
+              prev.max_coaches !== selectedPlan.max_coaches || 
+              prev.max_nutritionists !== selectedPlan.max_nutritionists ||
+              prevModulesStr !== activeModulesStr) {
+            return {
+              ...prev,
+              max_athletes: selectedPlan.max_athletes || 50,
+              max_coaches: selectedPlan.max_coaches || 2,
+              max_nutritionists: selectedPlan.max_nutritionists || 1,
+              modules: activeModules
+            }
+          }
+          return prev
+        })
+      }
+    }
+  }, [formData.saas_plan_id, plans])
 
   const handleModuleToggle = (moduleId: string) => {
     setFormData(prev => {
@@ -168,7 +217,7 @@ export default function GymsPage() {
     payload.append('max_athletes', String(formData.max_athletes))
     payload.append('max_coaches', String(formData.max_coaches))
     payload.append('max_nutritionists', String(formData.max_nutritionists))
-    payload.append('saas_plan', formData.saas_plan)
+    payload.append('saas_plan_id', formData.saas_plan_id)
     payload.append('billing_cycle', formData.billing_cycle)
 
     try {
@@ -179,7 +228,7 @@ export default function GymsPage() {
         brand_color: '#10b981', modules: [], 
         admin_first_name: '', admin_last_name: '', admin_email: '',
         max_athletes: 100, max_coaches: 2, max_nutritionists: 2,
-        saas_plan: 'Pro', billing_cycle: 'monthly'
+        saas_plan_id: '', billing_cycle: 'monthly'
       })
       setLogoFile(null)
       fetchGyms()
@@ -221,9 +270,11 @@ export default function GymsPage() {
               <thead className="text-xs text-slate-500 uppercase bg-slate-50/80 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 font-medium">Nombre</th>
+                  <th className="px-6 py-4 font-medium">Plan SaaS</th>
                   <th className="px-6 py-4 font-medium">RUC</th>
                   <th className="px-6 py-4 font-medium">Ubicación</th>
                   <th className="px-6 py-4 font-medium">Contacto</th>
+                  <th className="px-6 py-4 font-medium">Fecha Registro</th>
                   <th className="px-6 py-4 font-medium">Estado</th>
                   <th className="px-6 py-4 text-right font-medium">Acciones</th>
                 </tr>
@@ -231,11 +282,11 @@ export default function GymsPage() {
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">Cargando gimnasios...</td>
+                    <td colSpan={8} className="px-6 py-8 text-center text-slate-500">Cargando gimnasios...</td>
                   </tr>
                 ) : gyms.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">No hay gimnasios registrados.</td>
+                    <td colSpan={8} className="px-6 py-8 text-center text-slate-500">No hay gimnasios registrados.</td>
                   </tr>
                 ) : (
                   gyms.map((gym: any) => (
@@ -250,21 +301,61 @@ export default function GymsPage() {
                         )}
                         {gym.name}
                       </td>
+                      <td className="px-6 py-4">
+                        {gym.active_plan ? (
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800 text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 inline-block w-max">
+                              {gym.active_plan.name}
+                            </span>
+                            <span className="text-xs text-slate-500 mt-0.5">
+                              S/ {gym.active_plan.price} ({gym.active_plan.billing_cycle})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium italic">Sin Plan</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-slate-600">{gym.ruc || '-'}</td>
                       <td className="px-6 py-4 text-slate-600">{gym.location || 'N/A'}</td>
                       <td className="px-6 py-4 text-slate-600">{gym.contact_email || 'N/A'}</td>
+                      <td className="px-6 py-4 text-slate-600 text-xs">
+                        {gym.created_at ? (
+                          new Date(gym.created_at).toLocaleDateString('es-PE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                          })
+                        ) : (
+                          '-'
+                        )}
+                      </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          gym.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {gym.status === 'active' ? 'Activo' : 'Inactivo'}
-                        </span>
+                        {gym.deleted_at ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+                            Desactivado
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            gym.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {gym.status === 'active' ? 'Activo' : 'Inactivo'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="ghost" size="sm" onClick={() => openManageModules(gym)} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
                             Módulos
                           </Button>
+                          {gym.deleted_at ? (
+                            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete({ gym, action: 'activate' })} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" title="Reactivar">
+                              <Power className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete({ gym, action: 'deactivate' })} className="text-rose-600 hover:text-rose-700 hover:bg-rose-50" title="Desactivar">
+                              <PowerOff className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" onClick={() => handleImpersonate(gym.id)} className="text-slate-600 hover:text-indigo-600 hover:bg-indigo-50" title="Entrar como Admin">
                             <UserCheck className="h-4 w-4" />
                           </Button>
@@ -456,7 +547,7 @@ export default function GymsPage() {
               <CardTitle className="text-xl">Módulos: {selectedGym.name}</CardTitle>
               <CardDescription>Activa o desactiva funciones exclusivas para este cliente.</CardDescription>
             </CardHeader>
-            <CardContent className="p-6">
+            <CardContent className="p-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               {isLoadingModules ? (
                 <p className="text-center text-slate-500 py-8">Cargando módulos...</p>
               ) : (
@@ -489,6 +580,31 @@ export default function GymsPage() {
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
               <Button variant="outline" onClick={() => setIsManageModulesOpen(false)}>Cerrar</Button>
             </div>
+          </Card>
+        </div>
+      )}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <Card className="w-full max-w-md bg-white shadow-2xl border-0">
+            <CardHeader>
+              <CardTitle className="text-xl">
+                {confirmDelete.action === 'deactivate' ? 'Desactivar Gimnasio' : 'Reactivar Gimnasio'}
+              </CardTitle>
+              <CardDescription>
+                {confirmDelete.action === 'deactivate'
+                  ? `¿Estás seguro de desactivar "${confirmDelete.gym.name}"? Los usuarios no podrán acceder al panel.`
+                  : `¿Estás seguro de reactivar "${confirmDelete.gym.name}"? Los usuarios volverán a tener acceso al panel.`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
+              <Button
+                onClick={() => handleToggleStatus(confirmDelete.gym, confirmDelete.action)}
+                className={confirmDelete.action === 'deactivate' ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}
+              >
+                {confirmDelete.action === 'deactivate' ? 'Desactivar' : 'Reactivar'}
+              </Button>
+            </CardContent>
           </Card>
         </div>
       )}

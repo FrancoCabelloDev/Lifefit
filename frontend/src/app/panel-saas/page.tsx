@@ -2,15 +2,31 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, Building2, Users } from 'lucide-react'
+import { TrendingUp, Building2, Users, DollarSign } from 'lucide-react'
 import { api } from '@/lib/api'
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+} from 'recharts'
+
+interface RevenuePoint {
+  month: string
+  total: number
+}
+
+interface GymPoint {
+  month: string
+  count: number
+}
 
 interface DashboardMetrics {
-  mrr: number;
-  mrrGrowth: string;
-  activeGyms: number;
-  totalAthletes: number;
-  totalAthletesGrowth: string;
+  mrr: number
+  mrrGrowth: string
+  activeGyms: number
+  totalAthletes: number
+  totalAthletesGrowth: string
+  newGymsThisMonth: number
+  revenueHistory: RevenuePoint[]
+  gymHistory: GymPoint[]
 }
 
 export default function SaaSAdminDashboard() {
@@ -37,7 +53,6 @@ export default function SaaSAdminDashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Resumen General</h1>
@@ -45,19 +60,18 @@ export default function SaaSAdminDashboard() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">Ingresos Recurrentes (MRR)</CardTitle>
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
+            <DollarSign className="w-4 h-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-900">
-              ${metrics.mrr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              S/{metrics.mrr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-emerald-600 mt-1 font-medium bg-emerald-50 inline-flex px-2 py-0.5 rounded-full">
-              {metrics.mrrGrowth} respecto al mes pasado
+            <p className={`text-xs mt-1 font-medium inline-flex px-2 py-0.5 rounded-full ${metrics.mrrGrowth.startsWith('+') ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
+              {metrics.mrrGrowth} vs mes anterior
             </p>
           </CardContent>
         </Card>
@@ -70,7 +84,7 @@ export default function SaaSAdminDashboard() {
           <CardContent>
             <div className="text-3xl font-bold text-slate-900">{metrics.activeGyms}</div>
             <p className="text-xs text-slate-500 mt-1">
-              Gimnasios dados de alta
+              +{metrics.newGymsThisMonth} este mes
             </p>
           </CardContent>
         </Card>
@@ -85,6 +99,71 @@ export default function SaaSAdminDashboard() {
             <p className="text-xs text-slate-500 mt-1">
               {metrics.totalAthletesGrowth}
             </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Nuevos este mes</CardTitle>
+            <TrendingUp className="w-4 h-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-slate-900">{metrics.newGymsThisMonth}</div>
+            <p className="text-xs text-slate-500 mt-1">
+              Gimnasios creados
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Ingresos Mensuales</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={metrics.revenueHistory}>
+                  <defs>
+                    <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} tickFormatter={(v) => {
+                    const [, m] = v.split('-')
+                    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+                    return months[parseInt(m) - 1] || v
+                  }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v: number) => `S/${v}`} />
+                  <Tooltip formatter={(value: any) => [`S/${Number(value).toFixed(2)}`, 'Ingresos']} />
+                  <Area type="monotone" dataKey="total" stroke="#10b981" fill="url(#revenueGrad)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Crecimiento de Gimnasios</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.gymHistory}>
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} tickFormatter={(v) => {
+                    const [, m] = v.split('-')
+                    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+                    return months[parseInt(m) - 1] || v
+                  }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip formatter={(value: any) => [value, 'Gimnasios']} />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>

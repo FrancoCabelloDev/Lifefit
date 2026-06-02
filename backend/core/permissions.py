@@ -19,3 +19,18 @@ class IsCoachOrBetter(IsAuthenticated):
         if not super().has_permission(request, view):
             return False
         return request.user.role in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}
+
+
+class IsNutritionist(IsAuthenticated):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.role == User.Role.NUTRITIONIST
+
+
+class IsReceptionist(IsAuthenticated):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.role == User.Role.RECEPTIONIST
+
+
+class IsAthlete(IsAuthenticated):
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.role == User.Role.ATHLETE

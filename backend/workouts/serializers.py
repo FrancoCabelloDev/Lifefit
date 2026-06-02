@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from gyms.models import Gym
-from .models import Exercise, RoutineExercise, WorkoutRoutine, WorkoutSession
+from .models import Exercise, RoutineExercise, UserRoutineAssignment, WorkoutRoutine, WorkoutSession
 
 User = get_user_model()
 
@@ -160,3 +160,12 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
                 routine = validated_data.get("routine")
                 validated_data["gym"] = request.user.gym or (routine.gym if routine else None)
         return super().create(validated_data)
+
+
+class UserRoutineAssignmentSerializer(serializers.ModelSerializer):
+    routine_detail = WorkoutRoutineSerializer(source="routine", read_only=True)
+
+    class Meta:
+        model = UserRoutineAssignment
+        fields = ["id", "user", "routine", "routine_detail", "assigned_by", "start_date", "end_date", "status", "compliance_percentage", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "assigned_by", "routine_detail"]

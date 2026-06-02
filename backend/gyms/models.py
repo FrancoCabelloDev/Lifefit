@@ -85,3 +85,176 @@ class GymFeatureFlag(BaseModel):
     def __str__(self) -> str:
         status = "ON" if self.is_active else "OFF"
         return f"{self.gym.name} - {self.feature_flag.name} ({status})"
+
+
+class CheckIn(BaseModel):
+    class Method(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        QR = "qr", "QR Code"
+        SELF = "self", "Autoregistro"
+
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="checkins",
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="checkins")
+    branch = models.ForeignKey(
+        Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name="checkins"
+    )
+    method = models.CharField(max_length=10, choices=Method.choices, default=Method.MANUAL)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        indexes = [
+            models.Index(fields=["gym", "timestamp"]),
+            models.Index(fields=["user", "timestamp"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user.email} @ {self.gym.name} [{self.timestamp:%Y-%m-%d %H:%M}]"
+
+
+class NutritionistAssignment(BaseModel):
+    nutritionist = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="nutritionist_assignments",
+        limit_choices_to={"role": "nutritionist"},
+    )
+    athlete = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="nutritionist_assigned_athletes",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="nutritionist_assignments")
+    is_active = models.BooleanField(default=True)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("nutritionist", "athlete")
+        ordering = ["-assigned_at"]
+
+    def __str__(self) -> str:
+        return f"{self.nutritionist.email} → {self.athlete.email}"
+
+
+class Notification(BaseModel):
+    class Type(models.TextChoices):
+        ROUTINE_ASSIGNED = "routine_assigned", "Rutina Asignada"
+        ROUTINE_UPDATED = "routine_updated", "Rutina Actualizada"
+        PLAN_ASSIGNED = "plan_assigned", "Plan Nutricional Asignado"
+        PLAN_UPDATED = "plan_updated", "Plan Nutricional Actualizado"
+        CHALLENGE_COMPLETED = "challenge_completed", "Reto Completado"
+        BADGE_EARNED = "badge_earned", "Medalla Obtenida"
+        CHECKIN_REMINDER = "checkin_reminder", "Recordatorio de Check-in"
+        MESSAGE = "message", "Mensaje"
+        SYSTEM = "system", "Sistema"
+
+    recipient = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="notifications"
+    )
+    actor = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="acted_notifications"
+    )
+    notification_type = models.CharField(max_length=30, choices=Type.choices)
+    title = models.CharField(max_length=255)
+    message = models.TextField(blank=True)
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="notifications", null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    link = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient", "is_read"]),
+            models.Index(fields=["recipient", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.notification_type}] {self.recipient.email} - {self.title}"
+
+
+class CoachAssignment(BaseModel):
+    coach = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="coach_assignments",
+        limit_choices_to={"role": "coach"},
+    )
+    athlete = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="athlete_assignments",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="coach_assignments")
+    is_active = models.BooleanField(default=True)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("coach", "athlete")
+        ordering = ["-assigned_at"]
+
+    def __str__(self) -> str:
+        return f"{self.coach.email} → {self.athlete.email}"
+
+
+class GymSubscription(BaseModel):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Activa"
+        EXPIRED = "expired", "Vencida"
+        CANCELED = "canceled", "Cancelada"
+
+    athlete = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="gym_subscriptions"
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="gym_subscriptions")
+    plan = models.ForeignKey(
+        GymMembershipPlan, on_delete=models.SET_NULL, null=True, related_name="subscriptions"
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    auto_renew = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-start_date", "athlete__first_name"]
+
+    def __str__(self) -> str:
+        return f"{self.athlete.email} → {self.plan.name if self.plan else 'Sin plan'} ({self.get_status_display()})"
+
+
+class GymPayment(BaseModel):
+    class PaymentStatus(models.TextChoices):
+        SUCCESS = "success", "Pagado"
+        PENDING = "pending", "Pendiente"
+        FAILED = "failed", "Fallido"
+        REFUNDED = "refunded", "Reembolsado"
+
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="gym_payments")
+    subscription = models.ForeignKey(
+        GymSubscription, on_delete=models.SET_NULL, null=True, blank=True, related_name="payments"
+    )
+    athlete = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, related_name="gym_payments"
+    )
+    plan = models.ForeignKey(
+        GymMembershipPlan, on_delete=models.SET_NULL, null=True, related_name="payments"
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=10, default="PEN")
+    status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.SUCCESS)
+    paid_at = models.DateTimeField()
+    due_date = models.DateField(null=True, blank=True)
+    payment_method = models.CharField(max_length=50, default="manual")
+    reference = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-paid_at"]
+
+    def __str__(self) -> str:
+        return f"{self.gym.name} - {self.athlete} - S/{self.amount} ({self.get_status_display()})"

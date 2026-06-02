@@ -134,3 +134,31 @@ class WorkoutSession(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.user.email} - {self.performed_at:%Y-%m-%d}"
+
+
+class UserRoutineAssignment(BaseModel):
+    class AssignmentStatus(models.TextChoices):
+        ACTIVE = "active", "Activo"
+        PAUSED = "paused", "Pausado"
+        COMPLETED = "completed", "Completado"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="routine_assignments", on_delete=models.CASCADE)
+    routine = models.ForeignKey(WorkoutRoutine, related_name="assignments", on_delete=models.CASCADE)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="assigned_routines",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=AssignmentStatus.choices, default=AssignmentStatus.ACTIVE)
+    compliance_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["-start_date"]
+        unique_together = ("user", "routine", "status")
+
+    def __str__(self) -> str:
+        return f"{self.user.email} - {self.routine.name}"

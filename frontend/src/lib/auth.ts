@@ -2,6 +2,7 @@ export const KEYS = {
   ACCESS: "lifefit_access_token",
   REFRESH: "lifefit_refresh_token",
   USER: "lifefit_user",
+  ADMIN_BACKUP: "lifefit_admin_backup",
 }
 
 export function getToken(): string | null {
@@ -39,4 +40,30 @@ export function dispatchAuthEvent(): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(AUTH_EVENT))
   }
+}
+
+export function backupAdminTokens(): void {
+  if (typeof window === "undefined") return
+  const access = localStorage.getItem(KEYS.ACCESS)
+  const refresh = localStorage.getItem(KEYS.REFRESH)
+  const rawUser = localStorage.getItem(KEYS.USER)
+  if (access && refresh && rawUser) {
+    localStorage.setItem(KEYS.ADMIN_BACKUP, JSON.stringify({ access, refresh, user: JSON.parse(rawUser) }))
+  }
+}
+
+export function getAdminBackup(): { access: string; refresh: string; user: { role: string } } | null {
+  if (typeof window === "undefined") return null
+  const raw = localStorage.getItem(KEYS.ADMIN_BACKUP)
+  return raw ? JSON.parse(raw) : null
+}
+
+export function restoreAdminTokens(): boolean {
+  const backup = getAdminBackup()
+  if (!backup) return false
+  localStorage.setItem(KEYS.ACCESS, backup.access)
+  localStorage.setItem(KEYS.REFRESH, backup.refresh)
+  localStorage.setItem(KEYS.USER, JSON.stringify(backup.user))
+  localStorage.removeItem(KEYS.ADMIN_BACKUP)
+  return true
 }

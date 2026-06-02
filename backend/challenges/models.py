@@ -29,7 +29,15 @@ class Challenge(BaseModel):
     description = models.TextField(blank=True)
     type = models.CharField(max_length=20, choices=ChallengeType.choices, default=ChallengeType.WORKOUTS)
     start_date = models.DateField()
+    start_time = models.TimeField(null=True, blank=True)
     end_date = models.DateField()
+    responsible = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="responsible_challenges",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     reward_points = models.PositiveIntegerField(default=100)
     goal_value = models.PositiveIntegerField(default=10)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)

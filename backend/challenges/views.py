@@ -25,10 +25,10 @@ class ChallengeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = Challenge.objects.select_related("gym")
+        queryset = Challenge.objects.select_related("gym", "responsible")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH, User.Role.NUTRITIONIST}:
             if user.gym_id:
                 return queryset.filter(global_or_user_gym_filter(user))
             return queryset.filter(gym__isnull=True)
@@ -39,10 +39,14 @@ class ChallengeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         if user.role == User.Role.SUPER_ADMIN:
-            serializer.save()
+            responsible = serializer.validated_data.get("responsible") or user
+            serializer.save(responsible=responsible)
             return
         if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
-            serializer.save(gym=user.gym)
+            responsible = serializer.validated_data.get("responsible") or user
+            if responsible.gym_id != user.gym_id:
+                responsible = user
+            serializer.save(gym=user.gym, responsible=responsible)
             return
         raise PermissionDenied("No tienes permisos para crear retos.")
 
@@ -53,7 +57,10 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             serializer.save()
             return
         if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.gym_id == user.gym_id:
-            serializer.save()
+            responsible = serializer.validated_data.get("responsible") or instance.responsible
+            if responsible and hasattr(responsible, 'gym_id') and responsible.gym_id != user.gym_id:
+                responsible = user
+            serializer.save(gym=instance.gym, responsible=responsible)
             return
         raise PermissionDenied("No puedes modificar este reto.")
 
@@ -221,8 +228,61 @@ class UserProgressViewSet(viewsets.ModelViewSet):
         return queryset.none()
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
+    def my_dashboard(self, request):
+        from datetime import date
+        from workouts.models import WorkoutSession, UserRoutineAssignment
+        from nutrition.models import UserMealLog, UserNutritionPlan
+
+        user = request.user
+        progress, _ = UserProgress.objects.get_or_create(user=user)
+
+        active_participations = ChallengeParticipation.objects.filter(
+            user=user,
+            status='active'
+        ).count()
+
+        badges_count = UserBadge.objects.filter(user=user).count()
+
+        sessions_today = WorkoutSession.objects.filter(
+            user=user,
+            status=WorkoutSession.Status.COMPLETED,
+            performed_at__date=date.today()
+        ).count()
+
+        meals_today = UserMealLog.objects.filter(
+            user=user,
+            date=date.today(),
+            completed=True
+        ).count()
+
+        has_active_routine = UserRoutineAssignment.objects.filter(
+            user=user,
+            status=UserRoutineAssignment.AssignmentStatus.ACTIVE
+        ).exists()
+
+        has_active_plan = UserNutritionPlan.objects.filter(
+            user=user,
+            status='active'
+        ).exists()
+
+        return Response({
+            "total_points": progress.total_points,
+            "level": progress.level,
+            "current_xp": progress.current_xp,
+            "next_level_xp": progress.next_level_xp,
+            "active_challenges": active_participations,
+            "badges_count": badges_count,
+            "sessions_today": sessions_today,
+            "meals_today": meals_today,
+            "has_active_routine": has_active_routine,
+            "has_active_plan": has_active_plan,
+        })
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
     def leaderboard(self, request):
         user = request.user
-        queryset = self.get_queryset().order_by("-total_points")[:20]
+        queryset = self.get_queryset().filter(
+            user__role=User.Role.ATHLETE
+        ).order_by("-total_points")[:20]
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)

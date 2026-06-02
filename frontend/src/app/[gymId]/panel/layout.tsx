@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Settings, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Users,
+  Settings,
+  LogOut,
   ShieldCheck,
   Apple,
   Headphones,
@@ -15,7 +16,19 @@ import {
   ChevronDown,
   Award,
   CircleDot,
-  UserCircle
+  UserCircle,
+  Dumbbell,
+  ClipboardList,
+  UtensilsCrossed,
+  Target,
+  Trophy,
+  Radio,
+  CalendarCheck,
+  List,
+  Medal,
+  Bell,
+  CheckCheck,
+  DollarSign,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -45,8 +58,12 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 
 import { api } from '@/lib/api'
-import { getToken, getStoredUser, clearAuth } from '@/lib/auth'
-import type { User, Gym, PaginatedResponse } from '@/lib/types'
+import { getToken, getStoredUser, clearAuth, restoreAdminTokens, getAdminBackup, dispatchAuthEvent } from '@/lib/auth'
+import type { User, Gym, PaginatedResponse, Role, Notification } from '@/lib/types'
+import GlobalBanner from '@/components/GlobalBanner'
+import { ROLE_LABELS, ROLE_HEADERS } from '@/lib/types'
+
+const AUTHORIZED_ROLES: Role[] = ['gym_admin', 'coach', 'nutritionist', 'receptionist', 'athlete']
 
 interface NavSubItem {
   title: string
@@ -66,7 +83,265 @@ interface NavGroup {
   items: NavItem[]
 }
 
-export default function GymAdminLayout({
+function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: Set<string>): { navMain: NavGroup[] } {
+  const isEnabled = (flag: string) => !activeFlags || activeFlags.has(flag)
+  if (role === 'athlete') {
+    return {
+      navMain: [
+        {
+          title: "Principal",
+          items: [
+            { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+          ],
+        },
+        {
+          title: "Mi Progreso",
+          items: [
+            {
+              title: "Rutinas",
+              icon: Dumbbell,
+              isActive: pathname.includes('/mis-rutinas'),
+              items: [
+                { title: "Mis Rutinas", url: `/${gymId}/panel/mis-rutinas` },
+              ],
+            },
+            {
+              title: "Nutrición",
+              icon: UtensilsCrossed,
+              isActive: pathname.includes('/mi-nutricion'),
+              items: [
+                { title: "Mi Plan Nutricional", url: `/${gymId}/panel/mi-nutricion` },
+              ],
+            },
+          ],
+        },
+        {
+          title: "Gamificación",
+          items: [
+            {
+              title: "Retos",
+              icon: Target,
+              isActive: pathname.includes('/mis-retos'),
+              items: [
+                { title: "Mis Retos", url: `/${gymId}/panel/mis-retos` },
+              ],
+            },
+            { title: "Mis Logros", url: `/${gymId}/panel/mis-logros`, icon: Award },
+            { title: "Ranking", url: `/${gymId}/panel/mi-ranking`, icon: Medal },
+          ],
+        },
+        {
+          title: "Cuenta",
+          items: [
+            { title: "Perfil", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+          ],
+        },
+      ],
+    }
+  }
+
+  if (role === 'coach') {
+    return {
+      navMain: [
+        {
+          title: "Principal",
+          items: [
+            { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+          ],
+        },
+        {
+          title: "Gestión",
+          items: [
+            { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
+          ],
+        },
+        {
+          title: "Entrenamiento",
+          items: [
+            { title: "Ejercicios", url: `/${gymId}/panel/entrenamiento/ejercicios`, icon: List },
+            { title: "Rutinas", url: `/${gymId}/panel/entrenamiento/rutinas`, icon: ClipboardList },
+          ],
+        },
+        {
+          title: "Nutrición",
+          items: [
+            { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: Apple },
+          ],
+        },
+        {
+          title: "Gamificación",
+          items: [
+            { title: "Retos", url: `/${gymId}/panel/gamificacion/retos`, icon: Target },
+            { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking`, icon: Trophy },
+          ],
+        },
+        {
+          title: "Cuenta",
+          items: [
+            { title: "Perfil", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+          ],
+        },
+      ],
+    }
+  }
+
+  if (role === 'nutritionist') {
+    return {
+      navMain: [
+        {
+          title: "Principal",
+          items: [
+            { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+          ],
+        },
+        {
+          title: "Gestión",
+          items: [
+            { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
+          ],
+        },
+        {
+          title: "Nutrición",
+          items: [
+            { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: Apple },
+          ],
+        },
+        {
+          title: "Gamificación",
+          items: [
+            { title: "Retos", url: `/${gymId}/panel/gamificacion/retos`, icon: Target },
+            { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking`, icon: Trophy },
+          ],
+        },
+        {
+          title: "Cuenta",
+          items: [
+            { title: "Perfil", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+          ],
+        },
+      ],
+    }
+  }
+
+  if (role === 'receptionist') {
+    return {
+      navMain: [
+        {
+          title: "Principal",
+          items: [
+            { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+          ],
+        },
+        {
+          title: "Operaciones",
+          items: [
+            { title: "Check-in", url: `/${gymId}/panel/gestion/checkins`, icon: Radio },
+          ],
+        },
+        {
+          title: "Gestión",
+          items: [
+            { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
+            { title: "Planes de Membresía", url: `/${gymId}/panel/gestion/planes`, icon: CalendarCheck },
+          ],
+        },
+        {
+          title: "Cuenta",
+          items: [
+            { title: "Perfil", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+          ],
+        },
+      ],
+    }
+  }
+
+  const teamItems = [
+    isEnabled('coach') && { title: "Coaches", url: `/${gymId}/panel/equipo/coaches` },
+    isEnabled('nutricion') && { title: "Nutricionistas", url: `/${gymId}/panel/equipo/nutricionistas` },
+    { title: "Atención al Cliente", url: `/${gymId}/panel/equipo/atencion` },
+  ].filter(Boolean) as { title: string; url: string }[]
+
+  const gamificationItems = [
+    isEnabled('retos') && { title: "Retos", url: `/${gymId}/panel/gamificacion/retos` },
+    isEnabled('ranking') && { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking` },
+  ].filter(Boolean) as { title: string; url: string }[]
+
+  const operacionesItems: (NavItem | { title: string; icon: any; isActive: boolean; items: { title: string; url: string }[] })[] = [
+    isEnabled('checkin') && { title: "Check-in", url: `/${gymId}/panel/gestion/checkins`, icon: Radio },
+    {
+      title: "Gestión",
+      icon: Users,
+      isActive: pathname.includes('/gestion/'),
+      items: [
+        { title: "Atletas", url: `/${gymId}/panel/gestion/atletas` },
+        { title: "Planes de Membresía", url: `/${gymId}/panel/gestion/planes` },
+      ],
+    },
+    teamItems.length > 1 && {
+      title: "Mi Equipo",
+      icon: Users2,
+      isActive: pathname.includes('/equipo/'),
+      items: teamItems,
+    },
+    isEnabled('rutinas') && {
+      title: "Entrenamiento",
+      icon: Dumbbell,
+      isActive: pathname.includes('/entrenamiento/'),
+      items: [
+        { title: "Ejercicios", url: `/${gymId}/panel/entrenamiento/ejercicios` },
+        { title: "Rutinas", url: `/${gymId}/panel/entrenamiento/rutinas` },
+      ],
+    },
+    isEnabled('nutricion') && {
+      title: "Nutrición",
+      icon: UtensilsCrossed,
+      isActive: pathname.includes('/nutricion/'),
+      items: [
+        { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales` },
+      ],
+    },
+    gamificationItems.length > 0 && {
+      title: "Gamificación",
+      icon: Target,
+      isActive: pathname.includes('/gamificacion/'),
+      items: gamificationItems,
+    },
+    {
+      title: "Finanzas",
+      icon: DollarSign,
+      isActive: pathname.includes('/finanzas'),
+      items: [
+        { title: "Suscripciones", url: `/${gymId}/panel/finanzas/suscripciones` },
+        { title: "Planes de Precio", url: `/${gymId}/panel/finanzas/planes-precio` },
+        { title: "Facturación", url: `/${gymId}/panel/finanzas/facturacion` },
+      ],
+    },
+  ].filter(Boolean)
+
+  return {
+    navMain: [
+      {
+        title: "Principal",
+        items: [
+          { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+        ],
+      },
+      {
+        title: "Operaciones",
+        items: operacionesItems,
+      },
+      {
+        title: "Sistema",
+        items: [
+          { title: "Configuración", url: `/${gymId}/panel/sistema/configuracion`, icon: Settings },
+          { title: "Perfil", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+        ],
+      },
+    ],
+  }
+}
+
+export default function GymPanelLayout({
   children,
   params
 }: {
@@ -78,11 +353,53 @@ export default function GymAdminLayout({
   const { gymId } = use(params)
   
   const [isAuthorized, setIsAuthorized] = useState(false)
+  const [userRole, setUserRole] = useState<Role>('gym_admin')
   const [gymName, setGymName] = useState('')
   const [gymLogo, setGymLogo] = useState<string | null>(null)
   const [gymColor, setGymColor] = useState('#10b981')
   const [userInitial, setUserInitial] = useState('AD')
   const [userName, setUserName] = useState('Admin')
+  const [showNotif, setShowNotif] = useState(false)
+  const [isImpersonating, setIsImpersonating] = useState(false)
+
+  const notifQuery = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const data = await api.get<any>('/api/gyms/notifications/')
+      return (data?.results || []) as Notification[]
+    },
+    refetchInterval: 30000,
+  })
+  const notifications = notifQuery.data || []
+
+  const unreadCountQuery = useQuery({
+    queryKey: ['notifications-unread'],
+    queryFn: async () => {
+      const data = await api.get<any>('/api/gyms/notifications/unread_count/')
+      return (data?.unread_count || 0) as number
+    },
+    refetchInterval: 15000,
+  })
+  const unreadCount = unreadCountQuery.data || 0
+
+  const { data: featureFlags } = useQuery({
+    queryKey: ['gym-feature-flags'],
+    queryFn: async () => {
+      const data = await api.get<any>('/api/gyms/feature-flags/')
+      const flags = (data?.results || data || []) as Array<{ feature_flag_detail: { code: string }; is_active: boolean }>
+      return new Set(flags.filter(f => f.is_active).map(f => f.feature_flag_detail.code))
+    },
+    staleTime: 60000,
+  })
+
+  const queryClient = useQueryClient()
+  const markReadMutation = useMutation({
+    mutationFn: () => api.post('/api/gyms/notifications/mark_read/'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] })
+    },
+  })
 
   useEffect(() => {
     const token = getToken()
@@ -93,11 +410,14 @@ export default function GymAdminLayout({
       return
     }
 
-    if (user.role !== 'gym_admin') {
+    if (!AUTHORIZED_ROLES.includes(user.role)) {
       router.push('/tugimnasio')
       return
     }
+
     setIsAuthorized(true)
+    setIsImpersonating(!!getAdminBackup())
+    setUserRole(user.role)
     setUserName(`${user.first_name} ${user.last_name}`)
     setUserInitial(user.first_name?.[0]?.toUpperCase() || 'AD')
 
@@ -123,7 +443,31 @@ export default function GymAdminLayout({
     }
 
     fetchGymData()
+
+    const handleAuthChanged = () => {
+      const u = getStoredUser<User>()
+      if (u) {
+        setUserRole(u.role)
+        setUserName(`${u.first_name} ${u.last_name}`)
+        setUserInitial(u.first_name?.[0]?.toUpperCase() || 'AD')
+      }
+      setIsImpersonating(!!getAdminBackup())
+    }
+
+    window.addEventListener('lifefit-auth-changed', handleAuthChanged)
+    return () => window.removeEventListener('lifefit-auth-changed', handleAuthChanged)
   }, [router, gymId])
+
+  const handleRestoreAdmin = () => {
+    const backup = getAdminBackup()
+    if (!backup) return
+    restoreAdminTokens()
+    if (backup.user.role === 'super_admin') {
+      window.location.href = '/panel-saas'
+    } else {
+      window.location.href = `/${gymId}/panel`
+    }
+  }
 
   const handleLogout = () => {
     clearAuth()
@@ -138,69 +482,9 @@ export default function GymAdminLayout({
     )
   }
 
-  const navData: { navMain: NavGroup[] } = {
-    navMain: [
-      {
-        title: "Principal",
-        items: [
-          {
-            title: "Resumen",
-            url: `/${gymId}/panel`,
-            icon: LayoutDashboard,
-          },
-        ],
-      },
-      {
-        title: "Operaciones",
-        items: [
-          {
-            title: "Gestión",
-            icon: Users,
-            isActive: pathname.includes('/atletas') || pathname.includes('/planes'),
-            items: [
-              {
-                title: "Atletas",
-                url: `/${gymId}/panel/atletas`,
-              },
-              {
-                title: "Planes de Membresía",
-                url: `/${gymId}/panel/planes`,
-              },
-            ],
-          },
-          {
-            title: "Mi Equipo",
-            icon: Users2,
-            isActive: pathname.includes('/coaches') || pathname.includes('/nutricionistas') || pathname.includes('/atencion'),
-            items: [
-              {
-                title: "Coaches",
-                url: `/${gymId}/panel/coaches`,
-              },
-              {
-                title: "Nutricionistas",
-                url: `/${gymId}/panel/nutricionistas`,
-              },
-              {
-                title: "Atención al Cliente",
-                url: `/${gymId}/panel/atencion`,
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "Sistema",
-        items: [
-          {
-            title: "Configuración",
-            url: `/${gymId}/panel/configuracion`,
-            icon: Settings,
-          },
-        ],
-      },
-    ],
-  }
+  const navData = getNavData(userRole, gymId, pathname, featureFlags)
+  const roleLabel = ROLE_LABELS[userRole]
+  const roleHeader = ROLE_HEADERS[userRole]
 
   return (
     <TooltipProvider>
@@ -237,9 +521,11 @@ export default function GymAdminLayout({
             <SidebarContent className="bg-slate-900">
               {navData.navMain.map((group) => (
                 <SidebarGroup key={group.title}>
-                  <SidebarGroupLabel className="text-slate-500 font-semibold text-[11px] uppercase tracking-[0.1em] px-4 mb-2 font-lexend">
-                    {group.title}
-                  </SidebarGroupLabel>
+                  {group.title !== "Finanzas" && (
+                    <SidebarGroupLabel className="text-slate-500 font-semibold text-[11px] uppercase tracking-[0.1em] px-4 mb-2 font-lexend">
+                      {group.title}
+                    </SidebarGroupLabel>
+                  )}
                   <SidebarGroupContent>
                     <SidebarMenu>
                       {group.items.map((item) => (
@@ -310,7 +596,7 @@ export default function GymAdminLayout({
                   </div>
                   <div className="flex flex-col truncate">
                     <span className="text-xs font-bold text-white truncate font-inter">{userName}</span>
-                    <span className="text-[10px] text-slate-500 truncate font-inter">Administrador</span>
+                    <span className="text-[10px] text-slate-500 truncate font-inter">{roleLabel}</span>
                   </div>
                 </div>
                 <Separator className="bg-white/5" />
@@ -327,13 +613,14 @@ export default function GymAdminLayout({
           </Sidebar>
 
           <main className="flex-1 flex flex-col min-w-0">
+            <GlobalBanner />
             <header className="h-20 bg-white border-b border-slate-100 flex items-center justify-between px-8 sticky top-0 z-30 shadow-sm shadow-slate-100/50">
               <div className="flex items-center gap-4">
                 <SidebarTrigger className="text-slate-500 hover:bg-slate-50" />
                 <Separator orientation="vertical" className="h-6 bg-slate-100" />
                 <div className="flex items-center gap-2">
                    <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                   <span className="font-black text-slate-900 uppercase tracking-tight text-sm font-lexend">Panel Admin</span>
+                   <span className="font-black text-slate-900 uppercase tracking-tight text-sm font-lexend">{roleHeader}</span>
                 </div>
               </div>
               
@@ -342,6 +629,86 @@ export default function GymAdminLayout({
                   <span className="text-xs font-bold text-slate-900 font-inter">{userName}</span>
                   <span className="text-[10px] text-emerald-600 font-black tracking-widest uppercase font-lexend">Sucursal Activa</span>
                 </div>
+
+                {isImpersonating && (
+                  <button
+                    onClick={handleRestoreAdmin}
+                    className="h-10 px-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-amber-700 shadow-sm transition-all hover:bg-amber-100 hover:scale-105 text-xs font-bold"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Volver a Admin
+                  </button>
+                )}
+
+                <div className="relative">
+                  <button
+                    onClick={() => setShowNotif(prev => !prev)}
+                    className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 shadow-sm transition-all hover:bg-slate-100 hover:scale-105 relative"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-rose-500/20">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {showNotif && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
+                      <div className="absolute right-0 top-12 z-50 w-96 bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-900/10 overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                          <h3 className="font-bold text-slate-900 text-sm">Notificaciones</h3>
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={() => markReadMutation.mutate()}
+                              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                            >
+                              <CheckCheck className="w-3.5 h-3.5" />
+                              Marcar todas leídas
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-96 overflow-y-auto">
+                          {notifQuery.isLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
+                            </div>
+                          ) : notifications.length > 0 ? (
+                            notifications.map(n => (
+                              <div
+                                key={n.id}
+                                className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-all cursor-pointer ${!n.is_read ? 'bg-emerald-50/50' : ''}`}
+                                onClick={() => {
+                                  if (n.link) router.push(n.link)
+                                  setShowNotif(false)
+                                }}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`min-w-2 h-2 rounded-full mt-1.5 ${!n.is_read ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-slate-900 truncate">{n.title}</p>
+                                    {n.message && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>}
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                      {new Date(n.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="py-12 text-center text-slate-400">
+                              <Bell className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                              <p className="text-sm font-medium">Sin notificaciones</p>
+                              <p className="text-xs mt-1">No tienes notificaciones nuevas.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shadow-sm transition-transform hover:scale-105 cursor-pointer">
                   <UserCircle className="w-6 h-6" />
                 </div>

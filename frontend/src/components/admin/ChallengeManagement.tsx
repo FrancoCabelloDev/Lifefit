@@ -3,21 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
 import { api } from '@/lib/api'
-
-type Challenge = {
-  id: string
-  gym: string | null
-  name: string
-  description: string
-  type: 'attendance' | 'distance' | 'workouts' | 'nutrition' | 'mixed'
-  start_date: string
-  end_date: string
-  reward_points: number
-  goal_value: number
-  status: 'draft' | 'active' | 'completed' | 'archived'
-  created_at: string
-  updated_at: string
-}
+import type { Challenge as ChallengeType, StaffMember } from '@/lib/types'
 
 type ChallengeStats = {
   total: number
@@ -26,17 +12,12 @@ type ChallengeStats = {
   draft: number
 }
 
-type Gym = {
-  id: string
-  name: string
-}
-
 type ChallengeManagementProps = {
   token: string
   userGymId?: string | null
 }
 
-const CHALLENGE_TYPES = {
+const CHALLENGE_TYPES: Record<string, { label: string; icon: string; color: string }> = {
   attendance: { label: 'Asistencia', icon: '📅', color: 'bg-blue-100 text-blue-700' },
   distance: { label: 'Distancia', icon: '🏃', color: 'bg-purple-100 text-purple-700' },
   workouts: { label: 'Entrenamientos', icon: '💪', color: 'bg-emerald-100 text-emerald-700' },
@@ -44,20 +25,26 @@ const CHALLENGE_TYPES = {
   mixed: { label: 'Mixto', icon: '🎯', color: 'bg-pink-100 text-pink-700' },
 }
 
-const CHALLENGE_STATUS = {
+const CHALLENGE_STATUS: Record<string, { label: string; color: string }> = {
   draft: { label: 'Borrador', color: 'bg-slate-100 text-slate-700' },
   active: { label: 'Activo', color: 'bg-emerald-100 text-emerald-700' },
   completed: { label: 'Completado', color: 'bg-blue-100 text-blue-700' },
   archived: { label: 'Archivado', color: 'bg-slate-100 text-slate-600' },
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  gym_admin: 'Administrador',
+  coach: 'Coach',
+  nutritionist: 'Nutricionista',
+  receptionist: 'Recepción',
+}
+
 export default function ChallengeManagement({ token, userGymId }: ChallengeManagementProps) {
-  const [challenges, setChallenges] = useState<Challenge[]>([])
-  const [gyms, setGyms] = useState<Gym[]>([])
+  const [challenges, setChallenges] = useState<ChallengeType[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null)
+  const [editingChallenge, setEditingChallenge] = useState<ChallengeType | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')
 
@@ -75,19 +62,9 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
     }
   }, [])
 
-  const fetchGyms = useCallback(async () => {
-    try {
-      const data = await api.get<any>("/api/gyms/gyms/")
-      setGyms(Array.isArray(data) ? data : data?.results ?? [])
-    } catch (err) {
-      console.error('Error loading gyms:', err)
-    }
-  }, [])
-
   useEffect(() => {
     fetchChallenges()
-    fetchGyms()
-  }, [fetchChallenges, fetchGyms])
+  }, [fetchChallenges])
 
   const stats: ChallengeStats = {
     total: challenges.length,
@@ -102,7 +79,7 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
     return true
   })
 
-  const handleEdit = (challenge: Challenge) => {
+  const handleEdit = (challenge: ChallengeType) => {
     setEditingChallenge(challenge)
     setShowModal(true)
   }
@@ -125,9 +102,14 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
     return diff
   }
 
+  const formatTime = (time: string | null) => {
+    if (!time) return ''
+    const [hours, minutes] = time.split(':')
+    return `${hours}:${minutes}`
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Gestión de Retos</h2>
@@ -150,7 +132,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
         </div>
       )}
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <div className="flex items-center justify-between">
@@ -163,7 +144,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
             </div>
           </div>
         </div>
-
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -175,7 +155,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
             </div>
           </div>
         </div>
-
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -187,7 +166,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
             </div>
           </div>
         </div>
-
         <div className="rounded-2xl bg-white border border-slate-200 p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -201,7 +179,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <select
           value={filterStatus}
@@ -214,7 +191,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
           <option value="completed">Completado</option>
           <option value="archived">Archivado</option>
         </select>
-
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
@@ -229,7 +205,6 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
         </select>
       </div>
 
-      {/* Challenges List */}
       {loading ? (
         <div className="rounded-2xl bg-white border border-slate-200 p-8 text-center">
           <p className="text-slate-600">Cargando retos...</p>
@@ -275,6 +250,7 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
                         <span className="text-slate-500">📅 Inicio:</span>
                         <span className="font-medium text-slate-900">
                           {new Date(challenge.start_date).toLocaleDateString('es-ES')}
+                          {challenge.start_time && ` ${formatTime(challenge.start_time)}`}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -299,6 +275,17 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
                         <span className="text-slate-500">🎯 Meta:</span>
                         <span className="font-medium text-slate-900">{challenge.goal_value}</span>
                       </div>
+                      {challenge.responsible_name && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500">👤 Encargado:</span>
+                          <span className="font-medium text-slate-900">{challenge.responsible_name}</span>
+                          {challenge.responsible_role && (
+                            <span className="text-xs text-slate-400">
+                              ({ROLE_LABELS[challenge.responsible_role] || challenge.responsible_role})
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -323,12 +310,10 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
         </div>
       )}
 
-      {/* Modal */}
       {showModal && (
         <ChallengeModal
           token={token}
           challenge={editingChallenge}
-          gyms={gyms}
           userGymId={userGymId}
           onClose={() => {
             setShowModal(false)
@@ -347,38 +332,67 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
 
 type ChallengeModalProps = {
   token: string
-  challenge: Challenge | null
-  gyms: Gym[]
+  challenge: ChallengeType | null
   userGymId?: string | null
   onClose: () => void
   onSave: () => void
 }
 
-function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: ChallengeModalProps) {
+function ChallengeModal({ token, challenge, userGymId, onClose, onSave }: ChallengeModalProps) {
   const [form, setForm] = useState({
-    gym: challenge?.gym ?? userGymId ?? '',
     name: challenge?.name ?? '',
     description: challenge?.description ?? '',
     type: challenge?.type ?? 'workouts',
     start_date: challenge?.start_date ?? '',
+    start_time: challenge?.start_time ?? '',
     end_date: challenge?.end_date ?? '',
+    responsible: challenge?.responsible ?? '',
     reward_points: challenge?.reward_points ?? 100,
     goal_value: challenge?.goal_value ?? 10,
     status: challenge?.status ?? 'draft',
   })
+  const [staff, setStaff] = useState<StaffMember[]>([])
+  const [currentUserRole, setCurrentUserRole] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const stored = localStorage.getItem('lifefit_user')
+    if (stored) {
+      try {
+        const user = JSON.parse(stored)
+        setCurrentUserRole(user.role || '')
+        if (!challenge) {
+          setForm(prev => ({ ...prev, responsible: user.id || '' }))
+        }
+      } catch {}
+    }
+
+    const fetchStaff = async () => {
+      try {
+        const data = await api.get<any>('/api/auth/gym-members/')
+        const members: StaffMember[] = Array.isArray(data) ? data : data?.results ?? []
+        setStaff(members)
+      } catch {
+        console.log('No se pudo cargar el staff')
+      }
+    }
+    fetchStaff()
+  }, [challenge])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setError('')
 
+    const payload = { ...form }
+    if (!payload.start_time) delete (payload as any).start_time
+
     try {
       if (challenge) {
-        await api.put(`/api/challenges/challenges/${challenge.id}/`, form)
+        await api.put(`/api/challenges/challenges/${challenge.id}/`, payload)
       } else {
-        await api.post("/api/challenges/challenges/", form)
+        await api.post("/api/challenges/challenges/", payload)
       }
       onSave()
     } catch (err: any) {
@@ -438,7 +452,7 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tipo</label>
               <select
                 value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as Challenge['type'] })}
+                onChange={(e) => setForm({ ...form, type: e.target.value as ChallengeType['type'] })}
                 className={inputClass}
                 required
               >
@@ -454,7 +468,7 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Estado</label>
               <select
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as Challenge['status'] })}
+                onChange={(e) => setForm({ ...form, status: e.target.value as ChallengeType['status'] })}
                 className={inputClass}
                 required
               >
@@ -477,7 +491,18 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
                 required
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Hora de inicio</label>
+              <input
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Fecha de fin</label>
               <input
@@ -487,6 +512,27 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
                 className={inputClass}
                 required
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Encargado del reto</label>
+              <select
+                value={form.responsible}
+                onChange={(e) => setForm({ ...form, responsible: e.target.value })}
+                className={inputClass}
+              >
+                {staff.length > 0 ? (
+                  <>
+                    <option value="">Seleccionar encargado</option>
+                    {staff.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.first_name} {m.last_name} ({ROLE_LABELS[m.role] || m.role})
+                      </option>
+                    ))}
+                  </>
+                ) : (
+                  <option value={form.responsible}>Tú (creador del reto)</option>
+                )}
+              </select>
             </div>
           </div>
 
@@ -502,7 +548,6 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
                 min="1"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Puntos de recompensa</label>
               <input
@@ -515,24 +560,6 @@ function ChallengeModal({ token, challenge, gyms, userGymId, onClose, onSave }: 
               />
             </div>
           </div>
-
-          {gyms.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Gimnasio (opcional)</label>
-              <select
-                value={form.gym}
-                onChange={(e) => setForm({ ...form, gym: e.target.value })}
-                className={inputClass}
-              >
-                <option value="">Global (todos los gimnasios)</option>
-                {gyms.map((gym) => (
-                  <option key={gym.id} value={gym.id}>
-                    {gym.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           <div className="flex gap-3 pt-4">
             <button

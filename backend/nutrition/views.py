@@ -40,7 +40,7 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
         queryset = NutritionPlan.objects.select_related("gym").prefetch_related("meal_templates", user_assignments)
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             if user.gym_id:
                 return queryset.filter(global_or_user_gym_filter(user))
             return queryset.filter(gym__isnull=True)
@@ -53,7 +53,7 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
         if user.role == User.Role.SUPER_ADMIN:
             serializer.save()
             return
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and user.gym_id:
             serializer.save(gym=user.gym)
             return
         raise PermissionDenied("No tienes permisos para crear planes.")
@@ -61,7 +61,7 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user
         instance = self.get_object()
-        if user.role == User.Role.SUPER_ADMIN or (user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.gym_id == user.gym_id):
+        if user.role == User.Role.SUPER_ADMIN or (user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.gym_id == user.gym_id):
             serializer.save()
             return
         raise PermissionDenied("No puedes modificar este plan.")
@@ -180,7 +180,7 @@ class MealTemplateViewSet(viewsets.ModelViewSet):
         
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             if user.gym_id:
                 return queryset.filter(global_or_user_gym_filter(user, "plan__gym"))
             return queryset.filter(plan__gym__isnull=True)
@@ -188,7 +188,7 @@ class MealTemplateViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             raise PermissionDenied("No tienes permisos para crear comidas.")
         serializer.save()
 
@@ -263,7 +263,7 @@ class NutritionMealViewSet(viewsets.ModelViewSet):
         queryset = NutritionMeal.objects.select_related("plan", "plan__gym")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             if user.gym_id:
                 return queryset.filter(global_or_user_gym_filter(user, "plan__gym"))
             return queryset.filter(plan__gym__isnull=True)
@@ -277,7 +277,7 @@ class NutritionMealViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         plan = serializer.validated_data["plan"]
-        if user.role == User.Role.SUPER_ADMIN or (user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and plan.gym_id == user.gym_id):
+        if user.role == User.Role.SUPER_ADMIN or (user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and plan.gym_id == user.gym_id):
             serializer.save()
             return
         raise PermissionDenied("No puedes agregar comidas a este plan.")
@@ -286,7 +286,7 @@ class NutritionMealViewSet(viewsets.ModelViewSet):
         user = self.request.user
         instance = self.get_object()
         if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.plan.gym_id == user.gym_id
+            user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.plan.gym_id == user.gym_id
         ):
             serializer.save()
             return
@@ -311,7 +311,7 @@ class NutritionItemViewSet(viewsets.ModelViewSet):
         queryset = NutritionItem.objects.select_related("meal", "meal__plan", "meal__plan__gym")
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             if user.gym_id:
                 return queryset.filter(global_or_user_gym_filter(user, "meal__plan__gym"))
             return queryset.filter(meal__plan__gym__isnull=True)
@@ -326,7 +326,7 @@ class NutritionItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         meal = serializer.validated_data["meal"]
         if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and meal.plan.gym_id == user.gym_id
+            user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and meal.plan.gym_id == user.gym_id
         ):
             serializer.save()
             return
@@ -336,7 +336,7 @@ class NutritionItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         instance = self.get_object()
         if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.meal.plan.gym_id == user.gym_id
+            user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.meal.plan.gym_id == user.gym_id
         ):
             serializer.save()
             return
@@ -350,7 +350,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         base = UserNutritionPlan.objects.select_related("plan", "user", "assigned_by")
-        if user.role in ["super_admin", "gym_admin", "coach"]:
+        if user.role in ["super_admin", "gym_admin", "nutritionist"]:
             if user.gym:
                 return base.filter(
                     Q(user__gym=user.gym) | Q(user=user)
@@ -363,7 +363,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         if user.role == User.Role.SUPER_ADMIN:
             serializer.save()
             return
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and user.gym_id:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and user.gym_id:
             serializer.save(assigned_by=user)
             return
         raise PermissionDenied("No puedes asignar planes de nutrición.")
@@ -372,7 +372,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         user = self.request.user
         instance = self.get_object()
         if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.plan.gym_id == user.gym_id
+            user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.plan.gym_id == user.gym_id
         ):
             serializer.save()
             return
@@ -380,6 +380,18 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             serializer.save()
             return
         raise PermissionDenied("No puedes modificar esta asignación.")
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
+    def my_active(self, request):
+        user = request.user
+        assignment = UserNutritionPlan.objects.filter(
+            user=user,
+            status='active'
+        ).select_related('plan', 'plan__gym', 'assigned_by').first()
+        if not assignment:
+            return Response({"detail": "No tienes un plan activo."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(assignment)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
@@ -452,4 +464,56 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             "completion_percentage": round(completion_percentage, 1),
             "completed_meals": completed_logs,
             "total_meals": total_meals,
+        })
+
+    @action(detail=False, methods=["get"])
+    def athlete_nutrition(self, request):
+        """Devuelve el estado nutricional de un atleta específico (para nutricionistas)"""
+        user = request.user
+        if user.role not in {User.Role.NUTRITIONIST, User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}:
+            return Response({"detail": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+
+        athlete_id = request.query_params.get("athlete_id")
+        if not athlete_id:
+            return Response({"detail": "Se requiere athlete_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        today = date.today()
+
+        active_plan = UserNutritionPlan.objects.filter(
+            user_id=athlete_id, status="active"
+        ).select_related("plan", "plan__gym").first()
+
+        completed_plans = UserNutritionPlan.objects.filter(
+            user_id=athlete_id, status="completed"
+        ).select_related("plan").order_by("-end_date")
+
+        from datetime import timedelta
+        week_meals = UserMealLog.objects.filter(
+            user_id=athlete_id,
+            date__gte=(today - timedelta(days=7)).isoformat(),
+            completed=True,
+        ).select_related("meal_template").order_by("-date")
+
+        meal_data = {}
+        for log in week_meals:
+            day = log.date
+            if day not in meal_data:
+                meal_data[day] = []
+            meal_data[day].append({
+                "meal_name": log.meal_template.name,
+                "meal_type": log.meal_template.meal_type,
+                "completed": log.completed,
+            })
+
+        plan_serializer = UserNutritionPlanSerializer(active_plan, context={"request": request}) if active_plan else None
+        completed_serializer = UserNutritionPlanSerializer(completed_plans, many=True, context={"request": request})
+
+        return Response({
+            "active_plan": plan_serializer.data if plan_serializer else None,
+            "completed_plans": completed_serializer.data,
+            "week_meal_compliance": {
+                "dates": sorted(meal_data.keys(), reverse=True),
+                "meals_by_date": meal_data,
+            },
+            "total_meals_logged_week": len(week_meals),
         })

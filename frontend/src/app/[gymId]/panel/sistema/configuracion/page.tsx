@@ -13,7 +13,10 @@ import {
   Image as ImageIcon,
   X,
   CloudUpload,
-  Shield
+  Shield,
+  QrCode,
+  Download,
+  ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
@@ -34,6 +37,7 @@ import {
 
 import { api } from '@/lib/api'
 import type { Gym, PaginatedResponse } from '@/lib/types'
+import QRCode from 'qrcode'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -51,12 +55,24 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  
+  const [qrDataUrl, setQrDataUrl] = useState<string>('')
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchGymData()
   }, [])
+
+  useEffect(() => {
+    if (!gymData?.slug) return
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.lifefit.pe'
+    const qrUrl = `${origin}/${gymData.slug}/checkin/qr`
+    QRCode.toDataURL(qrUrl, {
+      width: 300,
+      margin: 2,
+      color: { dark: '#1e293b', light: '#ffffff' },
+    }).then(setQrDataUrl).catch(console.error)
+  }, [gymData?.slug])
 
   const fetchGymData = async () => {
     try {
@@ -358,6 +374,65 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
                     <p className="text-sm font-bold text-slate-800 uppercase tracking-tight">Personalización Activa</p>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                       Este tono se aplicará automáticamente a los botones y elementos del panel.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Sección 4: QR de Acceso */}
+            <div className="space-y-6 pt-4">
+              <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <span className="w-8 h-px bg-slate-100" /> QR de Acceso
+              </h3>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                <div className="lg:col-span-5 flex flex-col items-center gap-4">
+                  <div className="bg-white rounded-2xl p-4 shadow-lg border border-slate-100">
+                    {qrDataUrl ? (
+                      <img src={qrDataUrl} alt="QR de acceso" className="w-48 h-48" />
+                    ) : (
+                      <div className="w-48 h-48 flex items-center justify-center text-slate-200">
+                        <Loader2 className="w-8 h-8 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+                    Escanea para ingresar
+                  </p>
+                </div>
+                <div className="lg:col-span-7 space-y-4">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-800">Check-in con QR</h4>
+                    <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                      Imprime este código QR y colócalo en la entrada de tu gimnasio. Tus socios
+                      podrán escanearlo con su cámara para registrar su ingreso automáticamente.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <a
+                      href={qrDataUrl}
+                      download={`checkin-qr-${gymData?.slug || 'gym'}.png`}
+                      className="inline-flex items-center gap-2 bg-slate-900 hover:bg-black text-white rounded-2xl h-12 px-6 font-bold text-sm transition-all shadow-lg active:scale-95"
+                    >
+                      <Download className="w-4 h-4" />
+                      Descargar QR
+                    </a>
+                    {gymData?.slug && (
+                      <a
+                        href={`/${gymData.slug}/checkin/qr`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-2xl h-12 px-6 font-bold text-sm transition-all active:scale-95"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Vista previa
+                      </a>
+                    )}
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+                    <p className="font-bold">¿Cómo funciona?</p>
+                    <p className="mt-1 text-amber-700">
+                      El socio debe haber iniciado sesión en LifeFit desde su navegador. Al escanear
+                      el código QR, la página detecta su sesión y registra el check-in automáticamente.
                     </p>
                   </div>
                 </div>

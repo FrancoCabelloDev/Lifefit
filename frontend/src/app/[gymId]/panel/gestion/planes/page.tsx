@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { Plus, Edit, Trash, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,12 +11,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { api } from '@/lib/api'
 import { GymMembershipPlan } from '@/lib/types'
-import { useAuth } from '@/lib/auth'
 import { toast } from 'sonner'
 
-export default function GymMembershipPlansPage({ params }: { params: { gymId: string } }) {
-  const { user } = useAuth()
-  const gymId = user?.gym || params.gymId
+export default function GymMembershipPlansPage({ params }: { params: Promise<{ gymId: string }> }) {
+  const unwrappedParams = use(params)
+  const gymId = unwrappedParams.gymId
   
   const [plans, setPlans] = useState<GymMembershipPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -38,7 +37,7 @@ export default function GymMembershipPlansPage({ params }: { params: { gymId: st
   const fetchPlans = async () => {
     try {
       setIsLoading(true)
-      const res = await api.get(`/api/gyms/membership-plans/?gym_slug=${params.gymId}`)
+      const res = await api.get(`/api/gyms/membership-plans/?gym_slug=${gymId}`)
       setPlans((res as any).results || res)
     } catch (error) {
       toast.error('Error al cargar los planes')
@@ -53,7 +52,7 @@ export default function GymMembershipPlansPage({ params }: { params: { gymId: st
       setName(plan.name)
       setDescription(plan.description)
       setPrice(plan.price)
-      setDurationDays(plan.durationDays?.toString() || plan.duration_days?.toString() || '30')
+      setDurationDays(plan.duration_days?.toString() || '30')
       setFeatures(plan.features?.length ? plan.features : [''])
       setIsActive(plan.is_active)
     } else {
