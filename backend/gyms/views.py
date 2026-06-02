@@ -1105,10 +1105,32 @@ class GymSubscriptionViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.role not in [User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN]:
             raise PermissionDenied("No tienes permisos para crear suscripciones.")
+
         if user.role == User.Role.GYM_ADMIN and user.gym_id:
-            serializer.save(gym=user.gym)
-            return
-        serializer.save()
+            subscription = serializer.save(gym=user.gym)
+        else:
+            subscription = serializer.save()
+
+        plan = subscription.plan
+        if plan and not subscription.end_date:
+            subscription.end_date = subscription.start_date + timedelta(days=plan.duration_days)
+            subscription.save(update_fields=["end_date"])
+
+        if plan:
+            try:
+                GymPayment.objects.create(
+                    gym=subscription.gym,
+                    athlete=subscription.athlete,
+                    subscription=subscription,
+                    amount=plan.price,
+                    status="success",
+                    payment_method="cash",
+                    paid_at=timezone.now(),
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to create GymPayment for subscription {subscription.id}: {e}")
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -1437,18 +1459,21 @@ def gym_dashboard_stats(request):
     except Exception:
         pass
 
-    expiring_soon = athletes.filter(
-        membership_plan__isnull=False,
-        is_active=True,
-    ).select_related("membership_plan")[:5]
+    from .models import GymSubscription
+    expiring_subscriptions = GymSubscription.objects.filter(
+        gym_id=gym_id,
+        status="active",
+        end_date__gte=today,
+    ).select_related("athlete", "plan")[:5]
 
     expiring_list = []
-    for a in expiring_soon:
-        plan_name = a.membership_plan.name if a.membership_plan else "Sin plan"
+    for s in expiring_subscriptions:
         expiring_list.append({
-            "id": str(a.id),
-            "name": f"{a.first_name} {a.last_name}",
-            "plan": plan_name,
+            "id": str(s.athlete.id),
+            "name": f"{s.athlete.first_name} {s.athlete.last_name}",
+            "plan": s.plan.name if s.plan else "Sin plan",
+            "end_date": s.end_date.isoformat() if s.end_date else None,
+            "days_remaining": (s.end_date - today).days if s.end_date else None,
         })
 
     coaches_count = User.objects.filter(gym_id=gym_id, role=User.Role.COACH, is_active=True).count()

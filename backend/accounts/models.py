@@ -1,6 +1,7 @@
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 from core.models import BaseModel
 
@@ -54,14 +55,6 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(max_length=150)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.ATHLETE)
     dni = models.CharField(max_length=20, null=True, blank=True)
-    membership_plan = models.ForeignKey(
-        "gyms.GymMembershipPlan",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="users",
-        help_text="Plan de membresía del atleta en este gimnasio"
-    )
     phone = models.CharField(max_length=20, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -90,6 +83,10 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         indexes = [
             models.Index(fields=["gym", "role"]),
         ]
+
+    @property
+    def active_membership(self):
+        return self.gym_subscriptions.filter(status="active").select_related("plan").first()
 
     def __str__(self) -> str:
         return self.email

@@ -166,7 +166,7 @@ export default function GymMembershipPlansPage({ params }: { params: Promise<{ g
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-slate-900">Beneficios:</p>
                   <ul className="space-y-1">
-                    {plan.features?.map((f, i) => (
+                    {Array.isArray(plan.features) && plan.features.map((f, i) => (
                       <li key={i} className="text-sm text-slate-600 flex items-start">
                         <Check className="h-4 w-4 text-emerald-500 mr-2 shrink-0 mt-0.5" />
                         <span>{f}</span>

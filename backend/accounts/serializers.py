@@ -3,11 +3,14 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from gyms.serializers import GymSubscriptionSerializer
+
 User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
     gym_slug = serializers.CharField(source='gym.slug', read_only=True)
+    active_membership = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
@@ -21,14 +24,20 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "gym",
             "gym_slug",
-            "membership_plan",
+            "active_membership",
             "puntos",
             "nivel",
             "date_joined",
             "is_google_account",
             "google_picture",
         ]
-        read_only_fields = ["id", "date_joined", "puntos", "nivel", "is_google_account", "google_picture", "gym_slug"]
+        read_only_fields = ["id", "date_joined", "puntos", "nivel", "is_google_account", "google_picture", "gym_slug", "active_membership"]
+
+    def get_active_membership(self, obj):
+        membership = obj.active_membership
+        if membership:
+            return GymSubscriptionSerializer(membership).data
+        return None
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
@@ -49,7 +58,6 @@ class PasswordChangeSerializer(serializers.Serializer):
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
     gym_slug = serializers.CharField(write_only=True, required=True)
-    membership_plan_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -59,7 +67,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             "last_name",
             "role",
             "gym_slug",
-            "membership_plan_id",
             "password",
         ]
 
@@ -89,14 +96,6 @@ class RegisterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("El gimnasio ha alcanzado el límite máximo de coaches.")
             if role == "nutritionist" and User.objects.filter(gym=gym, role="nutritionist").count() >= gym.max_nutritionists:
                 raise serializers.ValidationError("El gimnasio ha alcanzado el límite máximo de nutricionistas.")
-
-        membership_plan_id = attrs.pop("membership_plan_id", None)
-        if membership_plan_id:
-            from gyms.models import GymMembershipPlan
-            plan = GymMembershipPlan.objects.filter(id=membership_plan_id, is_active=True).first()
-            if not plan:
-                raise serializers.ValidationError({"membership_plan_id": "Plan no válido."})
-            attrs["membership_plan"] = plan
 
         return attrs
 

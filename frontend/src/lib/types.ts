@@ -50,8 +50,7 @@ export type User = {
   is_google_account?: boolean
   phone?: string | null
   dni?: string | null
-  membership_plan?: number | null
-  plan?: string
+  active_membership?: GymSubscription | null
   date_joined?: string
 }
 
@@ -209,6 +208,8 @@ export type GymSubscription = {
   start_date: string
   end_date: string | null
   auto_renew: boolean
+  days_remaining: number | null
+  is_expired: boolean
   created_at: string
   updated_at: string
 }
@@ -362,7 +363,7 @@ export type DashboardStats = {
   sessions_today: number
   active_coaches: number
   active_nutritionists: number
-  expiring_memberships: { id: string; name: string; plan: string }[]
+  expiring_memberships: { id: string; name: string; plan: string; end_date: string | null; days_remaining: number | null }[]
   date: string
 }
 

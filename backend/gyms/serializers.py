@@ -90,6 +90,16 @@ class PublicGymSerializer(serializers.ModelSerializer):
 
 class GymMembershipPlanSerializer(serializers.ModelSerializer):
     gym_name = serializers.CharField(source="gym.name", read_only=True)
+    features = serializers.JSONField(default=list)
+
+    def validate_features(self, value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [v.strip() for v in value.split(",") if v.strip()]
+        if not isinstance(value, list):
+            raise serializers.ValidationError("features debe ser una lista")
+        return value
 
     class Meta:
         model = GymMembershipPlan
@@ -243,15 +253,17 @@ class GymSubscriptionSerializer(serializers.ModelSerializer):
     athlete_name = serializers.SerializerMethodField()
     plan_name = serializers.SerializerMethodField()
     plan_price = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = GymSubscription
         fields = [
             "id", "athlete", "athlete_name", "gym", "plan", "plan_name",
             "plan_price", "status", "start_date", "end_date", "auto_renew",
-            "created_at", "updated_at",
+            "days_remaining", "is_expired", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "athlete_name", "plan_name", "plan_price"]
+        read_only_fields = ["id", "created_at", "updated_at", "athlete_name", "plan_name", "plan_price", "days_remaining", "is_expired", "gym"]
 
     def get_athlete_name(self, obj):
         return f"{obj.athlete.first_name} {obj.athlete.last_name}".strip() or obj.athlete.email
@@ -261,6 +273,19 @@ class GymSubscriptionSerializer(serializers.ModelSerializer):
 
     def get_plan_price(self, obj):
         return float(obj.plan.price) if obj.plan else None
+
+    def get_days_remaining(self, obj):
+        if not obj.end_date:
+            return None
+        from datetime import date
+        delta = obj.end_date - date.today()
+        return delta.days if delta.days >= 0 else 0
+
+    def get_is_expired(self, obj):
+        if not obj.end_date:
+            return False
+        from datetime import date
+        return obj.end_date < date.today()
 
 
 class GymPaymentSerializer(serializers.ModelSerializer):

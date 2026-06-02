@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -52,10 +52,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { setTokens, setStoredUser, dispatchAuthEvent, getStoredUser, backupAdminTokens } from '@/lib/auth'
 import { showError, showSuccess } from '@/lib/toast'
-import type { User, PaginatedResponse, NutritionistAssignment } from '@/lib/types'
+import type { User, PaginatedResponse, GymMembershipPlan, GymSubscription } from '@/lib/types'
 
 const athleteSchema = z.object({
   first_name: z.string().min(1, 'El nombre es obligatorio').max(50),
@@ -63,9 +63,10 @@ const athleteSchema = z.object({
   dni: z.string().max(20).optional(),
   phone: z.string().max(30).optional(),
   email: z.string().email('Correo inválido').min(1, 'El correo es obligatorio'),
-  plan: z.string(),
+  membership_plan_id: z.string().optional(),
+  start_date: z.string().optional(),
 })
-type AthleteFormData = z.infer<typeof athleteSchema>
+export type AthleteFormData = z.infer<typeof athleteSchema>
 
 export default function AthletesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const router = useRouter()
@@ -83,10 +84,12 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [membershipPlans, setMembershipPlans] = useState<GymMembershipPlan[]>([])
+  const isSubmittingRef = useRef(false)
 
   const athleteForm = useForm<AthleteFormData>({
     resolver: zodResolver(athleteSchema),
-    defaultValues: { first_name: '', last_name: '', dni: '', phone: '', email: '', plan: 'mensual' },
+    defaultValues: { first_name: '', last_name: '', dni: '', phone: '', email: '', membership_plan_id: '', start_date: '' },
   })
 
   const [coaches, setCoaches] = useState<User[]>([])
@@ -120,7 +123,17 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
     }
     fetchAssignments()
     fetchNutritionAssignments()
+    fetchMembershipPlans()
   }, [])
+
+  const fetchMembershipPlans = async () => {
+    try {
+      const data = await api.get<PaginatedResponse<GymMembershipPlan>>("/api/gyms/membership-plans/")
+      setMembershipPlans(Array.isArray(data) ? data : data.results || [])
+    } catch (error) {
+      console.error('Error fetching membership plans:', error)
+    }
+  }
 
   const fetchCoaches = async () => {
     try {
@@ -269,17 +282,62 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   }
 
   const handleCreateAthlete = async (data: AthleteFormData) => {
+    if (isSubmittingRef.current) return
+    isSubmittingRef.current = true
+    setIsSubmitting(true)
     try {
-      setIsSubmitting(true)
-      await api.post("/api/auth/gym-members/", { ...data, role: 'athlete', dni: data.dni || undefined, phone: data.phone || undefined })
+      const payload: any = {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        role: 'athlete',
+      }
+      if (data.dni) payload.dni = data.dni
+      if (data.phone) payload.phone = data.phone
+      const newAthlete = await api.post<any>("/api/auth/gym-members/", payload)
+      console.log('newAthlete response:', newAthlete)
+      if (data.membership_plan_id) {
+        const subPayload = {
+          athlete: newAthlete.id || newAthlete.user_id,
+          plan: data.membership_plan_id,
+          start_date: data.start_date || new Date().toISOString().slice(0, 10),
+        }
+        console.log('Sub payload:', subPayload)
+        try {
+          await api.post("/api/gyms/subscriptions/", subPayload)
+        } catch (subError: any) {
+            console.error('Subscription full error:', subError)
+            if (subError instanceof ApiError) {
+              console.error('Status:', subError.status, 'Data:', JSON.stringify(subError.data))
+            }
+            showError(subError, 'Atleta creado pero no se pudo asignar el plan')
+          }
+      }
       setIsModalOpen(false)
       athleteForm.reset()
-      fetchAthletes()
       showSuccess('Atleta registrado correctamente.')
     } catch (error: any) {
       showError(error, 'Error al crear atleta')
     } finally {
       setIsSubmitting(false)
+      isSubmittingRef.current = false
+      fetchAthletes()
+    }
+  }
+
+  const handleDeactivateAthlete = async (athleteId: string) => {
+    if (!confirm('¿Estás seguro de dar de baja a este atleta? Esta acción cancelará su suscripción.')) return
+    try {
+      const athlete = athletes.find(a => a.id === athleteId)
+      const sub = athlete?.active_membership
+      if (sub && sub.status === 'active') {
+        await api.patch(`/api/gyms/subscriptions/${sub.id}/`, { status: 'canceled' })
+      }
+      await api.delete(`/api/auth/gym-members/${athleteId}/`)
+      fetchAthletes()
+      showSuccess('Atleta dado de baja correctamente.')
+    } catch (error: any) {
+      showError(error, 'Error al dar de baja al atleta')
     }
   }
 
@@ -442,22 +500,39 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                   )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="plan" className="text-slate-700 font-bold ml-1 text-xs uppercase tracking-wider">Plan de Suscripción</Label>
-                  <Select 
-                    value={athleteForm.watch('plan')} 
-                    onValueChange={(value) => athleteForm.setValue('plan', value)}
-                  >
-                    <SelectTrigger className="rounded-xl border-slate-200 h-11 focus:ring-emerald-500/10 bg-white">
-                      <SelectValue placeholder="Selecciona un plan" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-xl bg-white p-2">
-                      <SelectItem value="mensual" className="rounded-xl py-3 cursor-pointer">Plan Mensual</SelectItem>
-                      <SelectItem value="trimestral" className="rounded-xl py-3 cursor-pointer">Plan Trimestral</SelectItem>
-                      <SelectItem value="semestral" className="rounded-xl py-3 cursor-pointer">Plan Semestral</SelectItem>
-                      <SelectItem value="anual" className="rounded-xl py-3 cursor-pointer">Plan Anual</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="membership_plan_id" className="text-slate-700 font-bold ml-1 text-xs uppercase tracking-wider">Plan</Label>
+                    <Select 
+                      value={athleteForm.watch('membership_plan_id')} 
+                      onValueChange={(value) => athleteForm.setValue('membership_plan_id', value)}
+                    >
+                      <SelectTrigger className="rounded-xl border-slate-200 h-11 focus:ring-emerald-500/10 bg-white">
+                        <SelectValue placeholder="Sin plan" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-2xl border-none shadow-xl bg-white p-2">
+                        {membershipPlans.map((plan) => (
+                          <SelectItem key={plan.id} value={String(plan.id)} className="rounded-xl py-3 cursor-pointer">
+                            {plan.name} — S/{plan.price}
+                          </SelectItem>
+                        ))}
+                        {membershipPlans.length === 0 && (
+                          <SelectItem value="none" disabled className="text-slate-400">
+                            No hay planes disponibles
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="start_date" className="text-slate-700 font-bold ml-1 text-xs uppercase tracking-wider">Inicio</Label>
+                    <Input 
+                      id="start_date" 
+                      type="date"
+                      className="rounded-xl border-slate-200 h-11 focus:ring-emerald-500/10"
+                      {...athleteForm.register('start_date')}
+                    />
+                  </div>
                 </div>
                 <div className="pt-4 flex gap-3">
                   <Button 
@@ -660,9 +735,28 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                         </div>
                       </td>
                       <td className="px-8 py-5">
-                        <Badge variant="outline" className="capitalize border-slate-200 text-slate-600 px-3 py-1 font-semibold">
-                          {athlete.plan === 'none' ? 'Sin Plan' : athlete.plan}
-                        </Badge>
+                        {athlete.active_membership ? (
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className={`capitalize px-3 py-1 font-semibold w-fit ${
+                              athlete.active_membership.status === 'active'
+                                ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
+                                : athlete.active_membership.status === 'expired'
+                                ? 'border-rose-200 text-rose-700 bg-rose-50'
+                                : 'border-slate-200 text-slate-600'
+                            }`}>
+                              {athlete.active_membership.plan_name || 'Sin Plan'}
+                            </Badge>
+                            <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                              athlete.active_membership.status === 'active' ? 'text-emerald-600' : 'text-rose-500'
+                            }`}>
+                              {athlete.active_membership.status === 'active'
+                                ? `${athlete.active_membership.days_remaining ?? '?'} días restantes`
+                                : athlete.active_membership.status}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-medium">Sin Plan</span>
+                        )}
                       </td>
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-2">
@@ -787,7 +881,8 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                                   )}
                                 </>
                               )}
-                              <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-rose-50 group/item text-rose-600">
+                              <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-rose-50 group/item text-rose-600"
+                                onClick={() => handleDeactivateAthlete(athlete.id)}>
                                 <div className="p-2 bg-rose-50 rounded-lg group-hover/item:bg-rose-600 group-hover/item:text-white transition-colors">
                                   <Trash2 className="w-4 h-4" />
                                 </div>
