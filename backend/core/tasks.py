@@ -2,9 +2,6 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from django_q.tasks import async_task
-
-
 def send_welcome_gym_email(admin_email: str, gym_name: str, invite_link: str) -> None:
     context = {
         'gym_name': gym_name,
@@ -60,12 +57,12 @@ def send_welcome_staff_email(staff_email: str, staff_name: str, gym_name: str, r
 
 
 def send_welcome_gym_async(admin_email: str, gym_name: str, invite_link: str) -> None:
-    async_task('core.tasks.send_welcome_gym_email', admin_email, gym_name, invite_link)
+    send_welcome_gym_email(admin_email, gym_name, invite_link)
 
 
 def send_welcome_athlete_async(athlete_email: str, athlete_name: str, gym_name: str, invite_link: str) -> None:
-    async_task('core.tasks.send_welcome_athlete_email', athlete_email, athlete_name, gym_name, invite_link)
+    send_welcome_athlete_email(athlete_email, athlete_name, gym_name, invite_link)
 
 
 def send_welcome_staff_async(staff_email: str, staff_name: str, gym_name: str, role_name: str, invite_link: str) -> None:
-    async_task('core.tasks.send_welcome_staff_email', staff_email, staff_name, gym_name, role_name, invite_link)
+    send_welcome_staff_email(staff_email, staff_name, gym_name, role_name, invite_link)
