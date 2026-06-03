@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import CustomTokenObtainPairSerializer
 from .views import (
     ChangePasswordView,
+    CompleteGoogleRegistrationView,
     GoogleCallbackView,
     GoogleDisconnectView,
     GoogleLoginView,
@@ -38,6 +39,7 @@ urlpatterns = [
     path("google/login/", GoogleLoginView.as_view(), name="google_login"),
     path("google/callback/", GoogleCallbackView.as_view(), name="google_callback"),
     path("google/disconnect/", GoogleDisconnectView.as_view(), name="google_disconnect"),
+    path("google/complete-registration/", CompleteGoogleRegistrationView.as_view(), name="google_complete_registration"),
     path("impersonate/", ImpersonateView.as_view(), name="impersonate"),
     path("impersonate-staff/", ImpersonateStaffView.as_view(), name="impersonate_staff"),
     path("role-redirect/", RoleRedirectView.as_view(), name="role_redirect"),

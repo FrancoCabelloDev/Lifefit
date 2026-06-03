@@ -260,7 +260,25 @@ class GoogleCallbackView(APIView):
         first_name = user_data.get("given_name") or user_data.get("name") or ""
         last_name = user_data.get("family_name") or ""
         picture = user_data.get("picture")
+        google_id = user_data.get("sub")
 
+        # ── Flujo /unirse: NO crear cuenta aún, redirigir a confirmación + pago ──
+        if gym_slug and plan_id:
+            pending_payload = {
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "picture": picture or "",
+                "google_id": google_id,
+                "gym_slug": gym_slug,
+                "plan_id": plan_id,
+                "nonce": get_random_string(8),
+            }
+            pending_token = base64.urlsafe_b64encode(json.dumps(pending_payload).encode()).decode()
+            frontend_confirm = f"{settings.FRONTEND_URL.rstrip('/')}/unirse/confirmar"
+            return redirect(f"{frontend_confirm}?token={pending_token}")
+
+        # ── Flujo login normal: crear/actualizar usuario y emitir tokens ──
         user = User.objects.filter(email=email).first()
         if not user:
             user = User.objects.create_user(
@@ -278,36 +296,10 @@ class GoogleCallbackView(APIView):
         if not user.last_name:
             user.last_name = last_name
 
-        user.google_id = user_data.get("sub")
+        user.google_id = google_id
         user.google_picture = picture
         user.is_google_account = True
         user.save(update_fields=["first_name", "last_name", "google_id", "google_picture", "is_google_account", "updated_at"])
-
-        # Asignar gym y plan si vienen del flujo /unirse
-        if gym_slug:
-            from gyms.models import Gym, GymSubscription, GymMembershipPlan
-            from django.utils import timezone
-            from datetime import date, timedelta
-            gym = Gym.objects.filter(slug=gym_slug, deleted_at__isnull=True).first()
-            if gym and not user.gym_id:
-                user.gym = gym
-                user.save(update_fields=["gym", "updated_at"])
-
-            if gym and plan_id:
-                plan = GymMembershipPlan.objects.filter(id=plan_id, gym=gym, is_active=True).first()
-                if plan:
-                    # Cancelar membresías activas previas para evitar duplicados
-                    GymSubscription.objects.filter(athlete=user, gym=gym, status="active").update(status="canceled")
-                    GymSubscription.objects.create(
-                        athlete=user,
-                        gym=gym,
-                        plan=plan,
-                        status="active",
-                        start_date=date.today(),
-                        end_date=date.today() + timedelta(days=plan.duration_days),
-                    )
-                    # Redirigir al panel del gym del atleta
-                    next_path = f"/{gym_slug}/panel"
 
         refresh = RefreshToken.for_user(user)
         frontend_callback = f"{settings.FRONTEND_URL.rstrip('/')}/ingresar/google/callback"
@@ -316,10 +308,96 @@ class GoogleCallbackView(APIView):
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
                 "next": next_path,
-                "gym_slug": gym_slug,
             }
         )
         return redirect(f"{frontend_callback}?{query}")
+
+
+class CompleteGoogleRegistrationView(APIView):
+    """
+    Completa el registro de un atleta que viene del flujo /unirse con Google.
+    Se llama DESPUÉS de confirmar el pago con IziPay.
+    Recibe el token pendiente, crea la cuenta y activa la membresía.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        from gyms.models import Gym, GymSubscription, GymMembershipPlan
+        from datetime import date, timedelta
+
+        token = request.data.get("token")
+        if not token:
+            return Response({"detail": "Token requerido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payload = _decode_state_token(token)
+        except Exception:
+            return Response({"detail": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = payload.get("email")
+        first_name = payload.get("first_name", "")
+        last_name = payload.get("last_name", "")
+        picture = payload.get("picture", "")
+        google_id = payload.get("google_id", "")
+        gym_slug = payload.get("gym_slug", "")
+        plan_id = payload.get("plan_id", "")
+
+        if not email or not gym_slug or not plan_id:
+            return Response({"detail": "Datos incompletos en el token."}, status=status.HTTP_400_BAD_REQUEST)
+
+        gym = Gym.objects.filter(slug=gym_slug, deleted_at__isnull=True).first()
+        if not gym:
+            return Response({"detail": "Gimnasio no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        plan = GymMembershipPlan.objects.filter(id=plan_id, gym=gym, is_active=True).first()
+        if not plan:
+            return Response({"detail": "Plan no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Crear usuario si no existe
+        user = User.objects.filter(email=email).first()
+        if not user:
+            user = User.objects.create_user(
+                email=email,
+                password=None,
+                first_name=first_name,
+                last_name=last_name,
+                role=User.Role.ATHLETE,
+                is_active=True,
+                is_google_account=True,
+                gym=gym,
+            )
+        else:
+            # Si ya existe, actualizar gym si no tenía
+            if not user.gym_id:
+                user.gym = gym
+
+        user.google_id = google_id
+        user.google_picture = picture
+        user.is_google_account = True
+        user.save(update_fields=["gym", "google_id", "google_picture", "is_google_account", "updated_at"])
+
+        # Cancelar membresías activas previas y crear la nueva
+        GymSubscription.objects.filter(athlete=user, gym=gym, status="active").update(status="canceled")
+        GymSubscription.objects.create(
+            athlete=user,
+            gym=gym,
+            plan=plan,
+            status="active",
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=plan.duration_days),
+        )
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "gym_slug": gym_slug,
+            "user": {
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+            }
+        }, status=status.HTTP_201_CREATED)
 
 
 class GoogleDisconnectView(APIView):
