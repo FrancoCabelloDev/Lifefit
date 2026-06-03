@@ -11,10 +11,13 @@ import { api } from '@/lib/api'
 import type { NutritionPlan, MealTemplate, UserNutritionPlan } from '@/lib/types'
 import { showError } from '@/lib/toast'
 import MealLogger from '@/components/nutrition/MealLogger'
+import { useSubscriptionTier } from '@/lib/hooks'
 
 export default function MiNutricionPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
+  const { tier } = useSubscriptionTier()
+  const isBasic = tier !== 'premium'
 
   const [assignment, setAssignment] = useState<UserNutritionPlan | null>(null)
   const [plan, setPlan] = useState<NutritionPlan | null>(null)
@@ -77,13 +80,31 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Mi Plan Nutricional</h1>
-          <p className="text-slate-500 mt-2 text-lg">Tu plan de alimentación personalizado</p>
+          <p className="text-slate-500 mt-2 text-lg">Tu plan de alimentación</p>
         </div>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-12 text-center">
             <UtensilsCrossed className="w-16 h-16 mx-auto text-slate-300 mb-4" />
             <h3 className="text-lg font-semibold text-slate-700">Sin plan activo</h3>
-            <p className="text-slate-500 mt-1">Tu coach o nutricionista aún no te ha asignado un plan nutricional.</p>
+            <p className="text-slate-500 mt-1">
+              {isBasic
+                ? 'Aún no tienes un plan nutricional asignado. Con el Plan Básico puedes solicitar uno general a tu gimnasio.'
+                : 'Tu nutricionista aún no te ha asignado un plan nutricional.'}
+            </p>
+            {isBasic && (
+              <div className="mt-6 p-4 bg-slate-50 rounded-xl text-left max-w-sm mx-auto">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Consejos generales</p>
+                <ul className="text-sm text-slate-600 space-y-1">
+                  <li>• Consume al menos 3 comidas principales al día</li>
+                  <li>• Bebe 2L de agua diarios</li>
+                  <li>• Incluye proteínas en cada comida</li>
+                  <li>• Evita ultraprocesados y azúcares añadidos</li>
+                </ul>
+                <p className="text-xs text-amber-600 font-medium mt-3">
+                  Actualiza a Premium para obtener un plan personalizado con tu nutricionista.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

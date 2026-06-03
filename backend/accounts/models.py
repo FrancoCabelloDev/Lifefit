@@ -73,6 +73,25 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     google_picture = models.URLField(blank=True, null=True)
     is_google_account = models.BooleanField(default=False)
 
+    # Perfil profesional (coach / nutritionist)
+    profile_picture = models.ImageField(upload_to="users/profiles/", null=True, blank=True)
+    bio = models.TextField(blank=True, max_length=600)
+    specialty = models.CharField(max_length=100, blank=True)
+    years_experience = models.PositiveSmallIntegerField(null=True, blank=True)
+    max_clients = models.PositiveSmallIntegerField(default=20)
+
+    # Objetivos del atleta
+    class FitnessGoal(models.TextChoices):
+        WEIGHT_LOSS     = "weight_loss",     "Pérdida de peso"
+        MUSCLE_GAIN     = "muscle_gain",     "Ganancia muscular"
+        ENDURANCE       = "endurance",       "Resistencia"
+        FLEXIBILITY     = "flexibility",     "Flexibilidad"
+        SPORT_PERF      = "sport_perf",      "Rendimiento deportivo"
+        GENERAL_FITNESS = "general_fitness", "Fitness general"
+
+    fitness_goal    = models.CharField(max_length=30, choices=FitnessGoal.choices, blank=True)
+    goal_notes      = models.TextField(blank=True, max_length=400)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["first_name", "last_name"]
 

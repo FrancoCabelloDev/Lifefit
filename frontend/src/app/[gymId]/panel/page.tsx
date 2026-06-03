@@ -15,6 +15,10 @@ import { TableSkeleton, ChartSkeleton, StatsCardSkeleton, CardSkeleton } from '@
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import type { User, DashboardStats, Role, CoachDashboard, CoachAthlete, NutritionistDashboard, NutritionistAthlete } from '@/lib/types'
+import { useSubscriptionTier } from '@/lib/hooks'
+import NutritionistDashboardView from '@/components/nutritionist/NutritionistDashboard'
+import CoachDashboardView from '@/components/coach/CoachDashboard'
+import { BookUser, UserCheck } from 'lucide-react'
 
 export default function GymDashboard({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
@@ -51,6 +55,27 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
     queryKey: ['athlete-dashboard', gymId],
     queryFn: () => api.get<any>("/api/challenges/progress/my_dashboard/"),
     enabled: user.role === 'athlete',
+  })
+
+  const myTeamQuery = useQuery({
+    queryKey: ['my-team', gymId],
+    queryFn: async () => {
+      const [coachDir, nutriDir, coachAssign, nutriAssign] = await Promise.all([
+        api.get<any>('/api/gyms/staff-directory/', { params: { role: 'coach' } }),
+        api.get<any>('/api/gyms/staff-directory/', { params: { role: 'nutritionist' } }),
+        api.get<any>('/api/gyms/coach-assignments/', { params: { is_active: 'true' } }),
+        api.get<any>('/api/gyms/nutritionist-assignments/', { params: { is_active: 'true' } }),
+      ])
+      const coaches: any[] = Array.isArray(coachDir) ? coachDir : []
+      const nutris: any[] = Array.isArray(nutriDir) ? nutriDir : []
+      const activeCoach = (Array.isArray(coachAssign) ? coachAssign : coachAssign?.results || []).find((a: any) => a.is_active)
+      const activeNutri = (Array.isArray(nutriAssign) ? nutriAssign : nutriAssign?.results || []).find((a: any) => a.is_active)
+      const myCoach = activeCoach ? coaches.find((c: any) => c.id === activeCoach.coach) ?? null : null
+      const myNutri = activeNutri ? nutris.find((n: any) => n.id === activeNutri.nutritionist) ?? null : null
+      return { myCoach, myNutri }
+    },
+    enabled: user.role === 'athlete',
+    staleTime: 30000,
   })
 
   const coachDashQuery = useQuery({
@@ -108,582 +133,16 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
   const nutriTotalPages = nutriAthletesQuery.data?.total_pages || 1
 
   if (user?.role === 'coach') {
-    const cd = coachDashQuery.data
-
-    if (coachDashQuery.isLoading) {
-      return (
-        <div className="space-y-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Hola, {adminName} 👋
-            </h1>
-            <p className="text-slate-500 mt-2 text-lg">
-              Panel de entrenamiento de <span className="font-semibold text-emerald-700">{gymName}</span>.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => <StatsCardSkeleton key={i} />)}
-          </div>
-          <TableSkeleton rows={4} cols={6} />
-        </div>
-      )
-    }
-
-    if (!cd) {
-      return (
-        <div className="space-y-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Hola, {adminName} 👋
-            </h1>
-            <p className="text-slate-500 mt-2 text-lg">
-              Panel de entrenamiento de <span className="font-semibold text-emerald-700">{gymName}</span>.
-            </p>
-          </div>
-          <p className="text-slate-500">Error al cargar datos del dashboard.</p>
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Hola, {adminName} 👋
-          </h1>
-          <p className="text-slate-500 mt-2 text-lg">
-            Panel de entrenamiento de <span className="font-semibold text-emerald-700">{gymName}</span>.
-          </p>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Atletas Asignados</p>
-                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                  <Users className="h-5 w-5 text-purple-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{cd.total_athletes}</h2>
-              <p className="text-xs text-slate-500 mt-1">{cd.with_active_routine} con rutina activa</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Sesiones Semana</p>
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Activity className="h-5 w-5 text-blue-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{cd.sessions_week}</h2>
-              <p className="text-xs text-slate-500 mt-1">{cd.sessions_today} registradas hoy</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Planes Nutricionales</p>
-                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                  <Apple className="h-5 w-5 text-amber-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{cd.with_active_plan}</h2>
-              <p className="text-xs text-slate-500 mt-1">atletas con plan activo</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Retos Activos</p>
-                <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <Target className="h-5 w-5 text-indigo-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{cd.active_challenges}</h2>
-              <p className="text-xs text-slate-500 mt-1">atletas participando</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg font-semibold text-slate-800">Mis Atletas</CardTitle>
-                <CardDescription>{coachAthletesQuery.data?.total ?? coachAthletes.length} atletas asignados</CardDescription>
-              </div>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Buscar atleta..."
-                  className="pl-10 h-9 text-sm rounded-xl border-slate-200"
-                  value={coachSearch}
-                  onChange={(e) => { setCoachSearch(e.target.value); setCoachPage(1) }}
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {coachAthletesQuery.isLoading ? (
-              <TableSkeleton rows={4} cols={6} />
-            ) : coachAthletes.length > 0 ? (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-50/50 border-b border-slate-100">
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Atleta</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Nivel</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Rutina</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Plan Nutricional</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sesiones (7d)</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-right">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {coachAthletes.map((a) => (
-                        <tr key={a.id} className="hover:bg-slate-50/80 transition-all">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
-                                {a.first_name[0]}{a.last_name[0]}
-                              </div>
-                              <div>
-                                <div className="font-semibold text-slate-900">{a.first_name} {a.last_name}</div>
-                                <div className="text-xs text-slate-400">{a.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 font-bold">
-                              Nvl {a.nivel}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4">
-                            {a.has_active_routine ? (
-                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                {a.routine_name}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-slate-400">Sin asignar</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {a.has_active_plan ? (
-                              <Badge className="bg-amber-50 text-amber-700 border-amber-100">
-                                {a.plan_name}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-slate-400">Sin plan</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`font-bold text-sm ${a.sessions_last_7_days > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                              {a.sessions_last_7_days}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${a.id}`)}
-                              className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 hover:underline"
-                            >
-                              Ver perfil
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {coachTotalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 py-4 border-t border-slate-100">
-                    <button
-                      onClick={() => setCoachPage(p => Math.max(1, p - 1))}
-                      disabled={coachPage <= 1}
-                      className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm text-slate-500">Página {coachPage} de {coachTotalPages}</span>
-                    <button
-                      onClick={() => setCoachPage(p => Math.min(coachTotalPages, p + 1))}
-                      disabled={coachPage >= coachTotalPages}
-                      className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12 text-slate-500">
-                <Users className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                <p className="font-medium">{coachSearch ? 'Sin resultados' : 'No tienes atletas asignados'}</p>
-                <p className="text-sm mt-1">{coachSearch ? 'Intenta con otro término de búsqueda.' : 'El administrador te asignará atletas próximamente.'}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg font-semibold text-slate-800">Acceso Rápido</CardTitle>
-            <CardDescription>Gestiona tus atletas y recursos</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 grid gap-4 md:grid-cols-3">
-            <button onClick={() => router.push(`/${gymId}/panel/gestion/atletas`)} className="flex items-center gap-4 p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Mis Atletas</p>
-                <p className="text-xs text-slate-500">Ver y gestionar asignaciones</p>
-              </div>
-            </button>
-            <button onClick={() => router.push(`/${gymId}/panel/entrenamiento/rutinas`)} className="flex items-center gap-4 p-4 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                <Dumbbell className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Rutinas</p>
-                <p className="text-xs text-slate-500">Crear y asignar entrenamientos</p>
-              </div>
-            </button>
-            <button onClick={() => router.push(`/${gymId}/panel/entrenamiento/ejercicios`)} className="flex items-center gap-4 p-4 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <ListOrdered className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Ejercicios</p>
-                <p className="text-xs text-slate-500">Catálogo de ejercicios</p>
-              </div>
-            </button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    return <CoachDashboardView gymId={gymId} user={user} />
   }
+
 
   if (user?.role === 'nutritionist') {
-    const nd = nutriDashQuery.data
-
-    if (nutriDashQuery.isLoading) {
-      return (
-        <div className="space-y-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Hola, {adminName} 👋
-            </h1>
-            <p className="text-slate-500 mt-2 text-lg">
-              Panel de nutrición de <span className="font-semibold text-emerald-700">{gymName}</span>.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => <StatsCardSkeleton key={i} />)}
-          </div>
-          <ChartSkeleton />
-          <TableSkeleton rows={4} cols={6} />
-        </div>
-      )
-    }
-
-    if (!nd) {
-      return (
-        <div className="space-y-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Hola, {adminName} 👋
-            </h1>
-            <p className="text-slate-500 mt-2 text-lg">
-              Panel de nutrición de <span className="font-semibold text-emerald-700">{gymName}</span>.
-            </p>
-          </div>
-          <p className="text-slate-500">Error al cargar datos del dashboard.</p>
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Hola, {adminName} 👋
-          </h1>
-          <p className="text-slate-500 mt-2 text-lg">
-            Panel de nutrición de <span className="font-semibold text-emerald-700">{gymName}</span>.
-          </p>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Atletas Asignados</p>
-                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                  <Users className="h-5 w-5 text-purple-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{nd.total_athletes}</h2>
-              <p className="text-xs text-slate-500 mt-1">{nd.with_active_plan} con plan activo</p>
-              <p className="text-xs text-slate-500">{nd.completed_plans} planes completados</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Cumplimiento Promedio</p>
-                <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                  <TrendingUp className="h-5 w-5 text-emerald-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{nd.avg_compliance_percentage}%</h2>
-              <p className="text-xs text-slate-500 mt-1">{nd.meals_logged_week} comidas registradas esta semana</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Alerta Bajo Cumplimiento</p>
-                <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5 text-rose-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{nd.low_compliance_athletes}</h2>
-              <p className="text-xs text-slate-500 mt-1">atletas con &lt;50% cumplimiento</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Planes Nutricionales</p>
-                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                  <Apple className="h-5 w-5 text-amber-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{nd.with_active_plan}</h2>
-              <p className="text-xs text-slate-500 mt-1">planes activos asignados</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg font-semibold text-slate-800">Cumplimiento Diario (7 días)</CardTitle>
-            <CardDescription>Porcentaje de comidas completadas por día</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            {complianceChartQuery.isLoading ? (
-              <ChartSkeleton />
-            ) : complianceChartQuery.data && complianceChartQuery.data.length > 0 ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={complianceChartQuery.data} barCategoryGap="20%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11, fill: '#94a3b8' }}
-                      tickFormatter={(v: string) => {
-                        const d = new Date(v + 'T00:00:00')
-                        return d.toLocaleDateString('es', { weekday: 'short' })
-                      }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      domain={[0, 100]}
-                      tick={{ fontSize: 11, fill: '#94a3b8' }}
-                      unit="%"
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
-                      labelFormatter={(v: any) => {
-                        const d = new Date(String(v) + 'T00:00:00')
-                        return d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })
-                      }}
-                      formatter={(value: any) => [`${value}%`, 'Cumplimiento']}
-                    />
-                    <Bar dataKey="compliance" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
-                No hay datos de cumplimiento disponibles
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg font-semibold text-slate-800">Mis Atletas</CardTitle>
-                <CardDescription>{nutriAthletesQuery.data?.total ?? nutriAthletes.length} atletas asignados</CardDescription>
-              </div>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Buscar atleta..."
-                  className="pl-10 h-9 text-sm rounded-xl border-slate-200"
-                  value={nutriSearch}
-                  onChange={(e) => { setNutriSearch(e.target.value); setNutriPage(1) }}
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {nutriAthletesQuery.isLoading ? (
-              <TableSkeleton rows={4} cols={6} />
-            ) : nutriAthletes.length > 0 ? (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-50/50 border-b border-slate-100">
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Atleta</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Nivel</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Plan Activo</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Cumplimiento</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Comidas Hoy</th>
-                        <th className="px-6 py-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-right">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {nutriAthletes.map((a) => (
-                        <tr key={a.id} className="hover:bg-slate-50/80 transition-all">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
-                                {a.first_name[0]}{a.last_name[0]}
-                              </div>
-                              <div>
-                                <div className="font-semibold text-slate-900">{a.first_name} {a.last_name}</div>
-                                <div className="text-xs text-slate-400">{a.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 font-bold">
-                              Nvl {a.nivel}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-4">
-                            {a.has_active_plan ? (
-                              <Badge className="bg-amber-50 text-amber-700 border-amber-100">
-                                {a.plan_name}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-slate-400">Sin plan</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 max-w-[100px]">
-                                <Progress value={a.compliance_percentage} className={`h-2 ${a.compliance_percentage < 50 ? '[&>div]:bg-rose-500' : a.compliance_percentage < 80 ? '[&>div]:bg-amber-500' : '[&>div]:bg-emerald-500'}`} />
-                              </div>
-                              <span className={`text-xs font-bold ${a.compliance_percentage < 50 ? 'text-rose-600' : a.compliance_percentage < 80 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                {a.compliance_percentage}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`font-bold text-sm ${a.meals_completed_today > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                              {a.meals_completed_today}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${a.id}`)}
-                              className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 hover:underline"
-                            >
-                              Ver perfil
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {nutriTotalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 py-4 border-t border-slate-100">
-                    <button
-                      onClick={() => setNutriPage(p => Math.max(1, p - 1))}
-                      disabled={nutriPage <= 1}
-                      className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm text-slate-500">Página {nutriPage} de {nutriTotalPages}</span>
-                    <button
-                      onClick={() => setNutriPage(p => Math.min(nutriTotalPages, p + 1))}
-                      disabled={nutriPage >= nutriTotalPages}
-                      className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-12 text-slate-500">
-                <Users className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                <p className="font-medium">{nutriSearch ? 'Sin resultados' : 'No tienes atletas asignados'}</p>
-                <p className="text-sm mt-1">{nutriSearch ? 'Intenta con otro término de búsqueda.' : 'El administrador te asignará atletas próximamente.'}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg font-semibold text-slate-800">Acceso Rápido</CardTitle>
-            <CardDescription>Gestiona planes y atletas</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 grid gap-4 md:grid-cols-3">
-            <button onClick={() => router.push(`/${gymId}/panel/gestion/atletas`)} className="flex items-center gap-4 p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Users className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Mis Atletas</p>
-                <p className="text-xs text-slate-500">Ver progreso nutricional</p>
-              </div>
-            </button>
-            <button onClick={() => router.push(`/${gymId}/panel/nutricion/planes-nutricionales`)} className="flex items-center gap-4 p-4 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                <Apple className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Planes Nutricionales</p>
-                <p className="text-xs text-slate-500">Crear y asignar planes</p>
-              </div>
-            </button>
-            <button onClick={() => router.push(`/${gymId}/panel/gamificacion/retos`)} className="flex items-center gap-4 p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                <Target className="w-6 h-6 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Retos</p>
-                <p className="text-xs text-slate-500">Desafíos y competencias</p>
-              </div>
-            </button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    return <NutritionistDashboardView gymId={gymId} user={user} />
   }
+
+  const { tier: athleteTier } = useSubscriptionTier()
+  const isBasic = user?.role === 'athlete' && athleteTier !== 'premium'
 
   if (user?.role === 'athlete') {
     const ad = athleteDashboardQuery.data
@@ -736,26 +195,28 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-emerald-100 text-sm font-medium">NIVEL {ad.level}</p>
-              <p className="text-4xl font-bold mt-1">{ad.total_points} pts</p>
+        {!isBasic && (
+          <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-emerald-100 text-sm font-medium">NIVEL {ad.level}</p>
+                <p className="text-4xl font-bold mt-1">{ad.total_points} pts</p>
+              </div>
+              <div className="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center">
+                <Zap className="h-8 w-8 text-yellow-300" />
+              </div>
             </div>
-            <div className="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center">
-              <Zap className="h-8 w-8 text-yellow-300" />
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-emerald-100">
+                <span>XP: {ad.current_xp} / {ad.next_level_xp}</span>
+                <span>{Math.round(xpPercent)}%</span>
+              </div>
+              <Progress value={xpPercent} className="h-2 bg-white/20 [&>div]:bg-yellow-400" />
             </div>
           </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-emerald-100">
-              <span>XP: {ad.current_xp} / {ad.next_level_xp}</span>
-              <span>{Math.round(xpPercent)}%</span>
-            </div>
-            <Progress value={xpPercent} className="h-2 bg-white/20 [&>div]:bg-yellow-400" />
-          </div>
-        </div>
+        )}
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className={`grid gap-6 ${isBasic ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-4'}`}>
           <Card className="border-slate-200 shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between pb-2">
@@ -765,7 +226,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
                 </div>
               </div>
               <h2 className="text-3xl font-bold text-slate-900">{ad.sessions_today}</h2>
-              <p className="text-xs text-slate-500 mt-1">{ad.has_active_routine ? 'Rutina activa asignada' : 'Sin rutina asignada'}</p>
+              <p className="text-xs text-slate-500 mt-1">Entrenamientos completados hoy</p>
             </CardContent>
           </Card>
 
@@ -782,32 +243,116 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Retos Activos</p>
-                <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <Target className="h-5 w-5 text-indigo-600" />
+          {!isBasic && (
+            <Card className="border-slate-200 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between pb-2">
+                  <p className="text-sm font-medium text-slate-600">Retos Activos</p>
+                  <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                    <Target className="h-5 w-5 text-indigo-600" />
+                  </div>
                 </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{ad.active_challenges}</h2>
-              <p className="text-xs text-slate-500 mt-1">Retos en progreso</p>
-            </CardContent>
-          </Card>
+                <h2 className="text-3xl font-bold text-slate-900">{ad.active_challenges}</h2>
+                <p className="text-xs text-slate-500 mt-1">Retos en progreso</p>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Logros</p>
-                <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
-                  <Award className="h-5 w-5 text-rose-600" />
+          {!isBasic && (
+            <Card className="border-slate-200 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between pb-2">
+                  <p className="text-sm font-medium text-slate-600">Logros</p>
+                  <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
+                    <Award className="h-5 w-5 text-rose-600" />
+                  </div>
+                </div>
+                <h2 className="text-3xl font-bold text-slate-900">{ad.badges_count}</h2>
+                <p className="text-xs text-slate-500 mt-1">Insignias ganadas</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Mi Equipo — solo Premium */}
+        {!isBasic && <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold text-slate-800">Mi Equipo</CardTitle>
+              <CardDescription>Tu coach y nutricionista asignados</CardDescription>
+            </div>
+            <button
+              onClick={() => router.push(`/${gymId}/panel/directorio`)}
+              className="h-8 px-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+            >
+              <BookUser className="w-3.5 h-3.5" />
+              Ver directorio
+            </button>
+          </CardHeader>
+          <CardContent className="p-6 grid gap-4 md:grid-cols-2">
+            {/* Coach */}
+            {myTeamQuery.data?.myCoach ? (
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+                {myTeamQuery.data.myCoach.profile_picture ? (
+                  <img src={myTeamQuery.data.myCoach.profile_picture} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" alt="" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center font-bold text-emerald-700 flex-shrink-0">
+                    {myTeamQuery.data.myCoach.first_name?.[0]}{myTeamQuery.data.myCoach.last_name?.[0]}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Tu Coach</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{myTeamQuery.data.myCoach.first_name} {myTeamQuery.data.myCoach.last_name}</p>
+                  {myTeamQuery.data.myCoach.specialty && <p className="text-[10px] text-slate-500 truncate">{myTeamQuery.data.myCoach.specialty}</p>}
                 </div>
               </div>
-              <h2 className="text-3xl font-bold text-slate-900">{ad.badges_count}</h2>
-              <p className="text-xs text-slate-500 mt-1">Insignias ganadas</p>
-            </CardContent>
-          </Card>
-        </div>
+            ) : (
+              <button
+                onClick={() => router.push(`/${gymId}/panel/directorio`)}
+                className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-emerald-50 border-2 border-dashed border-slate-200 hover:border-emerald-300 rounded-xl transition-all text-left"
+              >
+                <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                  <UserCheck className="w-5 h-5 text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Elige tu Coach</p>
+                  <p className="text-xs text-slate-400">Ver coaches disponibles →</p>
+                </div>
+              </button>
+            )}
+
+            {/* Nutricionista */}
+            {myTeamQuery.data?.myNutri ? (
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+                {myTeamQuery.data.myNutri.profile_picture ? (
+                  <img src={myTeamQuery.data.myNutri.profile_picture} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" alt="" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center font-bold text-amber-700 flex-shrink-0">
+                    {myTeamQuery.data.myNutri.first_name?.[0]}{myTeamQuery.data.myNutri.last_name?.[0]}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Tu Nutricionista</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{myTeamQuery.data.myNutri.first_name} {myTeamQuery.data.myNutri.last_name}</p>
+                  {myTeamQuery.data.myNutri.specialty && <p className="text-[10px] text-slate-500 truncate">{myTeamQuery.data.myNutri.specialty}</p>}
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => router.push(`/${gymId}/panel/directorio`)}
+                className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-amber-50 border-2 border-dashed border-slate-200 hover:border-amber-300 rounded-xl transition-all text-left"
+              >
+                <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
+                  <Apple className="w-5 h-5 text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Elige tu Nutricionista</p>
+                  <p className="text-xs text-slate-400">Ver nutricionistas disponibles →</p>
+                </div>
+              </button>
+            )}
+          </CardContent>
+        </Card>}
 
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b border-slate-100 pb-4">

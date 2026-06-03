@@ -162,3 +162,28 @@ class UserRoutineAssignment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.user.email} - {self.routine.name}"
+
+
+class WeeklyRoutinePlan(BaseModel):
+    class DayOfWeek(models.IntegerChoices):
+        MONDAY    = 0, "Lunes"
+        TUESDAY   = 1, "Martes"
+        WEDNESDAY = 2, "Miércoles"
+        THURSDAY  = 3, "Jueves"
+        FRIDAY    = 4, "Viernes"
+        SATURDAY  = 5, "Sábado"
+        SUNDAY    = 6, "Domingo"
+
+    athlete     = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="weekly_plan")
+    coach       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="designed_plans")
+    routine     = models.ForeignKey(WorkoutRoutine, on_delete=models.CASCADE, related_name="weekly_slots")
+    day_of_week = models.IntegerField(choices=DayOfWeek.choices)
+    suggested_time = models.TimeField(null=True, blank=True)
+    notes       = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["day_of_week", "suggested_time"]
+        unique_together = ("athlete", "routine", "day_of_week")
+
+    def __str__(self) -> str:
+        return f"{self.athlete.email} - {self.get_day_of_week_display()} - {self.routine.name}"

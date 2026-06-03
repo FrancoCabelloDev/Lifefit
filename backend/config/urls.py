@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/challenges/', include('challenges.urls')),
     path('api/nutrition/', include('nutrition.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),
+    path('api/gamification/', include('gamification.urls')),
     path('api/system/', include('core.urls')),
 ]
 

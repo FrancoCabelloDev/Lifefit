@@ -13,11 +13,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
 from core.permissions import IsGymAdmin
+from gamification.models import AthleteStreak
 from .models import (
-    Branch, CheckIn, CoachAssignment, Gym, GymMembershipPlan,
+    BodyMeasurement, Branch, CheckIn, CoachAssignment, Gym, GymMembershipPlan,
     GymFeatureFlag, GymPayment, GymSubscription, Notification, NutritionistAssignment,
+    NutritionistAppointment, NutritionistMessage,
 )
 from .serializers import (
+    BodyMeasurementSerializer,
     BranchSerializer,
     CheckInCreateSerializer,
     CheckInSerializer,
@@ -30,6 +33,8 @@ from .serializers import (
     GymSubscriptionSerializer,
     NotificationSerializer,
     NutritionistAssignmentSerializer,
+    NutritionistAppointmentSerializer,
+    NutritionistMessageSerializer,
 )
 
 User = get_user_model()
@@ -494,6 +499,10 @@ class CheckInViewSet(viewsets.ModelViewSet):
             method=serializer.validated_data.get("method", CheckIn.Method.MANUAL),
         )
 
+        if target_user.role == User.Role.ATHLETE:
+            streak, _ = AthleteStreak.objects.get_or_create(user=target_user, gym_id=gym_id)
+            streak.register_activity()
+
         return Response(
             CheckInSerializer(checkin).data,
             status=status.HTTP_201_CREATED,
@@ -531,6 +540,10 @@ class CheckInViewSet(viewsets.ModelViewSet):
             gym_id=user.gym_id,
             method=CheckIn.Method.SELF,
         )
+
+        if user.role == User.Role.ATHLETE:
+            streak, _ = AthleteStreak.objects.get_or_create(user=user, gym_id=user.gym_id)
+            streak.register_activity()
 
         return Response(
             CheckInSerializer(checkin).data,
@@ -679,6 +692,7 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             routine = next((r for r in routine_assignments if str(r.user_id) == aid_str), None)
             plan = next((p for p in active_plans if str(p.user_id) == aid_str), None)
 
+            sessions_7d = sessions_count_map.get(aid_str, 0)
             athlete_list.append({
                 "id": aid_str,
                 "first_name": athlete_info.get("first_name", ""),
@@ -692,7 +706,8 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
                 "routine_id": str(routine.routine_id) if routine else None,
                 "has_active_plan": plan is not None,
                 "plan_name": plan.plan.name if plan else None,
-                "sessions_last_7_days": sessions_count_map.get(aid_str, 0),
+                "sessions_last_7_days": sessions_7d,
+                "is_at_risk": sessions_7d == 0,
                 "assigned_at": assignment.assigned_at.isoformat() if assignment else None,
             })
 
@@ -743,6 +758,38 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             user_id__in=athlete_ids, status="active"
         ).values("challenge").distinct().count()
 
+        # At-risk: athletes with 0 sessions in the last 7 days
+        athletes_with_sessions = set(
+            WorkoutSession.objects.filter(
+                user_id__in=athlete_ids, performed_at__date__gte=week_ago, status="completed"
+            ).values_list("user_id", flat=True).distinct()
+        )
+        at_risk_ids = [i for i in athlete_ids if i not in athletes_with_sessions]
+        at_risk_count = len(at_risk_ids)
+
+        at_risk_athletes = []
+        for u in User.objects.filter(id__in=at_risk_ids[:5]).values("id", "first_name", "last_name", "email", "nivel", "puntos"):
+            last_session = WorkoutSession.objects.filter(
+                user_id=u["id"], status="completed"
+            ).order_by("-performed_at").first()
+            at_risk_athletes.append({
+                "id": str(u["id"]),
+                "first_name": u["first_name"],
+                "last_name": u["last_name"],
+                "email": u["email"],
+                "nivel": u["nivel"],
+                "puntos": u["puntos"],
+                "last_session": last_session.performed_at.isoformat() if last_session else None,
+            })
+
+        top_athletes = list(
+            User.objects.filter(id__in=athlete_ids).order_by("-puntos").values(
+                "id", "first_name", "last_name", "puntos", "nivel"
+            )[:5]
+        )
+        for a in top_athletes:
+            a["id"] = str(a["id"])
+
         return Response({
             "total_athletes": total_athletes,
             "with_active_routine": with_routine,
@@ -750,6 +797,9 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             "sessions_today": sessions_today,
             "sessions_week": sessions_week,
             "active_challenges": active_challenges,
+            "at_risk_count": at_risk_count,
+            "at_risk_athletes": at_risk_athletes,
+            "top_athletes": top_athletes,
         })
 
     @action(detail=False, methods=["get"])
@@ -791,6 +841,59 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             ])
 
         return response
+
+    @action(detail=False, methods=["post"])
+    def self_assign(self, request):
+        """El atleta se autoasigna a un coach."""
+        user = request.user
+        if user.role != User.Role.ATHLETE:
+            return Response({"detail": "Solo los atletas pueden autoasignarse."}, status=status.HTTP_403_FORBIDDEN)
+
+        coach_id = request.data.get("coach_id")
+        if not coach_id:
+            return Response({"detail": "coach_id es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            coach = User.objects.get(id=coach_id, role=User.Role.COACH, gym_id=user.gym_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"detail": "Coach no encontrado en tu gimnasio."}, status=status.HTTP_404_NOT_FOUND)
+
+        current_clients = CoachAssignment.objects.filter(coach=coach, is_active=True).count()
+        if current_clients >= coach.max_clients:
+            return Response(
+                {"detail": f"{coach.first_name} ha alcanzado su límite de {coach.max_clients} clientes."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Desactivar asignación anterior del atleta
+        CoachAssignment.objects.filter(athlete=user, is_active=True).update(is_active=False)
+
+        # Crear o reactivar asignación
+        assignment, _ = CoachAssignment.objects.get_or_create(
+            coach=coach, athlete=user,
+            defaults={"gym_id": user.gym_id, "is_active": True},
+        )
+        if not assignment.is_active:
+            assignment.is_active = True
+            assignment.gym_id = user.gym_id
+            assignment.save(update_fields=["is_active", "gym_id"])
+
+        pic_url = None
+        if coach.profile_picture:
+            pic_url = request.build_absolute_uri(coach.profile_picture.url)
+        elif coach.google_picture:
+            pic_url = coach.google_picture
+
+        return Response({
+            "detail": f"Ahora {coach.first_name} {coach.last_name} es tu coach.",
+            "coach": {
+                "id": str(coach.id),
+                "first_name": coach.first_name,
+                "last_name": coach.last_name,
+                "profile_picture": pic_url,
+                "specialty": coach.specialty,
+            },
+        }, status=status.HTTP_200_OK)
 
 
 class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
@@ -1049,6 +1152,61 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
         return Response({"daily": daily_data, "days": days})
 
+    @action(detail=False, methods=["post"])
+    def self_assign(self, request):
+        """El atleta se autoasigna a un nutricionista."""
+        user = request.user
+        if user.role != User.Role.ATHLETE:
+            return Response({"detail": "Solo los atletas pueden autoasignarse."}, status=status.HTTP_403_FORBIDDEN)
+
+        nutritionist_id = request.data.get("nutritionist_id")
+        if not nutritionist_id:
+            return Response({"detail": "nutritionist_id es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            nutritionist = User.objects.get(
+                id=nutritionist_id, role=User.Role.NUTRITIONIST, gym_id=user.gym_id, is_active=True
+            )
+        except User.DoesNotExist:
+            return Response({"detail": "Nutricionista no encontrado en tu gimnasio."}, status=status.HTTP_404_NOT_FOUND)
+
+        current_clients = NutritionistAssignment.objects.filter(nutritionist=nutritionist, is_active=True).count()
+        if current_clients >= nutritionist.max_clients:
+            return Response(
+                {"detail": f"{nutritionist.first_name} ha alcanzado su límite de {nutritionist.max_clients} clientes."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Desactivar asignación anterior del atleta
+        NutritionistAssignment.objects.filter(athlete=user, is_active=True).update(is_active=False)
+
+        # Crear o reactivar asignación
+        assignment, _ = NutritionistAssignment.objects.get_or_create(
+            nutritionist=nutritionist, athlete=user,
+            defaults={"gym_id": user.gym_id, "is_active": True},
+        )
+        if not assignment.is_active:
+            assignment.is_active = True
+            assignment.gym_id = user.gym_id
+            assignment.save(update_fields=["is_active", "gym_id"])
+
+        pic_url = None
+        if nutritionist.profile_picture:
+            pic_url = request.build_absolute_uri(nutritionist.profile_picture.url)
+        elif nutritionist.google_picture:
+            pic_url = nutritionist.google_picture
+
+        return Response({
+            "detail": f"Ahora {nutritionist.first_name} {nutritionist.last_name} es tu nutricionista.",
+            "nutritionist": {
+                "id": str(nutritionist.id),
+                "first_name": nutritionist.first_name,
+                "last_name": nutritionist.last_name,
+                "profile_picture": pic_url,
+                "specialty": nutritionist.specialty,
+            },
+        }, status=status.HTTP_200_OK)
+
 
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
@@ -1253,6 +1411,297 @@ class GymPaymentViewSet(viewsets.ModelViewSet):
         ])
 
 
+class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
+    serializer_class = NutritionistAppointmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.gym_id:
+            return NutritionistAppointment.objects.none()
+        if user.role == "nutritionist":
+            return NutritionistAppointment.objects.filter(
+                nutritionist=user, gym_id=user.gym_id
+            ).select_related("athlete", "nutritionist")
+        if user.role in {"gym_admin", "super_admin"}:
+            return NutritionistAppointment.objects.filter(
+                gym_id=user.gym_id
+            ).select_related("athlete", "nutritionist")
+        if user.role == "athlete":
+            return NutritionistAppointment.objects.filter(
+                athlete=user, gym_id=user.gym_id
+            ).select_related("athlete", "nutritionist")
+        return NutritionistAppointment.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role != "nutritionist":
+            raise PermissionDenied("Solo nutricionistas pueden crear citas.")
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            raise PermissionDenied("Gimnasio no encontrado.")
+        serializer.save(nutritionist=user, gym=gym)
+
+    @action(detail=False, methods=["get"])
+    def upcoming(self, request):
+        now = timezone.now()
+        qs = self.get_queryset().filter(
+            scheduled_at__gte=now,
+            status=NutritionistAppointment.Status.SCHEDULED,
+        ).order_by("scheduled_at")[:10]
+        return Response(NutritionistAppointmentSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def next(self, request):
+        now = timezone.now()
+        appt = self.get_queryset().filter(
+            scheduled_at__gte=now,
+            status=NutritionistAppointment.Status.SCHEDULED,
+        ).order_by("scheduled_at").first()
+        if not appt:
+            return Response(None)
+        return Response(NutritionistAppointmentSerializer(appt).data)
+
+    @action(detail=False, methods=["get"])
+    def dashboard_stats(self, request):
+        user = request.user
+        if user.role != "nutritionist" or not user.gym_id:
+            return Response({})
+        now = timezone.now()
+        today = now.date()
+        month_ago = today - timedelta(days=30)
+        prev_month_start = month_ago - timedelta(days=30)
+
+        qs = NutritionistAppointment.objects.filter(nutritionist=user, gym_id=user.gym_id)
+
+        new_clients_this_month = NutritionistAssignment.objects.filter(
+            nutritionist=user, gym_id=user.gym_id,
+            assigned_at__date__gte=month_ago,
+        ).count()
+        new_clients_prev = NutritionistAssignment.objects.filter(
+            nutritionist=user, gym_id=user.gym_id,
+            assigned_at__date__gte=prev_month_start,
+            assigned_at__date__lt=month_ago,
+        ).count()
+
+        first_consultations = qs.filter(
+            appointment_type=NutritionistAppointment.AppointmentType.FIRST,
+            scheduled_at__date__gte=month_ago,
+            status=NutritionistAppointment.Status.COMPLETED,
+        ).count()
+
+        followup_consultations = qs.filter(
+            appointment_type=NutritionistAppointment.AppointmentType.FOLLOWUP,
+            scheduled_at__date__gte=month_ago,
+            status=NutritionistAppointment.Status.COMPLETED,
+        ).count()
+
+        messages_sent = NutritionistMessage.objects.filter(
+            nutritionist=user, gym_id=user.gym_id,
+            sender_is_nutritionist=True,
+            created_at__date__gte=month_ago,
+        ).count()
+
+        cancelled = qs.filter(
+            status=NutritionistAppointment.Status.CANCELLED,
+            scheduled_at__date__gte=month_ago,
+        ).order_by("-scheduled_at")[:5]
+
+        return Response({
+            "new_clients": new_clients_this_month,
+            "new_clients_delta": new_clients_this_month - new_clients_prev,
+            "first_consultations": first_consultations,
+            "followup_consultations": followup_consultations,
+            "messages_sent": messages_sent,
+            "cancelled_appointments": NutritionistAppointmentSerializer(cancelled, many=True).data,
+        })
+
+
+class NutritionistMessageViewSet(viewsets.ModelViewSet):
+    serializer_class = NutritionistMessageSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.gym_id:
+            return NutritionistMessage.objects.none()
+        if user.role == "nutritionist":
+            return NutritionistMessage.objects.filter(
+                nutritionist=user, gym_id=user.gym_id
+            ).select_related("athlete", "nutritionist")
+        if user.role == "athlete":
+            return NutritionistMessage.objects.filter(
+                athlete=user, gym_id=user.gym_id
+            ).select_related("athlete", "nutritionist")
+        return NutritionistMessage.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user.gym_id:
+            raise PermissionDenied("Sin gimnasio asignado.")
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            raise PermissionDenied("Gimnasio no encontrado.")
+        if user.role == "nutritionist":
+            serializer.save(nutritionist=user, gym=gym, sender_is_nutritionist=True)
+        elif user.role == "athlete":
+            nutri_assign = NutritionistAssignment.objects.filter(
+                athlete=user, gym=gym, is_active=True
+            ).first()
+            if not nutri_assign:
+                raise PermissionDenied("No tienes nutricionista asignado.")
+            serializer.save(nutritionist=nutri_assign.nutritionist, athlete=user, gym=gym, sender_is_nutritionist=False)
+        else:
+            raise PermissionDenied("Sin permisos para enviar mensajes.")
+
+    @action(detail=False, methods=["get"])
+    def threads(self, request):
+        """Lista de conversaciones agrupadas por atleta."""
+        user = request.user
+        if user.role != "nutritionist":
+            return Response({"detail": "Solo para nutricionistas."}, status=403)
+        qs = self.get_queryset()
+        from django.db.models import Max, Count
+        athletes = (
+            qs.values("athlete")
+            .annotate(last_message=Max("created_at"), total=Count("id"), unread=Count("id", filter=Q(is_read=False, sender_is_nutritionist=False)))
+            .order_by("-last_message")
+        )
+        result = []
+        for a in athletes:
+            try:
+                athlete_obj = User.objects.get(id=a["athlete"])
+                last_msg = qs.filter(athlete=athlete_obj).order_by("-created_at").first()
+                result.append({
+                    "athlete_id": str(athlete_obj.id),
+                    "athlete_name": f"{athlete_obj.first_name} {athlete_obj.last_name}".strip(),
+                    "athlete_email": athlete_obj.email,
+                    "last_message": last_msg.body[:80] if last_msg else "",
+                    "last_message_at": last_msg.created_at.isoformat() if last_msg else None,
+                    "unread": a["unread"],
+                    "total": a["total"],
+                })
+            except User.DoesNotExist:
+                pass
+        return Response(result)
+
+    @action(detail=False, methods=["get"])
+    def with_athlete(self, request):
+        athlete_id = request.query_params.get("athlete_id")
+        if not athlete_id:
+            return Response({"detail": "athlete_id requerido."}, status=400)
+        qs = self.get_queryset().filter(athlete_id=athlete_id).order_by("created_at")
+        qs.filter(sender_is_nutritionist=False, is_read=False).update(is_read=True)
+        return Response(NutritionistMessageSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def recent(self, request):
+        """Últimos mensajes recibidos (sin leer) para el nutritionist."""
+        user = request.user
+        if user.role != "nutritionist":
+            return Response([])
+        qs = self.get_queryset().filter(
+            sender_is_nutritionist=False, is_read=False
+        ).order_by("-created_at")[:5]
+        return Response(NutritionistMessageSerializer(qs, many=True).data)
+
+
+class BodyMeasurementViewSet(viewsets.ModelViewSet):
+    serializer_class = BodyMeasurementSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.gym_id:
+            return BodyMeasurement.objects.none()
+        qs = BodyMeasurement.objects.filter(gym_id=user.gym_id).select_related("athlete", "nutritionist")
+        if user.role == "nutritionist":
+            return qs.filter(nutritionist=user)
+        if user.role == "athlete":
+            return qs.filter(athlete=user)
+        if user.role in {"gym_admin", "super_admin", "coach"}:
+            return qs
+        return BodyMeasurement.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
+            raise PermissionDenied("Solo nutricionistas pueden registrar medidas.")
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            raise PermissionDenied("Gimnasio no encontrado.")
+        serializer.save(nutritionist=user, gym=gym)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if user.role in {"super_admin", "gym_admin"}:
+            serializer.save()
+            return
+        if instance.nutritionist == user:
+            serializer.save()
+            return
+        raise PermissionDenied("No puedes modificar esta medida.")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if user.role in {"super_admin", "gym_admin"} or instance.nutritionist == user:
+            instance.delete()
+            return
+        raise PermissionDenied("No puedes eliminar esta medida.")
+
+    @action(detail=False, methods=["get"])
+    def athlete_history(self, request):
+        """Historial de medidas de un atleta específico"""
+        athlete_id = request.query_params.get("athlete_id")
+        if not athlete_id:
+            return Response({"detail": "athlete_id requerido."}, status=400)
+        user = request.user
+        if user.role not in {"nutritionist", "gym_admin", "super_admin", "coach"}:
+            return Response({"detail": "Sin permisos."}, status=403)
+        qs = self.get_queryset().filter(athlete_id=athlete_id).order_by("measured_at")
+        return Response(BodyMeasurementSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def my_history(self, request):
+        """El atleta ve su propio historial"""
+        user = request.user
+        if user.role != "athlete":
+            return Response({"detail": "Solo para atletas."}, status=403)
+        qs = BodyMeasurement.objects.filter(athlete=user, gym_id=user.gym_id).order_by("measured_at")
+        return Response(BodyMeasurementSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def latest_per_athlete(self, request):
+        """Última medida de cada atleta asignado al nutricionista"""
+        user = request.user
+        if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
+            return Response({"detail": "Sin permisos."}, status=403)
+
+        from django.db.models import Max
+        athlete_ids = list(
+            NutritionistAssignment.objects.filter(
+                nutritionist=user, gym_id=user.gym_id, is_active=True
+            ).values_list("athlete_id", flat=True)
+        ) if user.role == "nutritionist" else list(
+            BodyMeasurement.objects.filter(gym_id=user.gym_id).values_list("athlete_id", flat=True).distinct()
+        )
+
+        latest_ids = (
+            BodyMeasurement.objects.filter(athlete_id__in=athlete_ids, gym_id=user.gym_id)
+            .values("athlete")
+            .annotate(latest_id=Max("id"))
+            .values_list("latest_id", flat=True)
+        )
+        qs = BodyMeasurement.objects.filter(id__in=latest_ids).select_related("athlete", "nutritionist")
+        return Response(BodyMeasurementSerializer(qs, many=True).data)
+
+
 def create_notification(recipient, notification_type, title, message="", actor=None, gym=None, link=""):
     """Función helper para crear notificaciones desde cualquier parte del código"""
     Notification.objects.create(
@@ -1264,6 +1713,15 @@ def create_notification(recipient, notification_type, title, message="", actor=N
         gym=gym,
         link=link,
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_subscription_tier(request):
+    """Devuelve el tier de la suscripción activa del atleta autenticado."""
+    from core.permissions import get_athlete_tier
+    tier = get_athlete_tier(request.user)
+    return Response({"tier": tier})
 
 
 @api_view(["GET"])
@@ -1368,12 +1826,20 @@ def athlete_profile(request, athlete_id):
             "is_active": athlete.is_active,
         },
         "coach": {
-            "id": str(coach_assign.coach.id) if coach_assign else None,
-            "name": f"{coach_assign.coach.first_name} {coach_assign.coach.last_name}" if coach_assign else None,
+            "id": str(coach_assign.coach.id),
+            "name": f"{coach_assign.coach.first_name} {coach_assign.coach.last_name}",
+            "profile_picture": request.build_absolute_uri(coach_assign.coach.profile_picture.url) if coach_assign.coach.profile_picture else None,
+            "bio": coach_assign.coach.bio,
+            "specialty": coach_assign.coach.specialty,
+            "years_experience": coach_assign.coach.years_experience,
         } if coach_assign else None,
         "nutritionist": {
-            "id": str(nutri_assign.nutritionist.id) if nutri_assign else None,
-            "name": f"{nutri_assign.nutritionist.first_name} {nutri_assign.nutritionist.last_name}" if nutri_assign else None,
+            "id": str(nutri_assign.nutritionist.id),
+            "name": f"{nutri_assign.nutritionist.first_name} {nutri_assign.nutritionist.last_name}",
+            "profile_picture": request.build_absolute_uri(nutri_assign.nutritionist.profile_picture.url) if nutri_assign.nutritionist.profile_picture else None,
+            "bio": nutri_assign.nutritionist.bio,
+            "specialty": nutri_assign.nutritionist.specialty,
+            "years_experience": nutri_assign.nutritionist.years_experience,
         } if nutri_assign else None,
         "routine": {
             "id": str(active_routine.routine.id) if active_routine else None,
@@ -1403,6 +1869,58 @@ def athlete_profile(request, athlete_id):
         },
         "points_history": points_history,
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def staff_directory(request):
+    """
+    Directorio de coaches y nutricionistas del gimnasio con su perfil y disponibilidad.
+    Parámetro ?role=coach | nutritionist
+    """
+    user = request.user
+    if not user.gym_id:
+        return Response({"detail": "Sin gimnasio asignado."}, status=400)
+
+    role_filter = request.query_params.get("role", "")
+    allowed_roles = {User.Role.COACH, User.Role.NUTRITIONIST}
+    if role_filter and role_filter not in allowed_roles:
+        return Response({"detail": "Rol no válido. Usa 'coach' o 'nutritionist'."}, status=400)
+
+    qs = User.objects.filter(
+        gym_id=user.gym_id,
+        is_active=True,
+        role__in=[role_filter] if role_filter else list(allowed_roles),
+    )
+
+    result = []
+    for staff in qs:
+        if staff.role == User.Role.COACH:
+            current_clients = CoachAssignment.objects.filter(coach=staff, is_active=True).count()
+        else:
+            current_clients = NutritionistAssignment.objects.filter(nutritionist=staff, is_active=True).count()
+
+        pic_url = None
+        if staff.profile_picture:
+            pic_url = request.build_absolute_uri(staff.profile_picture.url)
+        elif staff.google_picture:
+            pic_url = staff.google_picture
+
+        result.append({
+            "id": str(staff.id),
+            "first_name": staff.first_name,
+            "last_name": staff.last_name,
+            "role": staff.role,
+            "profile_picture": pic_url,
+            "bio": staff.bio,
+            "specialty": staff.specialty,
+            "years_experience": staff.years_experience,
+            "current_clients": current_clients,
+            "max_clients": staff.max_clients,
+            "is_available": current_clients < staff.max_clients,
+        })
+
+    return Response(result)
 
 
 @api_view(["GET"])

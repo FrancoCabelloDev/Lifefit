@@ -58,6 +58,10 @@ class Branch(BaseModel):
 
 
 class GymMembershipPlan(BaseModel):
+    class Tier(models.TextChoices):
+        BASIC   = "basic",   "Básico"
+        PREMIUM = "premium", "Premium"
+
     gym = models.ForeignKey(Gym, related_name="membership_plans", on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -65,6 +69,7 @@ class GymMembershipPlan(BaseModel):
     duration_days = models.IntegerField(default=30)
     features = models.JSONField(default=list, blank=True, help_text="Lista de beneficios a mostrar")
     is_active = models.BooleanField(default=True)
+    tier = models.CharField(max_length=10, choices=Tier.choices, default=Tier.BASIC)
 
     class Meta:
         ordering = ["price", "name"]
@@ -258,3 +263,121 @@ class GymPayment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.gym.name} - {self.athlete} - S/{self.amount} ({self.get_status_display()})"
+
+
+class NutritionistAppointment(BaseModel):
+    class AppointmentType(models.TextChoices):
+        FIRST = "first", "Primera Consulta"
+        FOLLOWUP = "followup", "Consulta de Seguimiento"
+
+    class Status(models.TextChoices):
+        SCHEDULED = "scheduled", "Programada"
+        COMPLETED = "completed", "Completada"
+        CANCELLED = "cancelled", "Cancelada"
+        NO_SHOW = "no_show", "No Asistió"
+
+    nutritionist = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="nutritionist_appointments",
+        limit_choices_to={"role": "nutritionist"},
+    )
+    athlete = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="athlete_appointments",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="nutritionist_appointments")
+    scheduled_at = models.DateTimeField()
+    duration_minutes = models.PositiveIntegerField(default=30)
+    appointment_type = models.CharField(
+        max_length=20, choices=AppointmentType.choices, default=AppointmentType.FOLLOWUP
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SCHEDULED)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["scheduled_at"]
+        indexes = [
+            models.Index(fields=["nutritionist", "scheduled_at"]),
+            models.Index(fields=["athlete", "scheduled_at"]),
+            models.Index(fields=["gym", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.nutritionist.email} + {self.athlete.email} @ {self.scheduled_at:%Y-%m-%d %H:%M}"
+
+
+class BodyMeasurement(BaseModel):
+    nutritionist = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="recorded_measurements",
+        limit_choices_to={"role": "nutritionist"},
+    )
+    athlete = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="body_measurements",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="body_measurements")
+    measured_at = models.DateField()
+
+    weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    height_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    body_fat_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    muscle_mass_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    waist_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    hip_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    arm_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    visceral_fat = models.PositiveSmallIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    @property
+    def bmi(self):
+        if self.weight_kg and self.height_cm and self.height_cm > 0:
+            h_m = float(self.height_cm) / 100
+            return round(float(self.weight_kg) / (h_m ** 2), 1)
+        return None
+
+    class Meta:
+        ordering = ["-measured_at"]
+        indexes = [
+            models.Index(fields=["athlete", "-measured_at"]),
+            models.Index(fields=["nutritionist", "-measured_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.athlete.email} @ {self.measured_at} — {self.weight_kg}kg"
+
+
+class NutritionistMessage(BaseModel):
+    nutritionist = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="sent_nutri_messages",
+        limit_choices_to={"role": "nutritionist"},
+    )
+    athlete = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="received_nutri_messages",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="nutri_messages")
+    sender_is_nutritionist = models.BooleanField(default=True)
+    body = models.TextField()
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["nutritionist", "athlete", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        sender = self.nutritionist.email if self.sender_is_nutritionist else self.athlete.email
+        return f"[MSG] {sender} → {self.athlete.email if self.sender_is_nutritionist else self.nutritionist.email}"

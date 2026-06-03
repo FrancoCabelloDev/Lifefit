@@ -1,18 +1,19 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
-from django.db.models import Count, F, Prefetch, Q
+from django.db.models import Count, F, Max, Prefetch, Q
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from core.filters import global_or_user_gym_filter
-from .models import Exercise, RoutineExercise, UserRoutineAssignment, WorkoutRoutine, WorkoutSession
+from .models import Exercise, RoutineExercise, UserRoutineAssignment, WorkoutRoutine, WorkoutSession, WeeklyRoutinePlan
 from .serializers import (
     ExerciseSerializer,
     RoutineExerciseSerializer,
     UserRoutineAssignmentSerializer,
+    WeeklyRoutinePlanSerializer,
     WorkoutRoutineSerializer,
     WorkoutSessionSerializer,
 )
@@ -135,7 +136,7 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
             return Response({"detail": "No tienes permisos para asignar rutinas."}, status=status.HTTP_403_FORBIDDEN)
-        if user.role != User.Role.SUPER_ADMIN and routine.gym_id != user.gym_id:
+        if user.role != User.Role.SUPER_ADMIN and routine.gym_id is not None and routine.gym_id != user.gym_id:
             return Response({"detail": "Esta rutina no pertenece a tu gimnasio."}, status=status.HTTP_403_FORBIDDEN)
 
         athlete_id = request.data.get("user_id")
@@ -238,7 +239,24 @@ class WorkoutSessionViewSet(viewsets.ModelViewSet):
             and session.routine
             and session.routine.points_reward
         ):
-            reward = session.routine.points_reward
+            # Solo otorgar puntos a atletas con plan Premium
+            from core.permissions import get_athlete_tier
+            athlete = session.user if hasattr(session, 'user') and session.user_id else \
+                User.objects.filter(pk=session.user_id).first()
+            if get_athlete_tier(athlete) != 'premium':
+                reward = 0
+            else:
+                # Solo otorgar puntos si es la primera sesión completada del día para esta rutina
+                already_rewarded = WorkoutSession.objects.filter(
+                    user_id=session.user_id,
+                    routine=session.routine,
+                    status=WorkoutSession.Status.COMPLETED,
+                    performed_at__date=timezone.localtime(session.performed_at).date(),
+                    points_awarded__gt=0,
+                ).exclude(pk=session.pk).exists()
+
+                if not already_rewarded:
+                    reward = session.routine.points_reward
 
         delta = reward - (session.points_awarded or 0)
         if delta:
@@ -305,3 +323,158 @@ class WorkoutSessionViewSet(viewsets.ModelViewSet):
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar esta sesión.")
+
+
+from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from gyms.models import CoachAssignment
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def coach_adherence(request):
+    user = request.user
+    today = timezone.localdate()
+    if user.role not in {User.Role.COACH, User.Role.GYM_ADMIN}:
+        return Response({"detail": "Sin permisos."}, status=403)
+
+    # Atletas asignados al coach (o todos del gym si es admin)
+    if user.role == User.Role.COACH:
+        athlete_ids = list(
+            CoachAssignment.objects.filter(coach=user, is_active=True)
+            .values_list("athlete_id", flat=True)
+        )
+    else:
+        athlete_ids = list(
+            User.objects.filter(gym_id=user.gym_id, role=User.Role.ATHLETE)
+            .values_list("id", flat=True)
+        )
+
+    athletes = User.objects.filter(id__in=athlete_ids).only("id", "first_name", "last_name", "email")
+
+    since = today - timedelta(days=30)
+    result = []
+
+    for athlete in athletes:
+        assignments = UserRoutineAssignment.objects.filter(
+            user=athlete,
+            status=UserRoutineAssignment.AssignmentStatus.ACTIVE,
+        ).select_related("routine")
+
+        routines_data = []
+        for assignment in assignments:
+            sessions = WorkoutSession.objects.filter(
+                user=athlete,
+                routine=assignment.routine,
+                status=WorkoutSession.Status.COMPLETED,
+                performed_at__date__gte=since,
+            ).order_by("-performed_at")
+
+            last_session = sessions.first()
+            session_count = sessions.count()
+
+            # Días desde asignación para calcular adherencia esperada (1 vez por semana)
+            days_active = max((today - assignment.start_date).days, 1)
+            expected = max(days_active // 7, 1)
+            adherence_pct = min(round((session_count / expected) * 100), 100)
+
+            days_since_last = None
+            if last_session:
+                days_since_last = (today - timezone.localtime(last_session.performed_at).date()).days
+
+            routines_data.append({
+                "routine_id": str(assignment.routine.id),
+                "routine_name": assignment.routine.name,
+                "assigned_since": assignment.start_date.isoformat(),
+                "sessions_last_30d": session_count,
+                "adherence_pct": adherence_pct,
+                "last_completed": last_session.performed_at.date().isoformat() if last_session else None,
+                "days_since_last": days_since_last,
+                "avg_completion": float(
+                    sessions.aggregate(avg=Count("completion_percentage"))["avg"] or 0
+                ),
+            })
+
+        total_sessions = sum(r["sessions_last_30d"] for r in routines_data)
+        avg_adherence = (
+            round(sum(r["adherence_pct"] for r in routines_data) / len(routines_data))
+            if routines_data else 0
+        )
+
+        # Última actividad (cualquier sesión)
+        last_any = WorkoutSession.objects.filter(
+            user=athlete,
+            status=WorkoutSession.Status.COMPLETED,
+        ).aggregate(last=Max("performed_at"))["last"]
+
+        days_inactive = None
+        if last_any:
+            days_inactive = (today - timezone.localtime(last_any).date()).days
+
+        result.append({
+            "athlete_id": str(athlete.id),
+            "athlete_name": f"{athlete.first_name} {athlete.last_name}".strip() or athlete.email,
+            "athlete_email": athlete.email,
+            "routines": routines_data,
+            "total_sessions_30d": total_sessions,
+            "avg_adherence_pct": avg_adherence,
+            "days_inactive": days_inactive,
+            "alert": days_inactive is None or days_inactive >= 7,
+        })
+
+    result.sort(key=lambda x: (not x["alert"], -x["avg_adherence_pct"]))
+    return Response(result)
+
+
+class WeeklyRoutinePlanViewSet(viewsets.ModelViewSet):
+    serializer_class = WeeklyRoutinePlanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = WeeklyRoutinePlan.objects.select_related("routine", "coach", "athlete")
+        if user.role == User.Role.ATHLETE:
+            return qs.filter(athlete=user)
+        if user.role in {User.Role.COACH, User.Role.GYM_ADMIN}:
+            athlete_id = self.request.query_params.get("athlete")
+            if athlete_id:
+                return qs.filter(athlete_id=athlete_id, athlete__gym_id=user.gym_id)
+            return qs.filter(athlete__gym_id=user.gym_id)
+        return qs.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role == User.Role.ATHLETE:
+            # Atleta solo puede crear slots para sí mismo
+            serializer.save(athlete=user, coach=None)
+        else:
+            serializer.save(coach=user)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        if user.role != User.Role.ATHLETE:
+            serializer.save(coach=user)
+        else:
+            serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        # Atleta solo puede eliminar sus propios slots sin coach
+        if user.role == User.Role.ATHLETE:
+            if instance.athlete_id != user.id:
+                raise PermissionDenied("No puedes eliminar este slot.")
+            if instance.coach_id is not None:
+                raise PermissionDenied("Tu coach administra este plan.")
+        instance.delete()
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_coach_status(request):
+    """Devuelve si el atleta tiene coach activo asignado."""
+    from gyms.models import CoachAssignment
+    user = request.user
+    if user.role != User.Role.ATHLETE:
+        return Response({"has_coach": False})
+    has_coach = CoachAssignment.objects.filter(athlete=user, is_active=True).exists()
+    return Response({"has_coach": has_coach})

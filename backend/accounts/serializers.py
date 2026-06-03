@@ -30,8 +30,21 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "is_google_account",
             "google_picture",
+            # Perfil profesional
+            "profile_picture",
+            "bio",
+            "specialty",
+            "years_experience",
+            "max_clients",
+            # Objetivos atleta
+            "fitness_goal",
+            "goal_notes",
         ]
-        read_only_fields = ["id", "date_joined", "puntos", "nivel", "is_google_account", "google_picture", "gym_slug", "active_membership"]
+        read_only_fields = [
+            "id", "date_joined", "puntos", "nivel",
+            "is_google_account", "google_picture",
+            "gym_slug", "active_membership",
+        ]
 
     def get_active_membership(self, obj):
         membership = obj.active_membership
@@ -43,7 +56,11 @@ class UserSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "gym"]
+        fields = [
+            "first_name", "last_name", "phone", "dni",
+            "profile_picture", "bio", "specialty",
+            "years_experience", "max_clients",
+        ]
 
 
 class PasswordChangeSerializer(serializers.Serializer):

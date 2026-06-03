@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dumbbell, CheckCircle2, Circle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { showSuccess, showError } from '@/lib/toast'
 import type { WorkoutRoutine, RoutineExercise } from '@/lib/types'
 
 interface WorkoutLoggerProps {
@@ -39,22 +40,27 @@ export default function WorkoutLogger({ routine, open, onClose, onComplete }: Wo
   const completedCount = Object.values(completedSets).reduce(
     (sum, sets) => sum + sets.filter(Boolean).length, 0
   )
-  const completionPct = totalSets > 0 ? Math.round((completedCount / totalSets) * 100) : 0
+  // Si no hay ejercicios que marcar, se considera 100% completada
+  const completionPct = totalSets > 0 ? Math.round((completedCount / totalSets) * 100) : 100
+  const isCompleted = completionPct >= 80
 
   const handleSubmit = async () => {
     setSaving(true)
     try {
       await api.post('/api/workouts/sessions/', {
         routine: routine.id,
+        performed_at: new Date().toISOString(),
         duration_minutes: duration,
         perceived_exertion: parseInt(exertion),
         completion_percentage: completionPct,
         notes,
-        status: completionPct >= 80 ? 'completed' : 'planned',
+        status: isCompleted ? 'completed' : 'planned',
       })
+      showSuccess(isCompleted ? '¡Entrenamiento completado! 💪' : 'Progreso guardado')
       onComplete()
       onClose()
     } catch (err) {
+      showError('No se pudo guardar la sesión')
       console.error('Error saving session', err)
     } finally {
       setSaving(false)
@@ -149,7 +155,7 @@ export default function WorkoutLogger({ routine, open, onClose, onComplete }: Wo
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
-            {saving ? 'Guardando...' : completionPct >= 80 ? 'Completar Entrenamiento' : 'Guardar Progreso'}
+            {saving ? 'Guardando...' : isCompleted ? 'Completar Entrenamiento' : 'Guardar Progreso'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -52,6 +52,26 @@ export type User = {
   dni?: string | null
   active_membership?: GymSubscription | null
   date_joined?: string
+  // Perfil profesional
+  profile_picture?: string | null
+  bio?: string
+  specialty?: string
+  years_experience?: number | null
+  max_clients?: number
+}
+
+export type StaffProfile = {
+  id: string
+  first_name: string
+  last_name: string
+  role: 'coach' | 'nutritionist'
+  profile_picture: string | null
+  bio: string
+  specialty: string
+  years_experience: number | null
+  current_clients: number
+  max_clients: number
+  is_available: boolean
 }
 
 export type LoginResponse = {
@@ -180,6 +200,8 @@ export type RevenuePoint = {
   total: number
 }
 
+export type SubscriptionTier = 'basic' | 'premium' | null
+
 export type GymMembershipPlan = {
   id: number
   gym: string
@@ -190,6 +212,7 @@ export type GymMembershipPlan = {
   duration_days: number
   features: string[]
   is_active: boolean
+  tier: 'basic' | 'premium'
   created_at: string
   updated_at: string
 }
@@ -204,6 +227,7 @@ export type GymSubscription = {
   plan: number | null
   plan_name: string | null
   plan_price: number | null
+  plan_tier: 'basic' | 'premium' | null
   status: GymSubscriptionStatus
   start_date: string
   end_date: string | null
@@ -281,6 +305,7 @@ export type CoachAthlete = {
   has_active_plan: boolean
   plan_name: string | null
   sessions_last_7_days: number
+  is_at_risk: boolean
   assigned_at: string | null
 }
 
@@ -298,6 +323,16 @@ export type NutritionistAthlete = {
   compliance_percentage: number
 }
 
+export type CoachAtRisk = {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  nivel: number
+  puntos: number
+  last_session: string | null
+}
+
 export type CoachDashboard = {
   total_athletes: number
   with_active_routine: number
@@ -305,6 +340,9 @@ export type CoachDashboard = {
   sessions_today: number
   sessions_week: number
   active_challenges: number
+  at_risk_count: number
+  at_risk_athletes: CoachAtRisk[]
+  top_athletes: { id: string; first_name: string; last_name: string; puntos: number; nivel: number }[]
 }
 
 export type NutritionistDashboard = {
@@ -505,11 +543,82 @@ export type UserNutritionPlan = {
 export type UserProgress = {
   id: string
   user: string
-  user_detail: { id: string; email: string } | null
+  user_detail: { id: string; email: string; first_name?: string; last_name?: string } | null
   level: number
   total_points: number
   current_xp: number
   next_level_xp: number
+  streak_days?: number
   created_at: string
   updated_at: string
+}
+
+export type NutritionistAppointment = {
+  id: string
+  nutritionist: string
+  athlete: string
+  athlete_name: string
+  athlete_email: string
+  gym: string
+  scheduled_at: string
+  duration_minutes: number
+  appointment_type: 'first' | 'followup'
+  appointment_type_display: string
+  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+  status_display: string
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type NutritionistMessage = {
+  id: string
+  nutritionist: string
+  athlete: string
+  athlete_name: string
+  sender_name: string
+  gym: string
+  sender_is_nutritionist: boolean
+  body: string
+  is_read: boolean
+  created_at: string
+}
+
+export type NutritionistMessageThread = {
+  athlete_id: string
+  athlete_name: string
+  athlete_email: string
+  last_message: string
+  last_message_at: string | null
+  unread: number
+  total: number
+}
+
+export type BodyMeasurement = {
+  id: string
+  athlete: string
+  nutritionist: string | null
+  gym: string
+  measured_at: string
+  weight_kg: string | null
+  height_cm: string | null
+  body_fat_pct: string | null
+  muscle_mass_kg: string | null
+  waist_cm: string | null
+  hip_cm: string | null
+  arm_cm: string | null
+  visceral_fat: number | null
+  notes: string
+  bmi: number | null
+  recorded_by: string | null
+  created_at: string
+}
+
+export type NutritionistAppointmentStats = {
+  new_clients: number
+  new_clients_delta: number
+  first_consultations: number
+  followup_consultations: number
+  messages_sent: number
+  cancelled_appointments: NutritionistAppointment[]
 }

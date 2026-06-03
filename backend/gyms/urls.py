@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    BodyMeasurementViewSet,
     BranchViewSet,
     CheckInViewSet,
     CoachAssignmentViewSet,
@@ -10,11 +11,15 @@ from .views import (
     GymViewSet,
     NotificationViewSet,
     NutritionistAssignmentViewSet,
+    NutritionistAppointmentViewSet,
+    NutritionistMessageViewSet,
     PublicGymViewSet,
     GymMembershipPlanViewSet,
     GymFeatureFlagViewSet,
     athlete_profile,
     gym_dashboard_stats,
+    my_subscription_tier,
+    staff_directory,
 )
 
 router = DefaultRouter()
@@ -26,12 +31,17 @@ router.register("feature-flags", GymFeatureFlagViewSet, basename="gym-feature-fl
 router.register("checkins", CheckInViewSet, basename="checkin")
 router.register("coach-assignments", CoachAssignmentViewSet, basename="coach-assignment")
 router.register("nutritionist-assignments", NutritionistAssignmentViewSet, basename="nutritionist-assignment")
+router.register("appointments", NutritionistAppointmentViewSet, basename="nutri-appointment")
+router.register("messages", NutritionistMessageViewSet, basename="nutri-message")
 router.register("notifications", NotificationViewSet, basename="notification")
 router.register("subscriptions", GymSubscriptionViewSet, basename="gym-subscription")
 router.register("payments", GymPaymentViewSet, basename="gym-payment")
+router.register("body-measurements", BodyMeasurementViewSet, basename="body-measurement")
 
 urlpatterns = [
     path("dashboard/stats/", gym_dashboard_stats, name="gym-dashboard-stats"),
     path("athlete-profile/<uuid:athlete_id>/", athlete_profile, name="athlete-profile"),
+    path("staff-directory/", staff_directory, name="staff-directory"),
+    path("my-subscription-tier/", my_subscription_tier, name="my-subscription-tier"),
     path("", include(router.urls)),
 ]

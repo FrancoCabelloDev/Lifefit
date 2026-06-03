@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 
 import { api } from '@/lib/api'
 import type { Badge, UserBadge, PaginatedResponse } from '@/lib/types'
+import PremiumGate from '@/components/PremiumGate'
 
 const badgeIcons: Record<string, string> = {
   'bronze': '🥉',
@@ -62,6 +63,7 @@ export default function MisLogrosPage({ params }: { params: Promise<{ gymId: str
   }
 
   return (
+    <PremiumGate feature="Los logros y medallas">
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Mis Logros</h1>
@@ -126,5 +128,6 @@ export default function MisLogrosPage({ params }: { params: Promise<{ gymId: str
         </div>
       )}
     </div>
+    </PremiumGate>
   )
 }

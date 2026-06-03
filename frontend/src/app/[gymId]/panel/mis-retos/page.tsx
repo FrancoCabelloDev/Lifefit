@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress'
 
 import { api } from '@/lib/api'
 import type { Challenge, ChallengeParticipation, PaginatedResponse } from '@/lib/types'
+import PremiumGate from '@/components/PremiumGate'
 
 const typeIcons: Record<string, string> = {
   attendance: '📋',
@@ -80,9 +81,10 @@ export default function MisRetosPage({ params }: { params: Promise<{ gymId: stri
   }
 
   return (
+    <PremiumGate feature="Los retos">
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Mis Retos</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Retos</h1>
         <p className="text-slate-500 mt-2 text-lg">Desafíos y competencias del gimnasio</p>
       </div>
 
@@ -177,5 +179,6 @@ export default function MisRetosPage({ params }: { params: Promise<{ gymId: stri
         </div>
       )}
     </div>
+    </PremiumGate>
   )
 }

@@ -169,3 +169,17 @@ class UserRoutineAssignmentSerializer(serializers.ModelSerializer):
         model = UserRoutineAssignment
         fields = ["id", "user", "routine", "routine_detail", "assigned_by", "start_date", "end_date", "status", "compliance_percentage", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at", "assigned_by", "routine_detail"]
+
+
+class WeeklyRoutinePlanSerializer(serializers.ModelSerializer):
+    routine_detail = WorkoutRoutineSerializer(source="routine", read_only=True)
+    day_label = serializers.CharField(source="get_day_of_week_display", read_only=True)
+
+    class Meta:
+        from .models import WeeklyRoutinePlan
+        model = WeeklyRoutinePlan
+        fields = ["id", "athlete", "coach", "routine", "routine_detail", "day_of_week", "day_label", "suggested_time", "notes", "created_at"]
+        read_only_fields = ["id", "coach", "routine_detail", "day_label", "created_at"]
+        extra_kwargs = {
+            "athlete": {"required": False},
+        }

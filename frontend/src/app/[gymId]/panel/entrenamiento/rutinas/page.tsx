@@ -86,6 +86,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
     duration_minutes: 30,
     points_reward: 100,
     status: 'draft',
+    is_public: false,
   })
 
   const [step, setStep] = useState<'form' | 'exercises'>('form')
@@ -160,7 +161,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
   }
 
   const resetForm = () => {
-    setFormData({ name: '', objective: '', level: 'beginner', duration_minutes: 30, points_reward: 100, status: 'draft' })
+    setFormData({ name: '', objective: '', level: 'beginner', duration_minutes: 30, points_reward: 100, status: 'draft', is_public: false })
     setEditingRoutine(null)
     setStep('form')
     setCreatedRoutineId(null)
@@ -181,6 +182,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
       duration_minutes: routine.duration_minutes,
       points_reward: routine.points_reward,
       status: routine.status,
+      is_public: routine.is_public ?? false,
     })
     setStep('form')
     setCreatedRoutineId(null)
@@ -377,6 +379,20 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
                       </div>
                     </div>
 
+                    {/* is_public toggle */}
+                    <div
+                      onClick={() => setFormData(f => ({ ...f, is_public: !f.is_public }))}
+                      className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${formData.is_public ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">Rutina pública</p>
+                        <p className="text-xs text-slate-500">Visible para todos los atletas del gimnasio</p>
+                      </div>
+                      <div className={`w-9 h-5 rounded-full transition-colors flex items-center ${formData.is_public ? 'bg-emerald-500' : 'bg-slate-200'}`}>
+                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform mx-0.5 ${formData.is_public ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <Label htmlFor="duration_minutes" className="text-slate-700 font-bold ml-1 text-xs uppercase tracking-wider">Duración (min)</Label>
@@ -568,13 +584,18 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
                         </div>
                         <div>
                           <div className="font-bold text-slate-900 text-base">{routine.name}</div>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <Badge variant="outline" className={`text-[10px] px-2.5 py-0.5 font-bold border ${levelColors[routine.level] || 'border-slate-200 text-slate-600'}`}>
                               {levelLabels[routine.level] || routine.level}
                             </Badge>
                             <Badge variant="outline" className={`text-[10px] px-2.5 py-0.5 font-bold border ${statusColors[routine.status] || 'border-slate-200 text-slate-600'}`}>
                               {statusLabels[routine.status] || routine.status}
                             </Badge>
+                            {routine.is_public && (
+                              <Badge variant="outline" className="text-[10px] px-2.5 py-0.5 font-bold border bg-blue-50 text-blue-700 border-blue-100">
+                                Pública
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -29,7 +29,12 @@ import {
   Bell,
   CheckCheck,
   DollarSign,
+  CalendarDays,
+  MessageSquare,
+  TrendingUp,
+  BookUser,
 } from 'lucide-react'
+import { useSubscriptionTier } from '@/lib/hooks'
 import {
   Sidebar,
   SidebarContent,
@@ -95,39 +100,26 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           ],
         },
         {
-          title: "Mi Progreso",
+          title: "Mi Entrenamiento",
           items: [
-            {
-              title: "Rutinas",
-              icon: Dumbbell,
-              isActive: pathname.includes('/mis-rutinas'),
-              items: [
-                { title: "Mis Rutinas", url: `/${gymId}/panel/mis-rutinas` },
-              ],
-            },
-            {
-              title: "Nutrición",
-              icon: UtensilsCrossed,
-              isActive: pathname.includes('/mi-nutricion'),
-              items: [
-                { title: "Mi Plan Nutricional", url: `/${gymId}/panel/mi-nutricion` },
-              ],
-            },
+            { title: "Mi Plan Semanal", url: `/${gymId}/panel/mi-plan-semanal`, icon: CalendarDays },
+            { title: "Mi Plan Nutricional", url: `/${gymId}/panel/mi-nutricion`, icon: UtensilsCrossed },
           ],
         },
         {
-          title: "Gamificación",
+          title: "Mi Juego",
           items: [
-            {
-              title: "Retos",
-              icon: Target,
-              isActive: pathname.includes('/mis-retos'),
-              items: [
-                { title: "Mis Retos", url: `/${gymId}/panel/mis-retos` },
-              ],
-            },
+            { title: "Retos", url: `/${gymId}/panel/mis-retos`, icon: Target },
             { title: "Mis Logros", url: `/${gymId}/panel/mis-logros`, icon: Award },
-            { title: "Ranking", url: `/${gymId}/panel/mi-ranking`, icon: Medal },
+            { title: "Mi Racha", url: `/${gymId}/panel/mi-racha`, icon: TrendingUp },
+            { title: "Mi Nivel", url: `/${gymId}/panel/mi-nivel`, icon: Trophy },
+            { title: "Tabla de posiciones", url: `/${gymId}/panel/mi-ranking`, icon: Medal },
+          ],
+        },
+        {
+          title: "Mi Equipo",
+          items: [
+            { title: "Mi Equipo", url: `/${gymId}/panel/directorio`, icon: BookUser },
           ],
         },
         {
@@ -146,11 +138,11 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
         {
           title: "Principal",
           items: [
-            { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+            { title: "Página inicial", url: `/${gymId}/panel`, icon: LayoutDashboard },
           ],
         },
         {
-          title: "Gestión",
+          title: "Mis Atletas",
           items: [
             { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
           ],
@@ -160,12 +152,8 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           items: [
             { title: "Ejercicios", url: `/${gymId}/panel/entrenamiento/ejercicios`, icon: List },
             { title: "Rutinas", url: `/${gymId}/panel/entrenamiento/rutinas`, icon: ClipboardList },
-          ],
-        },
-        {
-          title: "Nutrición",
-          items: [
-            { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: Apple },
+            { title: "Adherencia", url: `/${gymId}/panel/entrenamiento/adherencia`, icon: TrendingUp },
+            { title: "Plan Semanal", url: `/${gymId}/panel/entrenamiento/plan-semanal`, icon: CalendarDays },
           ],
         },
         {
@@ -191,26 +179,27 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
         {
           title: "Principal",
           items: [
-            { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
+            { title: "Página inicial", url: `/${gymId}/panel`, icon: LayoutDashboard },
           ],
         },
         {
           title: "Gestión",
           items: [
-            { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
+            { title: "Agenda", url: `/${gymId}/panel/agenda`, icon: CalendarDays },
+            { title: "Clientes", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
           ],
         },
         {
-          title: "Nutrición",
+          title: "Acompañamiento",
+          items: [
+            { title: "Mensajes", url: `/${gymId}/panel/mensajes`, icon: MessageSquare },
+            { title: "Progreso", url: `/${gymId}/panel/progreso`, icon: TrendingUp },
+          ],
+        },
+        {
+          title: "Plan de Alimentación",
           items: [
             { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: Apple },
-          ],
-        },
-        {
-          title: "Gamificación",
-          items: [
-            { title: "Retos", url: `/${gymId}/panel/gamificacion/retos`, icon: Target },
-            { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking`, icon: Trophy },
           ],
         },
         {
@@ -243,6 +232,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           items: [
             { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
             { title: "Planes de Membresía", url: `/${gymId}/panel/gestion/planes`, icon: CalendarCheck },
+            { title: "Suscripciones", url: `/${gymId}/panel/finanzas/suscripciones`, icon: DollarSign },
           ],
         },
         {
@@ -274,7 +264,6 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
       isActive: pathname.includes('/gestion/'),
       items: [
         { title: "Atletas", url: `/${gymId}/panel/gestion/atletas` },
-        { title: "Planes de Membresía", url: `/${gymId}/panel/gestion/planes` },
       ],
     },
     teamItems.length > 1 && {
@@ -361,6 +350,8 @@ export default function GymPanelLayout({
   const [userName, setUserName] = useState('Admin')
   const [showNotif, setShowNotif] = useState(false)
   const [isImpersonating, setIsImpersonating] = useState(false)
+
+  const { tier: subscriptionTier } = useSubscriptionTier()
 
   const notifQuery = useQuery({
     queryKey: ['notifications'],
@@ -566,21 +557,27 @@ export default function GymPanelLayout({
                               </CollapsibleContent>
                             </SidebarMenuItem>
                           </Collapsible>
-                        ) : (
-                          <SidebarMenuItem key={item.title}>
-                            <SidebarMenuButton 
-                              asChild 
-                              tooltip={item.title} 
-                              isActive={pathname === (item.url || '#')}
-                              className="h-10 px-4 hover:bg-white/5 active:scale-95 transition-all text-slate-300 hover:text-white data-[active=true]:bg-emerald-600 data-[active=true]:text-white shadow-none"
-                            >
-                              <Link href={item.url || '#'}>
-                                {item.icon && <item.icon className="w-5 h-5 opacity-70 group-data-[active=true]:opacity-100" />}
-                                <span className="font-medium font-inter">{item.title}</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        )
+                        ) : (() => {
+                          const premiumRoutes = ['mis-retos', 'mi-nivel', 'mi-ranking', 'mis-logros', 'mi-racha']
+                          const isPremiumRoute = item.url && premiumRoutes.some(r => item.url!.includes(r))
+                          const isLocked = isPremiumRoute && userRole === 'athlete' && subscriptionTier === 'basic'
+                          return (
+                            <SidebarMenuItem key={item.title}>
+                              <SidebarMenuButton
+                                asChild
+                                tooltip={item.title}
+                                isActive={pathname === (item.url || '#')}
+                                className="h-10 px-4 hover:bg-white/5 active:scale-95 transition-all text-slate-300 hover:text-white data-[active=true]:bg-emerald-600 data-[active=true]:text-white shadow-none"
+                              >
+                                <Link href={item.url || '#'}>
+                                  {item.icon && <item.icon className="w-5 h-5 opacity-70 group-data-[active=true]:opacity-100" />}
+                                  <span className="font-medium font-inter">{item.title}</span>
+                                  {isLocked && <span className="ml-auto text-[10px] opacity-60">🔒</span>}
+                                </Link>
+                              </SidebarMenuButton>
+                            </SidebarMenuItem>
+                          )
+                        })()
                       ))}
                     </SidebarMenu>
                   </SidebarGroupContent>

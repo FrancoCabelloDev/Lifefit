@@ -34,3 +34,19 @@ class IsReceptionist(IsAuthenticated):
 class IsAthlete(IsAuthenticated):
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role == User.Role.ATHLETE
+
+
+def get_athlete_tier(user) -> str | None:
+    """Return the active subscription tier ('basic'|'premium') for an athlete, or None."""
+    if user.role != User.Role.ATHLETE:
+        return None
+    from gyms.models import GymSubscription
+    sub = (
+        GymSubscription.objects
+        .filter(athlete=user, status="active")
+        .select_related("plan")
+        .first()
+    )
+    if sub and sub.plan:
+        return sub.plan.tier
+    return None

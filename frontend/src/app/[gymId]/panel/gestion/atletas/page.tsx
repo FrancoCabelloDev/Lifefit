@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { 
-  Users, 
-  UserPlus, 
-  Search, 
-  MoreHorizontal, 
-  Mail, 
+import {
+  Users,
+  UserPlus,
+  Search,
+  MoreHorizontal,
+  Mail,
   Calendar,
   Shield,
   Loader2,
@@ -20,7 +20,9 @@ import {
   Eye,
   UserCheck,
   Apple,
-  Download
+  Download,
+  Lock,
+  Star,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -75,7 +77,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
 
   const storedUser = getStoredUser<User>()
   const currentRole = storedUser?.role || 'gym_admin'
-  const isStaffPage = currentRole === 'gym_admin' || currentRole === 'super_admin'
+  const isStaffPage = currentRole === 'gym_admin' || currentRole === 'super_admin' || currentRole === 'receptionist'
   const isCoach = currentRole === 'coach'
   const isNutritionist = currentRole === 'nutritionist'
   
@@ -294,33 +296,20 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
       }
       if (data.dni) payload.dni = data.dni
       if (data.phone) payload.phone = data.phone
-      const newAthlete = await api.post<any>("/api/auth/gym-members/", payload)
-      console.log('newAthlete response:', newAthlete)
-      if (data.membership_plan_id) {
-        const subPayload = {
-          athlete: newAthlete.id || newAthlete.user_id,
-          plan: data.membership_plan_id,
-          start_date: data.start_date || new Date().toISOString().slice(0, 10),
-        }
-        console.log('Sub payload:', subPayload)
-        try {
-          await api.post("/api/gyms/subscriptions/", subPayload)
-        } catch (subError: any) {
-            console.error('Subscription full error:', subError)
-            if (subError instanceof ApiError) {
-              console.error('Status:', subError.status, 'Data:', JSON.stringify(subError.data))
-            }
-            showError(subError, 'Atleta creado pero no se pudo asignar el plan')
-          }
-      }
+      if (data.membership_plan_id) payload.membership_plan_id = data.membership_plan_id
+      if (data.start_date) payload.start_date = data.start_date
+
+      await api.post<any>("/api/auth/gym-members/", payload)
+
       setIsModalOpen(false)
       athleteForm.reset()
       showSuccess('Atleta registrado correctamente.')
     } catch (error: any) {
-      showError(error, 'Error al crear atleta')
+      showError(error, 'Error al registrar atleta')
     } finally {
       setIsSubmitting(false)
       isSubmittingRef.current = false
+      // Siempre refrescar la lista al terminar (éxito o error)
       fetchAthletes()
     }
   }
@@ -370,6 +359,11 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
       setIsLoading(false)
     }
   }
+
+  const getAthleteTier = (athlete: User) =>
+    athlete.active_membership?.plan_tier ?? null
+
+  const isPremium = (athlete: User) => getAthleteTier(athlete) === 'premium'
 
   const filteredAthletes = athletes.filter(athlete => {
     if (isCoach && !coachAthleteIds.has(athlete.id)) return false
@@ -737,15 +731,26 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                       <td className="px-8 py-5">
                         {athlete.active_membership ? (
                           <div className="flex flex-col gap-1">
-                            <Badge variant="outline" className={`capitalize px-3 py-1 font-semibold w-fit ${
-                              athlete.active_membership.status === 'active'
-                                ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
-                                : athlete.active_membership.status === 'expired'
-                                ? 'border-rose-200 text-rose-700 bg-rose-50'
-                                : 'border-slate-200 text-slate-600'
-                            }`}>
-                              {athlete.active_membership.plan_name || 'Sin Plan'}
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className={`capitalize px-3 py-1 font-semibold w-fit ${
+                                athlete.active_membership.status === 'active'
+                                  ? 'border-emerald-200 text-emerald-700 bg-emerald-50'
+                                  : athlete.active_membership.status === 'expired'
+                                  ? 'border-rose-200 text-rose-700 bg-rose-50'
+                                  : 'border-slate-200 text-slate-600'
+                              }`}>
+                                {athlete.active_membership.plan_name || 'Sin Plan'}
+                              </Badge>
+                              {isPremium(athlete) ? (
+                                <Badge className="bg-amber-100 text-amber-700 border-amber-200 px-2 py-0.5 text-[10px] font-bold gap-1">
+                                  <Star className="w-2.5 h-2.5" /> Premium
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-slate-200 text-slate-500 px-2 py-0.5 text-[10px] font-bold">
+                                  Básico
+                                </Badge>
+                              )}
+                            </div>
                             <span className={`text-[11px] font-bold uppercase tracking-wider ${
                               athlete.active_membership.status === 'active' ? 'text-emerald-600' : 'text-rose-500'
                             }`}>
@@ -755,7 +760,12 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                             </span>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400 font-medium">Sin Plan</span>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-slate-400 font-medium">Sin Plan</span>
+                            <Badge variant="outline" className="border-slate-200 text-slate-400 px-2 py-0.5 text-[10px] font-bold w-fit">
+                              Básico
+                            </Badge>
+                          </div>
                         )}
                       </td>
                       <td className="px-8 py-5">
@@ -831,17 +841,23 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                               </DropdownMenuItem>
                               {isStaffPage && (
                                 <>
-                                  <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-purple-50 group/item"
+                                  <DropdownMenuItem
+                                    className={`gap-3 py-3 rounded-xl ${isPremium(athlete) ? 'cursor-pointer hover:bg-purple-50' : 'opacity-50 cursor-not-allowed'} group/item`}
+                                    disabled={!isPremium(athlete)}
                                     onClick={() => {
+                                      if (!isPremium(athlete)) return
                                       setAssignAthleteId(athlete.id)
                                       setSelectedCoach('')
                                       setAssignModalOpen(true)
                                     }}
                                   >
                                     <div className="p-2 bg-purple-50 text-purple-600 rounded-lg group-hover/item:bg-purple-600 group-hover/item:text-white transition-colors">
-                                      <UserCheck className="w-4 h-4" />
+                                      {isPremium(athlete) ? <UserCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                                     </div>
-                                    <span className="font-bold text-sm text-slate-700">Asignar Coach</span>
+                                    <div>
+                                      <span className="font-bold text-sm text-slate-700">Asignar Coach</span>
+                                      {!isPremium(athlete) && <p className="text-[10px] text-slate-400">Requiere Plan Premium</p>}
+                                    </div>
                                   </DropdownMenuItem>
                                   {assignments[athlete.id] && (
                                     <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-rose-50 group/item text-rose-600"
@@ -857,17 +873,23 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                               )}
                               {isStaffPage && (
                                 <>
-                                  <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-amber-50 group/item"
+                                  <DropdownMenuItem
+                                    className={`gap-3 py-3 rounded-xl ${isPremium(athlete) ? 'cursor-pointer hover:bg-amber-50' : 'opacity-50 cursor-not-allowed'} group/item`}
+                                    disabled={!isPremium(athlete)}
                                     onClick={() => {
+                                      if (!isPremium(athlete)) return
                                       setAssignAthleteId(athlete.id)
                                       setSelectedNutritionist('')
                                       setNutriAssignModalOpen(true)
                                     }}
                                   >
                                     <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover/item:bg-amber-600 group-hover/item:text-white transition-colors">
-                                      <Apple className="w-4 h-4" />
+                                      {isPremium(athlete) ? <Apple className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                                     </div>
-                                    <span className="font-bold text-sm text-slate-700">Asignar Nutricionista</span>
+                                    <div>
+                                      <span className="font-bold text-sm text-slate-700">Asignar Nutricionista</span>
+                                      {!isPremium(athlete) && <p className="text-[10px] text-slate-400">Requiere Plan Premium</p>}
+                                    </div>
                                   </DropdownMenuItem>
                                   {nutritionAssignments[athlete.id] && (
                                     <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-rose-50 group/item text-rose-600"

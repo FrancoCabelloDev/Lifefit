@@ -63,10 +63,18 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
 
 class GymMemberViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    permission_classes = [IsGymAdmin]
+
+    STAFF_READ_ROLES = {'gym_admin', 'coach', 'nutritionist', 'receptionist'}
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAuthenticated()]
+        return [IsGymAdmin()]
 
     def get_queryset(self):
         user = self.request.user
+        if user.role not in self.STAFF_READ_ROLES:
+            return User.objects.none()
         queryset = User.objects.filter(gym=user.gym, gym__deleted_at__isnull=True).exclude(id=user.id).select_related("gym")
         
         role = self.request.query_params.get('role')
@@ -94,9 +102,48 @@ class GymMemberViewSet(viewsets.ModelViewSet):
         if role == "nutritionist" and User.objects.filter(gym=gym, role="nutritionist").count() >= gym.max_nutritionists:
             raise ValidationError("El gimnasio ha alcanzado el límite máximo de nutricionistas.")
 
-        user = serializer.save(gym=gym, is_active=True)
-        user.set_unusable_password()
-        user.save()
+        from django.db import transaction
+        from datetime import date, timedelta
+
+        with transaction.atomic():
+            user = serializer.save(gym=gym, is_active=True)
+            user.set_unusable_password()
+            user.save()
+
+            # Crear suscripción si se proporcionó un plan
+            membership_plan_id = self.request.data.get('membership_plan_id')
+            start_date_str = self.request.data.get('start_date') or date.today().isoformat()
+
+            if membership_plan_id and user.role == 'athlete':
+                from gyms.models import GymMembershipPlan, GymSubscription, GymPayment
+                try:
+                    plan = GymMembershipPlan.objects.get(id=membership_plan_id, gym=gym)
+                    try:
+                        start_date = date.fromisoformat(start_date_str)
+                    except ValueError:
+                        start_date = date.today()
+                    end_date = start_date + timedelta(days=plan.duration_days)
+                    subscription = GymSubscription.objects.create(
+                        athlete=user,
+                        gym=gym,
+                        plan=plan,
+                        status='active',
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                    from django.utils import timezone as tz
+                    GymPayment.objects.create(
+                        gym=gym,
+                        athlete=user,
+                        subscription=subscription,
+                        plan=plan,
+                        amount=plan.price,
+                        status='success',
+                        payment_method='cash',
+                        paid_at=tz.now(),
+                    )
+                except GymMembershipPlan.DoesNotExist:
+                    pass  # Plan inválido — atleta creado sin suscripción
 
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
@@ -110,19 +157,24 @@ class GymMemberViewSet(viewsets.ModelViewSet):
         })
         invite_link = f"{frontend_url}/unirse?{params}"
 
-        from core.tasks import send_welcome_athlete_async, send_welcome_staff_async
-
-        if user.role == 'athlete':
-            send_welcome_athlete_async(user.email, user.first_name, gym.name, invite_link)
-        else:
-            roles_dict = {
-                'coach': 'Entrenador (Coach)',
-                'nutritionist': 'Nutricionista',
-                'receptionist': 'Personal de Recepción / Soporte',
-                'gym_admin': 'Administrador del Gimnasio',
-            }
-            role_name = roles_dict.get(user.role, user.role.capitalize())
-            send_welcome_staff_async(user.email, user.first_name, gym.name, role_name, invite_link)
+        try:
+            from core.tasks import send_welcome_athlete_async, send_welcome_staff_async
+            if user.role == 'athlete':
+                send_welcome_athlete_async(user.email, user.first_name, gym.name, invite_link)
+            else:
+                roles_dict = {
+                    'coach': 'Entrenador (Coach)',
+                    'nutritionist': 'Nutricionista',
+                    'receptionist': 'Personal de Recepción / Soporte',
+                    'gym_admin': 'Administrador del Gimnasio',
+                }
+                role_name = roles_dict.get(user.role, user.role.capitalize())
+                send_welcome_staff_async(user.email, user.first_name, gym.name, role_name, invite_link)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"No se pudo enviar email de bienvenida a {user.email}"
+            )
 
 
 class GoogleLoginView(APIView):

@@ -1,17 +1,16 @@
 'use client'
 
 import { useEffect, useState, use } from 'react'
-import { Trophy, Medal, Loader2, Zap, Star, User } from 'lucide-react'
+import { Trophy, Medal, Loader2, Zap, Flame, User } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { getStoredUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import type { User as UserType, UserProgress as UserProgressType } from '@/lib/types'
 
 import { api } from '@/lib/api'
+import PremiumGate from '@/components/PremiumGate'
 
-interface LeaderboardEntry extends UserProgressType {
-  user_detail: { id: string; email: string; first_name?: string; last_name?: string } | null
-}
+type LeaderboardEntry = UserProgressType
 
 const podiumColors = ['bg-yellow-400', 'bg-slate-300', 'bg-amber-600']
 const podiumEmojis = ['🥇', '🥈', '🥉']
@@ -52,48 +51,63 @@ export default function MiRankingPage({ params }: { params: Promise<{ gymId: str
 
   if (leaderboard.length === 0) {
     return (
+      <PremiumGate feature="La tabla de posiciones">
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Ranking</h1>
-          <p className="text-slate-500 mt-2 text-lg">Tabla de posiciones del gimnasio</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Tabla de posiciones</h1>
+          <p className="text-slate-500 mt-2 text-lg">Ranking del gimnasio por puntos</p>
         </div>
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="p-12 text-center">
             <Trophy className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-            <h3 className="text-lg font-semibold text-slate-700">Sin datos</h3>
-            <p className="text-slate-500 mt-1">Aún no hay suficientes datos para mostrar el ranking.</p>
+            <h3 className="text-lg font-semibold text-slate-700">Sin datos aún</h3>
+            <p className="text-slate-500 mt-1">Completa retos y asiste al gimnasio para aparecer en el ranking.</p>
           </CardContent>
         </Card>
       </div>
+      </PremiumGate>
     )
   }
 
+  // Podio: orden visual es 2do - 1ro - 3ro
+  const podiumOrder = [leaderboard[1], leaderboard[0], leaderboard[2]].filter(Boolean)
+  const podiumVisualIndex = (entry: LeaderboardEntry) => leaderboard.indexOf(entry)
+
   return (
+    <PremiumGate feature="La tabla de posiciones">
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Ranking</h1>
-        <p className="text-slate-500 mt-2 text-lg">Tabla de posiciones por puntos</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Tabla de posiciones</h1>
+        <p className="text-slate-500 mt-2 text-lg">Ranking del gimnasio por puntos</p>
       </div>
 
-      {leaderboard.slice(0, 3).length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          {leaderboard.slice(0, 3).map((entry, index) => {
-            const pos = index === 0 ? 1 : index === 1 ? 0 : 2
+      {leaderboard.length >= 1 && (
+        <div className="flex items-end justify-center gap-4">
+          {podiumOrder.map((entry) => {
+            const rank = leaderboard.indexOf(entry)
+            const isFirst = rank === 0
+            const isMe = entry.user === currentUserId || entry.user_detail?.id === currentUserId
+            const heights = ['h-28', 'h-36', 'h-24']
+            const borders = ['border-slate-200', 'border-yellow-300 bg-yellow-50', 'border-amber-200 bg-amber-50']
             return (
               <Card
                 key={entry.id}
                 className={cn(
-                  'border text-center shadow-sm',
-                  index === 0 ? 'border-yellow-300 bg-yellow-50' : 'border-slate-200'
+                  'border text-center shadow-sm flex-1 max-w-[160px]',
+                  borders[rank] ?? 'border-slate-200',
+                  isMe && 'ring-2 ring-emerald-400'
                 )}
               >
-                <CardContent className="p-4">
-                  <div className="text-3xl mb-2">{podiumEmojis[index]}</div>
-                  <p className="text-xs font-semibold text-slate-800 truncate">
+                <CardContent className={cn('flex flex-col items-center justify-end p-4', heights[rank] ?? 'h-24')}>
+                  <div className="text-3xl mb-1">{podiumEmojis[rank]}</div>
+                  <p className="text-xs font-semibold text-slate-800 truncate w-full text-center">
                     {entry.user_detail?.first_name || entry.user_detail?.email?.split('@')[0] || 'Usuario'}
+                    {isMe && <span className="block text-[9px] text-emerald-500">(tú)</span>}
                   </p>
-                  <p className="text-lg font-bold text-emerald-600 mt-1">{entry.total_points}</p>
-                  <p className="text-xs text-slate-400">Nivel {entry.level}</p>
+                  <p className={cn('font-bold mt-1', isFirst ? 'text-xl text-yellow-600' : 'text-base text-emerald-600')}>
+                    {entry.total_points} pts
+                  </p>
+                  <p className="text-[10px] text-slate-400">Nivel {entry.level}</p>
                 </CardContent>
               </Card>
             )
@@ -135,15 +149,17 @@ export default function MiRankingPage({ params }: { params: Promise<{ gymId: str
                     {isMe && <span className="ml-2 text-[10px] text-emerald-500 font-normal">(tú)</span>}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="text-sm font-bold text-slate-800">{entry.total_points} pts</p>
                     <p className="text-xs text-slate-400">Nivel {entry.level}</p>
                   </div>
-                  <Zap className={cn(
-                    'w-5 h-5',
-                    isMe ? 'text-emerald-500' : 'text-slate-300'
-                  )} />
+                  {entry.streak_days != null && entry.streak_days > 0 && (
+                    <div className="flex items-center gap-0.5 text-orange-500">
+                      <Flame className="w-4 h-4" />
+                      <span className="text-xs font-bold">{entry.streak_days}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -151,5 +167,6 @@ export default function MiRankingPage({ params }: { params: Promise<{ gymId: str
         </CardContent>
       </Card>
     </div>
+    </PremiumGate>
   )
 }
