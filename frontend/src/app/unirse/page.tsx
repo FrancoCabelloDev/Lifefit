@@ -362,6 +362,19 @@ export default function UnirsePage() {
   const [selectedGym, setSelectedGym] = useState<PublicGym | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<PublicPlan | null>(null)
 
+  // Restaurar estado desde sessionStorage al montar (sobrevive redirects de Next.js)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('lifefit_unirse')
+      if (saved) {
+        const { gym, plan, step: savedStep } = JSON.parse(saved)
+        if (gym) setSelectedGym(gym)
+        if (plan) setSelectedPlan(plan)
+        if (savedStep) setStep(savedStep)
+      }
+    } catch {}
+  }, [])
+
   useEffect(() => {
     api
       .get<PublicGym[] | { results: PublicGym[] }>('/api/gyms/public/', { authenticated: false })
@@ -376,12 +389,28 @@ export default function UnirsePage() {
 
   const handleSelectGym = (gym: PublicGym) => {
     setSelectedGym(gym)
+    setSelectedPlan(null)
     setStep('plans')
+    sessionStorage.setItem('lifefit_unirse', JSON.stringify({ gym, plan: null, step: 'plans' }))
   }
 
   const handleSelectPlan = (plan: PublicPlan) => {
     setSelectedPlan(plan)
     setStep('checkout')
+    sessionStorage.setItem('lifefit_unirse', JSON.stringify({ gym: selectedGym, plan, step: 'checkout' }))
+  }
+
+  const handleBackToGyms = () => {
+    setStep('gyms')
+    setSelectedGym(null)
+    setSelectedPlan(null)
+    sessionStorage.removeItem('lifefit_unirse')
+  }
+
+  const handleBackToPlans = () => {
+    setStep('plans')
+    setSelectedPlan(null)
+    sessionStorage.setItem('lifefit_unirse', JSON.stringify({ gym: selectedGym, plan: null, step: 'plans' }))
   }
 
   const stepLabel = step === 'gyms' ? null : step === 'plans' ? 'Elige tu plan' : 'Confirmar y pagar'
@@ -411,7 +440,7 @@ export default function UnirsePage() {
         {step === 'plans' && selectedGym && (
           <GymPlans
             gym={selectedGym}
-            onBack={() => setStep('gyms')}
+            onBack={handleBackToGyms}
             onSelectPlan={handleSelectPlan}
           />
         )}
@@ -419,7 +448,7 @@ export default function UnirsePage() {
           <Checkout
             gym={selectedGym}
             plan={selectedPlan}
-            onBack={() => setStep('plans')}
+            onBack={handleBackToPlans}
           />
         )}
       </main>
