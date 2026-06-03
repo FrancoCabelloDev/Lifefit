@@ -50,26 +50,35 @@ class ChallengeViewSet(viewsets.ModelViewSet):
             return
         raise PermissionDenied("No tienes permisos para crear retos.")
 
+    def _is_manageable_by(self, user, instance):
+        """Verifica si el usuario puede gestionar este reto."""
+        if user.role == User.Role.SUPER_ADMIN:
+            return True
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            # El reto pertenece al gym del usuario (gym_id coincide o el reto no tiene gym pero aparece en su queryset)
+            if instance.gym_id == user.gym_id:
+                return True
+            # Reto sin gym asignado pero filtrado para este gym (fue creado antes de que se asignara el gym)
+            if instance.gym_id is None and self.get_queryset().filter(id=instance.id).exists():
+                return True
+        return False
+
     def perform_update(self, serializer):
         user = self.request.user
         instance = self.get_object()
-        if user.role == User.Role.SUPER_ADMIN:
-            serializer.save()
-            return
-        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.gym_id == user.gym_id:
-            responsible = serializer.validated_data.get("responsible") or instance.responsible
-            if responsible and hasattr(responsible, 'gym_id') and responsible.gym_id != user.gym_id:
-                responsible = user
-            serializer.save(gym=instance.gym, responsible=responsible)
-            return
-        raise PermissionDenied("No puedes modificar este reto.")
+        if not self._is_manageable_by(user, instance):
+            raise PermissionDenied("No puedes modificar este reto.")
+        responsible = serializer.validated_data.get("responsible") or instance.responsible
+        if responsible and hasattr(responsible, 'gym_id') and user.gym_id and responsible.gym_id != user.gym_id:
+            responsible = user
+        gym = instance.gym or (user.gym if user.role != User.Role.SUPER_ADMIN else None)
+        serializer.save(gym=gym, responsible=responsible)
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if user.role == User.Role.SUPER_ADMIN or (user.role == User.Role.GYM_ADMIN and instance.gym_id == user.gym_id):
-            instance.delete()
-            return
-        raise PermissionDenied("No puedes eliminar este reto.")
+        if not self._is_manageable_by(user, instance):
+            raise PermissionDenied("No puedes eliminar este reto.")
+        instance.delete()
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def join(self, request, pk=None):

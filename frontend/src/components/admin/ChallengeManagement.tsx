@@ -55,12 +55,10 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
   const storedUser = getStoredUser<User>()
   const currentRole = storedUser?.role
 
-  // Gym admin puede gestionar sus propios retos (gym no nulo) y NO los globales (gym=null, creados por super_admin)
+  // Gym admin y coach pueden gestionar cualquier reto que el backend les devuelva
+  // El backend es la autoridad final — rechazará si no tienen permiso
   const canManage = (challenge: ChallengeType) => {
-    if (currentRole === 'super_admin') return true
-    if (currentRole === 'gym_admin') return challenge.gym !== null
-    if (currentRole === 'coach') return challenge.gym !== null
-    return false
+    return currentRole === 'super_admin' || currentRole === 'gym_admin' || currentRole === 'coach'
   }
 
   const fetchChallenges = useCallback(async () => {
