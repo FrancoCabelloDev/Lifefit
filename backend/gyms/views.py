@@ -926,6 +926,9 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         return qs.none()
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        from core.permissions import get_athlete_tier
+
         user = self.request.user
         if user.role not in [User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN]:
             raise PermissionDenied("No tienes permisos para asignar nutricionistas.")
@@ -935,6 +938,13 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
         if nutritionist.gym_id != user.gym_id or athlete.gym_id != user.gym_id:
             raise PermissionDenied("Nutricionista y atleta deben pertenecer al mismo gimnasio.")
+
+        # Validar que el atleta tenga Plan Premium activo
+        tier = get_athlete_tier(athlete)
+        if tier != "premium":
+            raise ValidationError(
+                {"athlete": "El atleta debe tener un Plan Premium activo para ser atendido por un nutricionista."}
+            )
 
         serializer.save(gym_id=user.gym_id)
 
@@ -1813,9 +1823,34 @@ def athlete_profile(request, athlete_id):
     checkins_month = athlete.checkins.filter(timestamp__date__gte=month_ago).count()
     checkins_total = athlete.checkins.count()
 
-    from gyms.models import CoachAssignment, NutritionistAssignment
+    from gyms.models import CoachAssignment, NutritionistAssignment, BodyMeasurement, NutritionistAppointment
     coach_assign = CoachAssignment.objects.filter(athlete=athlete, is_active=True).select_related("coach").first()
     nutri_assign = NutritionistAssignment.objects.filter(athlete=athlete, is_active=True).select_related("nutritionist").first()
+
+    # Medidas antropométricas — últimas 10
+    measurements = list(
+        BodyMeasurement.objects.filter(athlete=athlete)
+        .order_by("-measured_at")[:10]
+        .values(
+            "id", "measured_at", "weight_kg", "height_cm", "body_fat_pct",
+            "muscle_mass_kg", "waist_cm", "hip_cm", "arm_cm", "visceral_fat",
+            "bmi", "notes", "recorded_by",
+        )
+    )
+
+    # Citas — próximas y recientes
+    appointments = list(
+        NutritionistAppointment.objects.filter(athlete=athlete)
+        .order_by("-scheduled_at")[:10]
+        .values(
+            "id", "scheduled_at", "duration_minutes", "appointment_type",
+            "appointment_type_display", "status", "status_display", "notes",
+        )
+    )
+
+    # Tier de membresía del atleta
+    from core.permissions import get_athlete_tier
+    membership_tier = get_athlete_tier(athlete)
 
     return Response({
         "athlete": {
@@ -1873,6 +1908,9 @@ def athlete_profile(request, athlete_id):
             "checkins_total": checkins_total,
         },
         "points_history": points_history,
+        "measurements": measurements,
+        "appointments": appointments,
+        "membership_tier": membership_tier,
     })
 
 
