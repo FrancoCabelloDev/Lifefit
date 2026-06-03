@@ -6,6 +6,8 @@ from .serializers import CustomTokenObtainPairSerializer
 from .views import (
     ChangePasswordView,
     CompleteGoogleRegistrationView,
+    CreateIziPayOrderView,
+    IziPayWebhookView,
     GoogleCallbackView,
     GoogleDisconnectView,
     GoogleLoginView,
@@ -40,6 +42,8 @@ urlpatterns = [
     path("google/callback/", GoogleCallbackView.as_view(), name="google_callback"),
     path("google/disconnect/", GoogleDisconnectView.as_view(), name="google_disconnect"),
     path("google/complete-registration/", CompleteGoogleRegistrationView.as_view(), name="google_complete_registration"),
+    path("izipay/create-order/", CreateIziPayOrderView.as_view(), name="izipay_create_order"),
+    path("izipay/webhook/", IziPayWebhookView.as_view(), name="izipay_webhook"),
     path("impersonate/", ImpersonateView.as_view(), name="impersonate"),
     path("impersonate-staff/", ImpersonateStaffView.as_view(), name="impersonate_staff"),
     path("role-redirect/", RoleRedirectView.as_view(), name="role_redirect"),

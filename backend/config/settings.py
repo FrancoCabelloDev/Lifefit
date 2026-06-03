@@ -232,3 +232,11 @@ if RESEND_API_KEY and RESEND_API_KEY != "re_pon_tu_clave_aqui":
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = "testing@lifefit.local"
+
+
+# IziPay (Lyra/PayZen Perú)
+IZIPAY_USERNAME = env("IZIPAY_USERNAME", default="")
+IZIPAY_PASSWORD = env("IZIPAY_PASSWORD", default="")
+IZIPAY_PUBLIC_KEY = env("IZIPAY_PUBLIC_KEY", default="")
+IZIPAY_HMAC_SHA256 = env("IZIPAY_HMAC_SHA256", default="")
+IZIPAY_API_URL = env("IZIPAY_API_URL", default="https://api.micuentaweb.pe/api-payment/V4")

@@ -313,18 +313,15 @@ class GoogleCallbackView(APIView):
         return redirect(f"{frontend_callback}?{query}")
 
 
-class CompleteGoogleRegistrationView(APIView):
+class CreateIziPayOrderView(APIView):
     """
-    Completa el registro de un atleta que viene del flujo /unirse con Google.
-    Se llama DESPUÉS de confirmar el pago con IziPay.
-    Recibe el token pendiente, crea la cuenta y activa la membresía.
+    Crea una orden de pago en IziPay para el flujo /unirse.
+    Recibe el pending_token (con datos del usuario y plan) y devuelve el formToken de IziPay.
     """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        from gyms.models import Gym, GymSubscription, GymMembershipPlan
-        from datetime import date, timedelta
-
+        import hmac, hashlib
         token = request.data.get("token")
         if not token:
             return Response({"detail": "Token requerido."}, status=status.HTTP_400_BAD_REQUEST)
@@ -334,16 +331,10 @@ class CompleteGoogleRegistrationView(APIView):
         except Exception:
             return Response({"detail": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
-        email = payload.get("email")
-        first_name = payload.get("first_name", "")
-        last_name = payload.get("last_name", "")
-        picture = payload.get("picture", "")
-        google_id = payload.get("google_id", "")
+        from gyms.models import Gym, GymMembershipPlan
         gym_slug = payload.get("gym_slug", "")
         plan_id = payload.get("plan_id", "")
-
-        if not email or not gym_slug or not plan_id:
-            return Response({"detail": "Datos incompletos en el token."}, status=status.HTTP_400_BAD_REQUEST)
+        email = payload.get("email", "")
 
         gym = Gym.objects.filter(slug=gym_slug, deleted_at__isnull=True).first()
         if not gym:
@@ -353,39 +344,146 @@ class CompleteGoogleRegistrationView(APIView):
         if not plan:
             return Response({"detail": "Plan no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Crear usuario si no existe
-        user = User.objects.filter(email=email).first()
-        if not user:
-            user = User.objects.create_user(
-                email=email,
-                password=None,
-                first_name=first_name,
-                last_name=last_name,
-                role=User.Role.ATHLETE,
-                is_active=True,
-                is_google_account=True,
-                gym=gym,
-            )
-        else:
-            # Si ya existe, actualizar gym si no tenía
-            if not user.gym_id:
-                user.gym = gym
+        username = settings.IZIPAY_USERNAME
+        password = settings.IZIPAY_PASSWORD
 
+        if not username or not password:
+            return Response({"detail": "Pasarela de pago no configurada."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        amount_cents = int(float(plan.price) * 100)
+
+        order_payload = {
+            "amount": amount_cents,
+            "currency": "PEN",
+            "orderId": f"LIFEFIT-{gym_slug}-{plan_id}-{get_random_string(8)}",
+            "customer": {
+                "email": email,
+            },
+            "metadata": {
+                "pending_token": token,
+            },
+        }
+
+        response = requests.post(
+            f"{settings.IZIPAY_API_URL}/Charge/CreatePayment",
+            json=order_payload,
+            auth=(username, password),
+            timeout=15,
+        )
+
+        if response.status_code >= 400:
+            return Response({"detail": "Error al crear la orden de pago.", "raw": response.json()}, status=status.HTTP_502_BAD_GATEWAY)
+
+        data = response.json()
+        form_token = data.get("answer", {}).get("formToken")
+        if not form_token:
+            return Response({"detail": "No se obtuvo formToken de IziPay.", "raw": data}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({
+            "form_token": form_token,
+            "public_key": settings.IZIPAY_PUBLIC_KEY,
+            "amount": float(plan.price),
+            "plan_name": plan.name,
+            "gym_name": gym.name,
+        })
+
+
+class IziPayWebhookView(APIView):
+    """
+    Webhook de IziPay — se llama cuando el pago es confirmado.
+    Valida la firma HMAC, extrae el pending_token del metadata y completa el registro.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        import hmac, hashlib
+
+        raw_body = request.body.decode("utf-8")
+        received_signature = request.headers.get("kr-hash", "")
+        hmac_key = settings.IZIPAY_HMAC_SHA256
+
+        if hmac_key:
+            expected = hmac.new(hmac_key.encode(), raw_body.encode(), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, received_signature):
+                return Response({"detail": "Firma inválida."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data
+        order_status = data.get("orderStatus")
+        if order_status != "PAID":
+            return Response({"detail": "Pago no completado."}, status=status.HTTP_200_OK)
+
+        pending_token = data.get("metadata", {}).get("pending_token", "")
+        if not pending_token:
+            return Response({"detail": "Sin pending_token en metadata."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Reutilizar la lógica de CompleteGoogleRegistrationView
+        _complete_registration(pending_token)
+        return Response({"detail": "OK"})
+
+
+def _complete_registration(token: str):
+    """Lógica compartida para crear usuario + membresía tras pago confirmado."""
+    from gyms.models import Gym, GymSubscription, GymMembershipPlan
+    from datetime import date, timedelta
+
+    payload = _decode_state_token(token)
+    email = payload.get("email")
+    first_name = payload.get("first_name", "")
+    last_name = payload.get("last_name", "")
+    picture = payload.get("picture", "")
+    google_id = payload.get("google_id", "")
+    gym_slug = payload.get("gym_slug", "")
+    plan_id = payload.get("plan_id", "")
+
+    gym = Gym.objects.filter(slug=gym_slug, deleted_at__isnull=True).first()
+    plan = GymMembershipPlan.objects.filter(id=plan_id, gym=gym, is_active=True).first() if gym else None
+
+    user = User.objects.filter(email=email).first()
+    if not user:
+        user = User.objects.create_user(
+            email=email, password=None,
+            first_name=first_name, last_name=last_name,
+            role=User.Role.ATHLETE, is_active=True,
+            is_google_account=True, gym=gym,
+        )
+    else:
+        if not user.gym_id and gym:
+            user.gym = gym
+
+    if google_id:
         user.google_id = google_id
+    if picture:
         user.google_picture = picture
-        user.is_google_account = True
-        user.save(update_fields=["gym", "google_id", "google_picture", "is_google_account", "updated_at"])
+    user.is_google_account = True
+    user.save(update_fields=["gym", "google_id", "google_picture", "is_google_account", "updated_at"])
 
-        # Cancelar membresías activas previas y crear la nueva
+    if gym and plan:
         GymSubscription.objects.filter(athlete=user, gym=gym, status="active").update(status="canceled")
         GymSubscription.objects.create(
-            athlete=user,
-            gym=gym,
-            plan=plan,
-            status="active",
+            athlete=user, gym=gym, plan=plan, status="active",
             start_date=date.today(),
             end_date=date.today() + timedelta(days=plan.duration_days),
         )
+    return user, gym_slug
+
+
+class CompleteGoogleRegistrationView(APIView):
+    """
+    Completa el registro de un atleta que viene del flujo /unirse con Google.
+    Se llama DESPUÉS de confirmar el pago con IziPay.
+    Recibe el token pendiente, crea la cuenta y activa la membresía.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        token = request.data.get("token")
+        if not token:
+            return Response({"detail": "Token requerido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user, gym_slug = _complete_registration(token)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         refresh = RefreshToken.for_user(user)
         return Response({
