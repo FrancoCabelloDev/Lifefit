@@ -235,8 +235,10 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
       setNutriAssignModalOpen(false)
       setSelectedNutritionist('')
       fetchNutritionAssignments()
+      showSuccess('Nutricionista asignado correctamente.')
     } catch (error: any) {
-      alert(error?.message || 'Error al asignar nutricionista')
+      const detail = error?.data?.detail || error?.data?.athlete?.[0] || error?.message || 'Error al asignar nutricionista'
+      showError(detail, 'No se pudo asignar el nutricionista')
     } finally {
       setIsAssigningNutri(false)
     }

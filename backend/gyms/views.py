@@ -925,28 +925,54 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
         return qs.none()
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        """Upsert: reactivar si ya existe, crear si no. Valida Premium antes."""
         from rest_framework.exceptions import ValidationError
         from core.permissions import get_athlete_tier
 
-        user = self.request.user
+        user = request.user
         if user.role not in [User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN]:
             raise PermissionDenied("No tienes permisos para asignar nutricionistas.")
 
-        nutritionist = serializer.validated_data.get("nutritionist")
-        athlete = serializer.validated_data.get("athlete")
+        nutritionist_id = request.data.get("nutritionist")
+        athlete_id = request.data.get("athlete")
+
+        try:
+            nutritionist = User.objects.get(id=nutritionist_id)
+            athlete = User.objects.get(id=athlete_id)
+        except User.DoesNotExist:
+            raise ValidationError({"detail": "Nutricionista o atleta no encontrado."})
 
         if nutritionist.gym_id != user.gym_id or athlete.gym_id != user.gym_id:
             raise PermissionDenied("Nutricionista y atleta deben pertenecer al mismo gimnasio.")
 
-        # Validar que el atleta tenga Plan Premium activo
+        # Validar Plan Premium
         tier = get_athlete_tier(athlete)
         if tier != "premium":
             raise ValidationError(
-                {"athlete": "El atleta debe tener un Plan Premium activo para ser atendido por un nutricionista."}
+                {"detail": "El atleta debe tener un Plan Premium activo para ser atendido por un nutricionista."}
             )
 
-        serializer.save(gym_id=user.gym_id)
+        # Upsert: reactivar si existe, crear si no
+        assignment, created = NutritionistAssignment.objects.get_or_create(
+            nutritionist=nutritionist,
+            athlete=athlete,
+            defaults={"gym_id": user.gym_id, "is_active": True},
+        )
+        if not created and not assignment.is_active:
+            assignment.is_active = True
+            assignment.gym_id = user.gym_id
+            assignment.save(update_fields=["is_active", "gym_id", "updated_at"])
+
+        from .serializers import NutritionistAssignmentSerializer
+        return Response(
+            NutritionistAssignmentSerializer(assignment).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def perform_create(self, serializer):
+        # No se usa — sobreescrito por create()
+        pass
 
     def perform_destroy(self, instance):
         user = self.request.user
