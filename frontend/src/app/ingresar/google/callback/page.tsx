@@ -14,6 +14,7 @@ export default function GoogleCallbackPage() {
   useEffect(() => {
     const access = searchParams.get('access')
     const refresh = searchParams.get('refresh')
+    const next = searchParams.get('next')
 
     if (access && refresh) {
       setTokens(access, refresh)
@@ -22,15 +23,23 @@ export default function GoogleCallbackPage() {
       api.get<User>("/api/accounts/me/")
         .then(user => {
           setStoredUser(user)
+          // Limpiar sessionStorage del flujo /unirse si venía de ahí
+          sessionStorage.removeItem('lifefit_unirse')
 
+          // Si el backend ya calculó un next específico, usarlo
+          if (next && next !== '/resumen' && next !== '/unirse') {
+            router.push(next)
+            return
+          }
+
+          // Fallback por rol
           const gymSlug = (user as any).gym_slug || user.gym
-
-          if (user.role === 'gym_admin') {
-            router.push(`/${gymSlug}/panel`)
-          } else if (user.role === 'athlete' || user.role === 'coach') {
-            router.push(`/${gymSlug}/panel-atleta`)
-          } else {
+          if (user.role === 'super_admin') {
             router.push('/panel-saas')
+          } else if (gymSlug) {
+            router.push(`/${gymSlug}/panel`)
+          } else {
+            router.push('/unirse')
           }
         })
         .catch(err => {

@@ -185,6 +185,8 @@ class GoogleLoginView(APIView):
         state_payload = {
             "next": next_path,
             "nonce": get_random_string(12),
+            "gym_slug": request.query_params.get("gym_slug", ""),
+            "plan_id": request.query_params.get("plan_id", ""),
         }
         state = base64.urlsafe_b64encode(json.dumps(state_payload).encode()).decode()
         params = {
@@ -211,14 +213,20 @@ class GoogleCallbackView(APIView):
             return Response({"detail": "Missing authorization code."}, status=status.HTTP_400_BAD_REQUEST)
 
         next_path = "/resumen"
+        gym_slug = ""
+        plan_id = ""
         if state:
             try:
                 payload = _decode_state_token(state)
                 next_path = payload.get("next", next_path)
+                gym_slug = payload.get("gym_slug", "")
+                plan_id = payload.get("plan_id", "")
             except (ValueError, json.JSONDecodeError):
                 pass
         else:
             next_path = request.query_params.get("next", next_path)
+            gym_slug = request.query_params.get("gym_slug", "")
+            plan_id = request.query_params.get("plan_id", "")
 
         token_response = requests.post(
             "https://oauth2.googleapis.com/token",
@@ -275,6 +283,32 @@ class GoogleCallbackView(APIView):
         user.is_google_account = True
         user.save(update_fields=["first_name", "last_name", "google_id", "google_picture", "is_google_account", "updated_at"])
 
+        # Asignar gym y plan si vienen del flujo /unirse
+        if gym_slug:
+            from gyms.models import Gym, GymSubscription, GymMembershipPlan
+            from django.utils import timezone
+            from datetime import date, timedelta
+            gym = Gym.objects.filter(slug=gym_slug, deleted_at__isnull=True).first()
+            if gym and not user.gym_id:
+                user.gym = gym
+                user.save(update_fields=["gym", "updated_at"])
+
+            if gym and plan_id:
+                plan = GymMembershipPlan.objects.filter(id=plan_id, gym=gym, is_active=True).first()
+                if plan:
+                    # Cancelar membresías activas previas para evitar duplicados
+                    GymSubscription.objects.filter(athlete=user, gym=gym, status="active").update(status="canceled")
+                    GymSubscription.objects.create(
+                        athlete=user,
+                        gym=gym,
+                        plan=plan,
+                        status="active",
+                        start_date=date.today(),
+                        end_date=date.today() + timedelta(days=plan.duration_days),
+                    )
+                    # Redirigir al panel del gym del atleta
+                    next_path = f"/{gym_slug}/panel"
+
         refresh = RefreshToken.for_user(user)
         frontend_callback = f"{settings.FRONTEND_URL.rstrip('/')}/ingresar/google/callback"
         query = urlencode(
@@ -282,6 +316,7 @@ class GoogleCallbackView(APIView):
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
                 "next": next_path,
+                "gym_slug": gym_slug,
             }
         )
         return redirect(f"{frontend_callback}?{query}")
