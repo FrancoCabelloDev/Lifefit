@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation'
 import {
   User, Shield, Calendar, Award, Key, Save, Loader2,
   CheckCircle2, AlertTriangle, Medal, Camera, Briefcase,
-  Star, Users, Target,
+  Star, Users, Target, Trash2,
 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 import { api } from '@/lib/api'
-import { getStoredUser } from '@/lib/auth'
+import { getStoredUser, clearAuth } from '@/lib/auth'
 import { showError, showSuccess } from '@/lib/toast'
 import { ProfileSkeleton } from '@/components/ui/skeletons'
 import type { User as UserType, UserBadge, UserProgress } from '@/lib/types'
@@ -51,6 +54,23 @@ export default function PerfilPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordError, setPasswordError] = useState('')
+
+  // Eliminar cuenta
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true)
+    try {
+      await api.delete(`/api/auth/gym-members/${user?.id}/`)
+      clearAuth()
+      router.push('/unirse')
+    } catch (error: any) {
+      showError(error, 'Error al eliminar la cuenta')
+      setIsDeleting(false)
+    }
+  }
 
   // Objetivos atleta
   const [fitnessGoal, setFitnessGoal] = useState('')
@@ -637,8 +657,99 @@ export default function PerfilPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Zona peligrosa — solo para atletas */}
+          {isAthlete && (
+            <Card className="border-rose-200 bg-rose-50/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-bold text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Zona peligrosa
+                </CardTitle>
+                <CardDescription className="text-rose-600/80 text-sm">
+                  Las acciones de esta sección son permanentes e irreversibles.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div>
+                    <p className="font-semibold text-slate-800 text-sm">Eliminar mi cuenta</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Se eliminarán tu acceso y membresía activa. Esta acción no se puede deshacer.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="border-rose-300 text-rose-600 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all flex-shrink-0"
+                    onClick={() => { setDeleteConfirmText(''); setDeleteModalOpen(true) }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Eliminar cuenta
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
+
+      {/* Modal confirmación de eliminación de cuenta */}
+      <Dialog open={deleteModalOpen} onOpenChange={open => { if (!isDeleting) setDeleteModalOpen(open) }}>
+        <DialogContent className="sm:max-w-[420px] bg-white rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
+          <div className="bg-rose-600 px-8 pt-8 pb-6 text-white">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <DialogTitle className="text-2xl font-bold leading-tight">
+              Eliminar mi cuenta
+            </DialogTitle>
+            <DialogDescription className="text-rose-100 mt-1 font-medium">
+              Esta acción es permanente e irreversible.
+            </DialogDescription>
+          </div>
+
+          <div className="px-8 py-6 space-y-5">
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Al eliminar tu cuenta perderás acceso al gimnasio, se cancelará tu membresía activa
+              y todos tus datos de progreso dejarán de estar disponibles.
+            </p>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Escribe <span className="text-rose-600 font-bold">ELIMINAR</span> para confirmar
+              </Label>
+              <Input
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                placeholder="ELIMINAR"
+                className="border-rose-200 focus:border-rose-400 focus:ring-rose-400/20"
+                disabled={isDeleting}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <Button
+                variant="ghost"
+                className="flex-1 h-12 rounded-xl font-bold text-slate-500 hover:bg-slate-50"
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 h-12 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-lg shadow-rose-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'ELIMINAR' || isDeleting}
+              >
+                {isDeleting
+                  ? <Loader2 className="w-5 h-5 animate-spin" />
+                  : 'Eliminar mi cuenta'
+                }
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
