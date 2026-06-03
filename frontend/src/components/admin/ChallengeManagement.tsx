@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 
 import { api } from '@/lib/api'
-import type { Challenge as ChallengeType, StaffMember } from '@/lib/types'
+import { getStoredUser } from '@/lib/auth'
+import { showError, showSuccess } from '@/lib/toast'
+import type { Challenge as ChallengeType, StaffMember, User } from '@/lib/types'
 
 type ChallengeStats = {
   total: number
@@ -47,6 +49,19 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
   const [editingChallenge, setEditingChallenge] = useState<ChallengeType | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterType, setFilterType] = useState<string>('all')
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const storedUser = getStoredUser<User>()
+  const currentRole = storedUser?.role
+  const currentGymId = storedUser?.gym ? String(storedUser.gym) : null
+
+  // Un reto es "propio" si el gym admin lo creó (gym coincide) o es super_admin
+  const canManage = (challenge: ChallengeType) => {
+    if (currentRole === 'super_admin') return true
+    if (currentRole === 'gym_admin') return challenge.gym !== null && String(challenge.gym) === currentGymId
+    return false
+  }
 
   const fetchChallenges = useCallback(async () => {
     try {
@@ -84,14 +99,19 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
     setShowModal(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este reto?')) return
+  const confirmDelete = async () => {
+    if (!deleteId) return
+    setIsDeleting(true)
     try {
-      await api.delete(`/api/challenges/challenges/${id}/`)
-      setChallenges((prev) => prev.filter((c) => c.id !== id))
-    } catch (err) {
-      setError('Error al eliminar reto')
-      console.error(err)
+      await api.delete(`/api/challenges/challenges/${deleteId}/`)
+      setChallenges((prev) => prev.filter((c) => c.id !== deleteId))
+      showSuccess('Reto eliminado correctamente.')
+      setDeleteId(null)
+    } catch (err: any) {
+      const msg = err?.data?.detail || err?.message || 'Error al eliminar el reto'
+      showError(msg, 'No se pudo eliminar')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -290,23 +310,65 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
                   </div>
 
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEdit(challenge)}
-                      className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(challenge.id)}
-                      className="rounded-xl bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
-                    >
-                      Eliminar
-                    </button>
+                    {canManage(challenge) ? (
+                      <>
+                        <button
+                          onClick={() => handleEdit(challenge)}
+                          className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(challenge.id)}
+                          className="rounded-xl bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100"
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    ) : (
+                      <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-400 border border-slate-100">
+                        Solo lectura
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Modal confirmación de eliminación */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white overflow-hidden shadow-2xl">
+            <div className="bg-rose-600 px-8 pt-8 pb-6 text-white">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-4 text-2xl">🗑️</div>
+              <h3 className="text-2xl font-bold">Eliminar reto</h3>
+              <p className="text-rose-100 mt-1 font-medium">Esta acción no se puede deshacer.</p>
+            </div>
+            <div className="px-8 py-6 space-y-5">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Se eliminará el reto y todas las participaciones de atletas asociadas a él.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteId(null)}
+                  disabled={isDeleting}
+                  className="flex-1 h-12 rounded-xl border border-slate-200 text-sm font-bold text-slate-500 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 h-12 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold transition disabled:opacity-50"
+                >
+                  {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -390,13 +452,13 @@ function ChallengeModal({ token, challenge, userGymId, onClose, onSave }: Challe
 
     try {
       if (challenge) {
-        await api.put(`/api/challenges/challenges/${challenge.id}/`, payload)
+        await api.patch(`/api/challenges/challenges/${challenge.id}/`, payload)
       } else {
         await api.post("/api/challenges/challenges/", payload)
       }
       onSave()
     } catch (err: any) {
-      setError(err?.message || 'Error al guardar')
+      setError(err?.data?.detail || err?.data?.non_field_errors?.[0] || err?.message || 'Error al guardar')
     } finally {
       setSaving(false)
     }
