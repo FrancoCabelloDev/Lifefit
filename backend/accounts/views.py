@@ -54,6 +54,15 @@ class UserMeView(APIView):
         serializer.save()
         return Response(UserSerializer(request.user).data)
 
+    def delete(self, request, *args, **kwargs):
+        """Permite al atleta eliminar su propia cuenta."""
+        from gyms.models import GymSubscription
+        user = request.user
+        # Cancelar membresías activas
+        GymSubscription.objects.filter(athlete=user, status="active").update(status="canceled")
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     queryset = User.objects.all().select_related("gym")

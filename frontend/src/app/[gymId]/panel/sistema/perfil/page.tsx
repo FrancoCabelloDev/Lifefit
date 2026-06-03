@@ -63,7 +63,7 @@ export default function PerfilPage() {
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
     try {
-      await api.delete(`/api/auth/gym-members/${user?.id}/`)
+      await api.delete('/api/accounts/me/')
       clearAuth()
       router.push('/unirse')
     } catch (error: any) {
