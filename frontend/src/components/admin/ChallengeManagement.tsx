@@ -54,12 +54,12 @@ export default function ChallengeManagement({ token, userGymId }: ChallengeManag
 
   const storedUser = getStoredUser<User>()
   const currentRole = storedUser?.role
-  const currentGymId = storedUser?.gym ? String(storedUser.gym) : null
 
-  // Un reto es "propio" si el gym admin lo creó (gym coincide) o es super_admin
+  // Gym admin puede gestionar sus propios retos (gym no nulo) y NO los globales (gym=null, creados por super_admin)
   const canManage = (challenge: ChallengeType) => {
     if (currentRole === 'super_admin') return true
-    if (currentRole === 'gym_admin') return challenge.gym !== null && String(challenge.gym) === currentGymId
+    if (currentRole === 'gym_admin') return challenge.gym !== null
+    if (currentRole === 'coach') return challenge.gym !== null
     return false
   }
 
