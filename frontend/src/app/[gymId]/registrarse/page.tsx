@@ -1,6 +1,5 @@
-import RegisterForm from '../../../components/auth/RegisterForm'
+import { redirect } from 'next/navigation'
 
-export default async function GymRegisterPage({ params }: { params: Promise<{ gymId: string }> }) {
-  const resolvedParams = await params
-  return <RegisterForm gymId={resolvedParams.gymId} />
+export default function GymRegisterPage() {
+  redirect('/unirse')
 }
