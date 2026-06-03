@@ -282,9 +282,14 @@ class BranchViewSet(viewsets.ModelViewSet):
 class PublicGymViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Endpoint público para listar gimnasios activos.
-    Usado en las vistas de /tugimnasio y /unirse del frontend.
+    Usado en /unirse del frontend — no requiere autenticación.
     """
-    queryset = Gym.objects.filter(status=Gym.Status.ACTIVE, deleted_at__isnull=True).order_by("name")
+    queryset = (
+        Gym.objects
+        .filter(status=Gym.Status.ACTIVE, deleted_at__isnull=True)
+        .prefetch_related("membership_plans", "gym_subscriptions")
+        .order_by("name")
+    )
     serializer_class = PublicGymSerializer
     permission_classes = [AllowAny]
 

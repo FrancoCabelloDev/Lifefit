@@ -75,18 +75,46 @@ class GymSerializer(serializers.ModelSerializer):
         return None
 
 
+class PublicGymMembershipPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GymMembershipPlan
+        fields = ["id", "name", "description", "price", "duration_days", "features", "tier"]
+        read_only_fields = fields
+
+
 class PublicGymSerializer(serializers.ModelSerializer):
+    active_members_count = serializers.SerializerMethodField()
+    min_price = serializers.SerializerMethodField()
+    plans = serializers.SerializerMethodField()
+
     class Meta:
         model = Gym
         fields = [
             "id",
             "name",
             "slug",
+            "description",
             "location",
             "logo",
             "brand_color",
+            "website",
+            "contact_email",
+            "active_members_count",
+            "min_price",
+            "plans",
         ]
         read_only_fields = fields
+
+    def get_active_members_count(self, obj):
+        return obj.gym_subscriptions.filter(status="active").count()
+
+    def get_min_price(self, obj):
+        plan = obj.membership_plans.filter(is_active=True).order_by("price").first()
+        return float(plan.price) if plan else None
+
+    def get_plans(self, obj):
+        plans = obj.membership_plans.filter(is_active=True).order_by("price")
+        return PublicGymMembershipPlanSerializer(plans, many=True).data
 
 
 class GymMembershipPlanSerializer(serializers.ModelSerializer):

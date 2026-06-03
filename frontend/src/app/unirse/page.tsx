@@ -1,169 +1,379 @@
 'use client'
 
-import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
+import { GymMembershipPlan } from '@/lib/types'
+import {
+  MapPin,
+  Search,
+  Users,
+  ChevronRight,
+  Dumbbell,
+  Star,
+  ArrowLeft,
+  Check,
+  X,
+} from 'lucide-react'
 
-function SetPasswordForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const uid = searchParams.get('uid')
-  const token = searchParams.get('token')
-  const gymName = searchParams.get('gymName')
-  const gymSlug = searchParams.get('gymSlug')
+type PublicPlan = Pick<GymMembershipPlan, 'id' | 'name' | 'description' | 'price' | 'duration_days' | 'features' | 'tier'>
 
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
+type PublicGym = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  location: string
+  logo: string | null
+  brand_color: string
+  website: string
+  contact_email: string
+  active_members_count: number
+  min_price: number | null
+  plans: PublicPlan[]
+}
 
-  if (!uid || !token) {
-    return (
-      <div className="text-center text-rose-600 p-4">
-        Enlace de invitación inválido. Faltan parámetros en la URL.
-      </div>
-    )
-  }
+// ─── Gym Card ────────────────────────────────────────────────────────────────
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden')
-      return
-    }
-
-    if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres')
-      return
-    }
-
-    setIsLoading(true)
-
-    try {
-      const data = await api.post<{ detail: string; gym_slug?: string }>(
-        "/api/accounts/set-password/",
-        { uid, token, password },
-        { authenticated: false }
-      )
-
-      alert('Contraseña configurada con éxito. Ya puedes iniciar sesión.')
-      if (data.gym_slug) {
-        router.push(`/${data.gym_slug}/ingresar`)
-      } else {
-        router.push('/ingresar')
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Error de conexión con el servidor')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleGoogleLogin = async () => {
-    try {
-      const data = await api.get<{ authorization_url: string }>("/api/accounts/google/login/", { authenticated: false })
-      if (data.authorization_url) {
-        window.location.href = data.authorization_url
-      }
-    } catch {
-      console.error('Error fetching Google auth URL:')
-    }
-  }
+function GymCard({ gym, onClick }: { gym: PublicGym; onClick: () => void }) {
+  const color = gym.brand_color || '#10b981'
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="p-3 text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded-lg">
-          {error}
+    <button
+      onClick={onClick}
+      className="group w-full text-left bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+    >
+      {/* Banner de color de marca */}
+      <div
+        className="h-2 w-full"
+        style={{ backgroundColor: color }}
+      />
+
+      <div className="p-5">
+        <div className="flex items-start gap-4">
+          {/* Logo / inicial */}
+          <div
+            className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-xl shadow-sm"
+            style={{ backgroundColor: color }}
+          >
+            {gym.logo ? (
+              <img src={gym.logo} alt={gym.name} className="w-full h-full object-cover rounded-xl" />
+            ) : (
+              gym.name.charAt(0).toUpperCase()
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-slate-900 text-lg leading-tight truncate group-hover:text-emerald-600 transition-colors">
+                {gym.name}
+              </h3>
+              <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0 group-hover:text-emerald-500 transition-colors" />
+            </div>
+
+            {gym.location && (
+              <p className="flex items-center gap-1 text-sm text-slate-500 mt-0.5">
+                <MapPin className="w-3.5 h-3.5" />
+                {gym.location}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {gym.description && (
+          <p className="text-sm text-slate-600 mt-3 line-clamp-2 leading-relaxed">
+            {gym.description}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-50">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-xs text-slate-500">
+              <Users className="w-3.5 h-3.5" />
+              {gym.active_members_count} miembros
+            </span>
+            <span className="flex items-center gap-1 text-xs text-slate-500">
+              <Dumbbell className="w-3.5 h-3.5" />
+              {gym.plans.length} {gym.plans.length === 1 ? 'plan' : 'planes'}
+            </span>
+          </div>
+
+          {gym.min_price !== null && (
+            <span className="text-sm font-semibold text-emerald-600">
+              Desde S/ {Number(gym.min_price).toFixed(0)}/mes
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ─── Plan Card ───────────────────────────────────────────────────────────────
+
+function PlanCard({
+  plan,
+  brandColor,
+  onSelect,
+}: {
+  plan: PublicPlan
+  brandColor: string
+  onSelect: () => void
+}) {
+  const isPremium = plan.tier === 'premium'
+  const color = brandColor || '#10b981'
+
+  return (
+    <div
+      className={`relative rounded-2xl border-2 transition-all ${
+        isPremium ? 'border-amber-400 shadow-md' : 'border-slate-200'
+      } bg-white overflow-hidden`}
+    >
+      {isPremium && (
+        <div className="absolute top-3 right-3">
+          <span className="flex items-center gap-1 bg-amber-400 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+            <Star className="w-3 h-3" /> Premium
+          </span>
         </div>
       )}
-      
-      <div className="space-y-2">
-        <Label htmlFor="password">Nueva Contraseña</Label>
-        <Input 
-          id="password" 
-          type="password" 
-          required 
-          value={password} 
-          onChange={e => setPassword(e.target.value)} 
-          placeholder="••••••••" 
-        />
-      </div>
-      
-      <div className="space-y-2">
-        <Label htmlFor="confirm_password">Confirmar Contraseña</Label>
-        <Input 
-          id="confirm_password" 
-          type="password" 
-          required 
-          value={confirmPassword} 
-          onChange={e => setConfirmPassword(e.target.value)} 
-          placeholder="••••••••" 
-        />
-      </div>
 
-      <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={isLoading}>
-        {isLoading ? 'Guardando...' : 'Configurar mi cuenta'}
-      </Button>
+      {/* Barra de color superior */}
+      <div className="h-1.5 w-full" style={{ backgroundColor: isPremium ? '#f59e0b' : color }} />
 
-      <div className="relative my-6">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-slate-200" />
+      <div className="p-5">
+        <h4 className="font-bold text-slate-900 text-lg">{plan.name}</h4>
+        {plan.description && (
+          <p className="text-sm text-slate-500 mt-1">{plan.description}</p>
+        )}
+
+        <div className="mt-4">
+          <span className="text-3xl font-extrabold text-slate-900">
+            S/ {Number(plan.price).toFixed(2)}
+          </span>
+          <span className="text-slate-400 text-sm ml-1">
+            / {plan.duration_days} días
+          </span>
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-2 text-slate-500">O continúa con</span>
-        </div>
+
+        {plan.features && plan.features.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {plan.features.map((feat, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                <Check className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                {feat}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <Button
+          onClick={onSelect}
+          className="w-full mt-5 font-semibold"
+          style={{ backgroundColor: isPremium ? '#f59e0b' : color }}
+        >
+          Elegir este plan
+        </Button>
       </div>
-      
-      <Button 
-        variant="outline" 
-        className="w-full" 
-        type="button"
-        onClick={handleGoogleLogin}
+    </div>
+  )
+}
+
+// ─── Gym Detail View ─────────────────────────────────────────────────────────
+
+function GymDetail({ gym, onBack }: { gym: PublicGym; onBack: () => void }) {
+  const router = useRouter()
+  const color = gym.brand_color || '#10b981'
+
+  const handleSelectPlan = (plan: PublicPlan) => {
+    // Por ahora redirige a registro con el plan seleccionado
+    router.push(`/${gym.slug}/registrarse?plan=${plan.id}&planName=${encodeURIComponent(plan.name)}`)
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Header */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6 transition-colors"
       >
-        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-        </svg>
-        Google
-      </Button>
-    </form>
+        <ArrowLeft className="w-4 h-4" />
+        Volver a gimnasios
+      </button>
+
+      {/* Gym info */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+        <div className="h-3 w-full" style={{ backgroundColor: color }} />
+        <div className="p-6 flex items-center gap-5">
+          <div
+            className="w-16 h-16 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-sm flex-shrink-0"
+            style={{ backgroundColor: color }}
+          >
+            {gym.logo ? (
+              <img src={gym.logo} alt={gym.name} className="w-full h-full object-cover rounded-xl" />
+            ) : (
+              gym.name.charAt(0).toUpperCase()
+            )}
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">{gym.name}</h2>
+            {gym.location && (
+              <p className="flex items-center gap-1 text-sm text-slate-500 mt-1">
+                <MapPin className="w-3.5 h-3.5" />
+                {gym.location}
+              </p>
+            )}
+            <div className="flex items-center gap-3 mt-2">
+              <span className="flex items-center gap-1 text-xs text-slate-400">
+                <Users className="w-3.5 h-3.5" />
+                {gym.active_members_count} miembros activos
+              </span>
+            </div>
+          </div>
+        </div>
+        {gym.description && (
+          <div className="px-6 pb-6 text-sm text-slate-600 leading-relaxed border-t border-slate-50 pt-4">
+            {gym.description}
+          </div>
+        )}
+      </div>
+
+      {/* Planes */}
+      <h3 className="text-lg font-bold text-slate-900 mb-4">Elige tu plan</h3>
+
+      {gym.plans.length === 0 ? (
+        <div className="bg-slate-50 rounded-2xl p-10 text-center text-slate-400">
+          <Dumbbell className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>Este gimnasio aún no tiene planes publicados.</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {gym.plans.map(plan => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              brandColor={color}
+              onSelect={() => handleSelectPlan(plan)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-export default function SetPasswordPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">Cargando...</div>}>
-      <SetPasswordPageContent />
-    </Suspense>
-  )
-}
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
-function SetPasswordPageContent() {
-  const searchParams = useSearchParams()
-  const gymName = searchParams.get('gymName') || 'LifeFit'
+export default function UnirsePage() {
+  const [gyms, setGyms] = useState<PublicGym[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [selectedGym, setSelectedGym] = useState<PublicGym | null>(null)
+
+  useEffect(() => {
+    api
+      .get<PublicGym[]>('/api/gyms/public/', { authenticated: false })
+      .then(setGyms)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return gyms
+    const q = search.toLowerCase()
+    return gyms.filter(
+      g =>
+        g.name.toLowerCase().includes(q) ||
+        g.location?.toLowerCase().includes(q) ||
+        g.description?.toLowerCase().includes(q)
+    )
+  }, [gyms, search])
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-xl border-slate-100">
-        <CardHeader className="text-center space-y-1">
-          <CardTitle className="text-2xl font-bold text-slate-900">Bienvenido a {gymName}</CardTitle>
-          <CardDescription>
-            Crea una contraseña segura para acceder a tu panel de administración.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SetPasswordForm />
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-slate-50">
+      {/* Top bar */}
+      <header className="bg-white border-b border-slate-100 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Dumbbell className="w-6 h-6 text-emerald-600" />
+            <span className="font-bold text-slate-900 text-lg">Lifefit</span>
+          </div>
+          <a href="/ingresar" className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
+            Ya tengo cuenta →
+          </a>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 py-10">
+        {selectedGym ? (
+          <GymDetail gym={selectedGym} onBack={() => setSelectedGym(null)} />
+        ) : (
+          <>
+            {/* Hero */}
+            <div className="text-center mb-10">
+              <h1 className="text-4xl font-extrabold text-slate-900 mb-3">
+                Encuentra tu gimnasio
+              </h1>
+              <p className="text-slate-500 text-lg max-w-xl mx-auto">
+                Explora los gimnasios disponibles, elige tu plan y empieza hoy.
+              </p>
+            </div>
+
+            {/* Buscador */}
+            <div className="relative max-w-lg mx-auto mb-10">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o ciudad..."
+                className="pl-10 h-12 rounded-xl border-slate-200 shadow-sm text-base"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Resultados */}
+            {loading ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-slate-100 h-48 animate-pulse" />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-20 text-slate-400">
+                <Dumbbell className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p className="text-lg font-medium">No se encontraron gimnasios</p>
+                {search && (
+                  <p className="text-sm mt-1">Intenta con otro término de búsqueda</p>
+                )}
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500 mb-4">
+                  {filtered.length} {filtered.length === 1 ? 'gimnasio encontrado' : 'gimnasios encontrados'}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filtered.map(gym => (
+                    <GymCard
+                      key={gym.id}
+                      gym={gym}
+                      onClick={() => setSelectedGym(gym)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </main>
     </div>
   )
 }
