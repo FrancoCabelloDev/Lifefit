@@ -111,6 +111,11 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   const [nutriAthleteIds, setNutriAthleteIds] = useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+  // Modal confirmación de baja
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [athleteToDelete, setAthleteToDelete] = useState<User | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   useEffect(() => {
     if (isStaffPage) {
       fetchAthletes()
@@ -314,19 +319,29 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
     }
   }
 
-  const handleDeactivateAthlete = async (athleteId: string) => {
-    if (!confirm('¿Estás seguro de dar de baja a este atleta? Esta acción cancelará su suscripción.')) return
+  const handleDeactivateAthlete = (athleteId: string) => {
+    const athlete = athletes.find(a => a.id === athleteId) || null
+    setAthleteToDelete(athlete)
+    setDeleteModalOpen(true)
+  }
+
+  const confirmDeleteAthlete = async () => {
+    if (!athleteToDelete) return
+    setIsDeleting(true)
     try {
-      const athlete = athletes.find(a => a.id === athleteId)
-      const sub = athlete?.active_membership
+      const sub = athleteToDelete.active_membership
       if (sub && sub.status === 'active') {
         await api.patch(`/api/gyms/subscriptions/${sub.id}/`, { status: 'canceled' })
       }
-      await api.delete(`/api/auth/gym-members/${athleteId}/`)
+      await api.delete(`/api/auth/gym-members/${athleteToDelete.id}/`)
       fetchAthletes()
       showSuccess('Atleta dado de baja correctamente.')
+      setDeleteModalOpen(false)
+      setAthleteToDelete(null)
     } catch (error: any) {
       showError(error, 'Error al dar de baja al atleta')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -985,6 +1000,69 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                 onClick={handleAssignNutritionist}
               >
                 {isAssigningNutri ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Asignar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal — Confirmar baja de atleta */}
+      <Dialog open={deleteModalOpen} onOpenChange={open => { if (!isDeleting) setDeleteModalOpen(open) }}>
+        <DialogContent className="sm:max-w-[420px] bg-white rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
+          {/* Cabecera roja */}
+          <div className="bg-rose-600 px-8 pt-8 pb-6 text-white">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <DialogTitle className="text-2xl font-bold leading-tight">
+              Dar de baja al atleta
+            </DialogTitle>
+            <DialogDescription className="text-rose-100 mt-1 font-medium">
+              Esta acción no se puede deshacer.
+            </DialogDescription>
+          </div>
+
+          {/* Cuerpo */}
+          <div className="px-8 py-6 space-y-5">
+            {athleteToDelete && (
+              <div className="flex items-center gap-3 bg-slate-50 rounded-2xl p-4">
+                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center font-bold text-rose-600 text-sm flex-shrink-0">
+                  {athleteToDelete.first_name?.charAt(0)}{athleteToDelete.last_name?.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {athleteToDelete.first_name} {athleteToDelete.last_name}
+                  </p>
+                  <p className="text-xs text-slate-500">{athleteToDelete.email}</p>
+                </div>
+              </div>
+            )}
+
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Al confirmar, se <strong>cancelará su suscripción activa</strong> y el atleta
+              perderá acceso al gimnasio. Su historial de datos se conservará.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1 h-12 rounded-xl font-bold text-slate-500 hover:bg-slate-50"
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 h-12 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-lg shadow-rose-600/20 transition-all active:scale-95"
+                onClick={confirmDeleteAthlete}
+                disabled={isDeleting}
+              >
+                {isDeleting
+                  ? <Loader2 className="w-5 h-5 animate-spin" />
+                  : 'Sí, dar de baja'
+                }
               </Button>
             </div>
           </div>
