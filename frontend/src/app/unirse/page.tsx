@@ -274,8 +274,12 @@ export default function UnirsePage() {
 
   useEffect(() => {
     api
-      .get<PublicGym[]>('/api/gyms/public/', { authenticated: false })
-      .then(setGyms)
+      .get<PublicGym[] | { results: PublicGym[] }>('/api/gyms/public/', { authenticated: false })
+      .then(data => {
+        if (Array.isArray(data)) setGyms(data)
+        else if (data && Array.isArray((data as any).results)) setGyms((data as any).results)
+        else setGyms([])
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
