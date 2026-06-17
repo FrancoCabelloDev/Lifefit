@@ -1,5 +1,9 @@
 import csv
-from datetime import date, timedelta
+import logging
+import pytz
+from datetime import date, datetime, time as dt_time, timedelta
+
+logger = logging.getLogger(__name__)
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -9,22 +13,26 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
+from core.constants import DASHBOARD_CACHE_TTL
 from core.permissions import IsGymAdmin
 from gamification.models import AthleteStreak
 from .models import (
-    BodyMeasurement, Branch, CheckIn, CoachAssignment, Gym, GymMembershipPlan,
-    GymFeatureFlag, GymPayment, GymSubscription, Notification, NutritionistAssignment,
-    NutritionistAppointment, NutritionistMessage,
+    AthleteGoal, BodyMeasurement, Branch, CheckIn, CoachAssignment, CoachMessage, Gym,
+    GymMembershipPlan, GymFeatureFlag, GymPayment, GymSubscription, Notification,
+    NutritionistAssignment, AvailabilityOverride, NutritionistAppointment,
+    NutritionistAvailability, NutritionistMessage,
 )
 from .serializers import (
+    AthleteGoalSerializer,
     BodyMeasurementSerializer,
     BranchSerializer,
     CheckInCreateSerializer,
     CheckInSerializer,
     CoachAssignmentSerializer,
+    CoachMessageSerializer,
     GymSerializer,
     PublicGymSerializer,
     GymMembershipPlanSerializer,
@@ -34,12 +42,13 @@ from .serializers import (
     NotificationSerializer,
     NutritionistAssignmentSerializer,
     NutritionistAppointmentSerializer,
+    NutritionistAvailabilitySerializer,
     NutritionistMessageSerializer,
 )
 
 User = get_user_model()
 
-CACHE_TTL = 300  # 5 minutos
+CACHE_TTL = DASHBOARD_CACHE_TTL
 
 
 class GymViewSet(viewsets.ModelViewSet):
@@ -71,9 +80,7 @@ class GymViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Solo los super administradores pueden crear gimnasios.")
         
         admin_email = self.request.data.get('admin_email')
-        print("\n" + "="*50)
-        print(f"DEBUG: Intentando crear gimnasio. admin_email: '{admin_email}'")
-        print("="*50 + "\n")
+        logger.debug("Intentando crear gimnasio. admin_email: '%s'", admin_email)
         
         if admin_email and User.objects.filter(email=admin_email).exists():
             from rest_framework.exceptions import ValidationError
@@ -172,7 +179,7 @@ class GymViewSet(viewsets.ModelViewSet):
                     end_date=end_date,
                     next_billing_date=end_date
                 )
-                print(f"✅ Suscripción '{plan.name}' creada para {gym.name}")
+                logger.info("Suscripción '%s' creada para %s", plan.name, gym.name)
 
                 # Crear pago correspondiente para que se proyecte en Facturación
                 from subscriptions.models import Payment
@@ -184,7 +191,7 @@ class GymViewSet(viewsets.ModelViewSet):
                     paid_at=timezone.now(),
                     provider="manual"
                 )
-                print(f"✅ Pago inicial de {plan.currency} {plan.price} creado para {gym.name} en Facturación")
+                logger.info("Pago inicial %s %s creado para %s", plan.currency, plan.price, gym.name)
 
                 # Envío de correo asíncrono
                 from core.tasks import send_welcome_gym_async
@@ -296,12 +303,13 @@ class PublicGymViewSet(viewsets.ReadOnlyModelViewSet):
 
 class GymMembershipPlanViewSet(viewsets.ModelViewSet):
     serializer_class = GymMembershipPlanSerializer
-    permission_classes = [AllowAny]
+    # GET público (página de inscripción pública). POST/PUT/PATCH/DELETE requieren auth.
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
         user = self.request.user
         queryset = GymMembershipPlan.objects.select_related("gym")
-        
+
         gym_slug = self.request.query_params.get("gym_slug")
         if gym_slug:
             queryset = queryset.filter(gym__slug=gym_slug, is_active=True)
@@ -314,13 +322,11 @@ class GymMembershipPlanViewSet(viewsets.ModelViewSet):
 
         if user.role == User.Role.GYM_ADMIN and user.gym_id:
             return queryset.filter(gym_id=user.gym_id)
-            
+
         return queryset.filter(is_active=True)
 
     def perform_create(self, serializer):
         user = self.request.user
-        if not user.is_authenticated:
-            raise PermissionDenied("Debe autenticarse.")
         if user.role == User.Role.SUPER_ADMIN:
             serializer.save()
             return
@@ -331,8 +337,6 @@ class GymMembershipPlanViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         user = self.request.user
-        if not user.is_authenticated:
-            raise PermissionDenied("Debe autenticarse.")
         plan = self.get_object()
         if user.role == User.Role.SUPER_ADMIN:
             serializer.save()
@@ -344,8 +348,6 @@ class GymMembershipPlanViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if not user.is_authenticated:
-            raise PermissionDenied("Debe autenticarse.")
         if user.role == User.Role.SUPER_ADMIN:
             instance.delete()
             return
@@ -760,7 +762,8 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             user_id__in=athlete_ids, performed_at__date__gte=week_ago, status="completed"
         ).count()
         active_challenges = ChallengeParticipation.objects.filter(
-            user_id__in=athlete_ids, status="active"
+            user_id__in=athlete_ids,
+            status=ChallengeParticipation.ParticipationStatus.JOINED,
         ).values("challenge").distinct().count()
 
         # At-risk: athletes with 0 sessions in the last 7 days
@@ -1027,7 +1030,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         ).select_related("plan")
 
         today_meal_logs = UserMealLog.objects.filter(
-            user_id__in=athlete_ids_filter, date=today.isoformat(), completed=True
+            user_id__in=athlete_ids_filter, date=today.isoformat(), status="completed"
         ).values("user_id").annotate(count=Count("id"))
         meal_counts = {str(m["user_id"]): m["count"] for m in today_meal_logs}
 
@@ -1096,7 +1099,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         )["avg"] or 0
 
         meals_week = UserMealLog.objects.filter(
-            user_id__in=athlete_ids, date__gte=week_ago.isoformat(), completed=True
+            user_id__in=athlete_ids, date__gte=week_ago.isoformat(), status="completed"
         ).count()
 
         athletes_with_plan = UserNutritionPlan.objects.filter(
@@ -1142,7 +1145,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         for a in athletes:
             plan = UserNutritionPlan.objects.filter(user=a, status="active").first()
             compliance = plan.compliance_percentage if plan else 0
-            today_meals = UserMealLog.objects.filter(user=a, date=date.today().isoformat(), completed=True).count()
+            today_meals = UserMealLog.objects.filter(user=a, date=date.today().isoformat(), status="completed").count()
             writer.writerow([
                 f"{a.first_name} {a.last_name}", a.email, a.nivel, a.puntos,
                 plan.plan.name if plan else "",
@@ -1171,23 +1174,33 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
         today = date.today()
         start_date = today - timedelta(days=days - 1)
+        end_date = today
+
+        # total_expected es invariante por día: los planes activos no cambian dentro del período.
+        # Se calcula una sola vez fuera del loop (antes: 1 query por día = hasta 30 queries).
+        total_expected = MealTemplate.objects.filter(
+            plan__assignments__user_id__in=athlete_ids,
+            plan__assignments__status="active",
+        ).count()
+
+        # Logs completados agrupados por fecha: 1 sola query para todo el período.
+        completed_by_day = dict(
+            UserMealLog.objects.filter(
+                user_id__in=athlete_ids,
+                date__gte=start_date.isoformat(),
+                date__lte=end_date.isoformat(),
+                status="completed",
+            )
+            .values("date")
+            .annotate(count=Count("id"))
+            .values_list("date", "count")
+        )
 
         daily_data = []
         for i in range(days):
             day = start_date + timedelta(days=i)
             day_str = day.isoformat()
-
-            total_expected = MealTemplate.objects.filter(
-                plan__assignments__user_id__in=athlete_ids,
-                plan__assignments__status="active",
-            ).count()
-
-            completed = UserMealLog.objects.filter(
-                user_id__in=athlete_ids,
-                date=day_str,
-                completed=True,
-            ).count()
-
+            completed = completed_by_day.get(day_str, 0)
             pct = round((completed / total_expected * 100), 1) if total_expected > 0 else 0
             daily_data.append({"date": day_str, "compliance": pct, "completed": completed, "total": total_expected})
 
@@ -1195,10 +1208,20 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"])
     def self_assign(self, request):
-        """El atleta se autoasigna a un nutricionista."""
+        """El atleta se autoasigna a un nutricionista. Requiere Plan Premium."""
+        from core.permissions import get_athlete_tier
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
         user = request.user
         if user.role != User.Role.ATHLETE:
             return Response({"detail": "Solo los atletas pueden autoasignarse."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Misma validación Premium que el create() del admin
+        tier = get_athlete_tier(user)
+        if tier != "premium":
+            raise DRFValidationError(
+                {"detail": "Necesitas un Plan Premium activo para asignarte a un nutricionista."}
+            )
 
         nutritionist_id = request.data.get("nutritionist_id")
         if not nutritionist_id:
@@ -1452,6 +1475,201 @@ class GymPaymentViewSet(viewsets.ModelViewSet):
         ])
 
 
+AVAILABILITY_MANAGERS = {"gym_admin", "super_admin"}
+
+
+class NutritionistAvailabilityViewSet(viewsets.ModelViewSet):
+    serializer_class = NutritionistAvailabilitySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.gym_id:
+            return NutritionistAvailability.objects.none()
+
+        if user.role in AVAILABILITY_MANAGERS:
+            # Admin ve todos los bloques del gym, filtrables por nutricionista
+            qs = NutritionistAvailability.objects.filter(
+                gym_id=user.gym_id
+            ).select_related("nutritionist")
+            nutritionist_id = self.request.query_params.get("nutritionist_id")
+            if nutritionist_id:
+                qs = qs.filter(nutritionist_id=nutritionist_id)
+            return qs
+
+        if user.role == "nutritionist":
+            # Nutricionista ve solo sus propios bloques (read-only enforced below)
+            return NutritionistAvailability.objects.filter(
+                nutritionist=user, gym_id=user.gym_id
+            )
+
+        # Atletas y otros roles: solo bloques activos, para consultar slots
+        qs = NutritionistAvailability.objects.filter(gym_id=user.gym_id, is_active=True)
+        nutritionist_id = self.request.query_params.get("nutritionist_id")
+        if nutritionist_id:
+            qs = qs.filter(nutritionist_id=nutritionist_id)
+        return qs
+
+    def _assert_admin(self):
+        if self.request.user.role not in AVAILABILITY_MANAGERS:
+            raise PermissionDenied("Solo el administrador puede gestionar la disponibilidad de los nutricionistas.")
+
+    def perform_create(self, serializer):
+        self._assert_admin()
+        user = self.request.user
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            raise PermissionDenied("Gimnasio no encontrado.")
+
+        nutritionist_id = self.request.data.get("nutritionist_id")
+        if not nutritionist_id:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"nutritionist_id": "Se requiere el ID del nutricionista."})
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        nutritionist = User.objects.filter(
+            pk=nutritionist_id, gym_id=gym.id, role="nutritionist"
+        ).first()
+        if not nutritionist:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"nutritionist_id": "Nutricionista no encontrado en este gimnasio."})
+
+        serializer.save(nutritionist=nutritionist, gym=gym)
+
+    def perform_update(self, serializer):
+        self._assert_admin()
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._assert_admin()
+        instance.delete()
+
+    @action(detail=False, methods=["get"], url_path="days")
+    def days(self, request):
+        """
+        GET /api/gyms/availability/days/?nutritionist_id=X
+        Returns list of dates (YYYY-MM-DD) that have at least one available slot
+        within the next 21 days.
+        """
+        nutritionist_id = request.query_params.get("nutritionist_id")
+        if not nutritionist_id:
+            return Response({"error": "Se requiere nutritionist_id."}, status=400)
+
+        today = date.today()
+        max_date = today + timedelta(days=21)
+
+        # Fetch blocked overrides in range
+        blocked = set(
+            AvailabilityOverride.objects.filter(
+                nutritionist_id=nutritionist_id,
+                gym_id=request.user.gym_id,
+                date__range=(today, max_date),
+            ).values_list("date", flat=True)
+        )
+
+        # Fetch active availability blocks (by day_of_week)
+        blocks = NutritionistAvailability.objects.filter(
+            nutritionist_id=nutritionist_id,
+            gym_id=request.user.gym_id,
+            is_active=True,
+        ).values_list("day_of_week", flat=True)
+        available_weekdays = set(blocks)
+
+        # Fetch already fully-booked dates (all slots taken)
+        # For simplicity, we return any day that has a block and isn't overridden;
+        # slot-level conflict is checked per-day when the user selects the date.
+        available_dates = []
+        current = today + timedelta(days=1)  # start from tomorrow
+        while current <= max_date:
+            if current.weekday() in available_weekdays and current not in blocked:
+                available_dates.append(current.isoformat())
+            current += timedelta(days=1)
+
+        return Response(available_dates)
+
+    @action(detail=False, methods=["get"], url_path="slots")
+    def slots(self, request):
+        """
+        GET /api/gyms/availability/slots/?nutritionist_id=X&date=YYYY-MM-DD
+        Returns available (unbooked) slot datetimes for a given nutritionist and date.
+        """
+        nutritionist_id = request.query_params.get("nutritionist_id")
+        date_str = request.query_params.get("date")
+
+        if not nutritionist_id or not date_str:
+            return Response(
+                {"error": "Se requieren los parámetros nutritionist_id y date."},
+                status=400,
+            )
+
+        try:
+            target_date = date.fromisoformat(date_str)
+        except ValueError:
+            return Response({"error": "Formato de fecha inválido. Use YYYY-MM-DD."}, status=400)
+
+        # day_of_week: Monday=0 … Sunday=6 (same as Python weekday())
+        dow = target_date.weekday()
+
+        # Verificar si la fecha está bloqueada por un override
+        if AvailabilityOverride.objects.filter(
+            nutritionist_id=nutritionist_id,
+            gym_id=request.user.gym_id,
+            date=target_date,
+        ).exists():
+            return Response([])
+
+        blocks = NutritionistAvailability.objects.filter(
+            nutritionist_id=nutritionist_id,
+            gym_id=request.user.gym_id,
+            day_of_week=dow,
+            is_active=True,
+        )
+
+        if not blocks.exists():
+            return Response([])
+
+        from django.conf import settings as django_settings
+        tz = pytz.timezone(django_settings.TIME_ZONE)
+        candidate_slots: list[datetime] = []
+        for block in blocks:
+            duration = timedelta(minutes=block.slot_duration_minutes)
+            slot_start = tz.localize(datetime.combine(target_date, block.start_time))
+            slot_end_limit = tz.localize(datetime.combine(target_date, block.end_time))
+            while slot_start + duration <= slot_end_limit:
+                candidate_slots.append(slot_start)
+                slot_start += duration
+
+        if not candidate_slots:
+            return Response([])
+
+        # Remove slots already taken by non-cancelled appointments
+        day_start = datetime.combine(target_date, dt_time.min, tzinfo=tz)
+        day_end = datetime.combine(target_date, dt_time.max, tzinfo=tz)
+
+        booked = NutritionistAppointment.objects.filter(
+            nutritionist_id=nutritionist_id,
+            scheduled_at__range=(day_start, day_end),
+        ).exclude(status=NutritionistAppointment.Status.CANCELLED).values_list(
+            "scheduled_at", "duration_minutes"
+        )
+
+        slot_dur = blocks.first().slot_duration_minutes
+
+        def overlaps(slot_dt: datetime, appt_start: datetime, appt_mins: int) -> bool:
+            appt_end = appt_start + timedelta(minutes=appt_mins)
+            slot_end = slot_dt + timedelta(minutes=slot_dur)
+            return slot_dt < appt_end and slot_end > appt_start
+
+        available = [
+            s.isoformat()
+            for s in candidate_slots
+            if not any(overlaps(s, appt_start, appt_mins) for appt_start, appt_mins in booked)
+        ]
+
+        return Response(available)
+
+
 class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
     serializer_class = NutritionistAppointmentSerializer
     permission_classes = [IsAuthenticated]
@@ -1475,21 +1693,310 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
         return NutritionistAppointment.objects.none()
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
         user = self.request.user
-        if user.role != "nutritionist":
-            raise PermissionDenied("Solo nutricionistas pueden crear citas.")
         try:
             gym = Gym.objects.get(id=user.gym_id)
         except Gym.DoesNotExist:
             raise PermissionDenied("Gimnasio no encontrado.")
-        serializer.save(nutritionist=user, gym=gym)
+
+        if user.role not in {"nutritionist", "athlete"}:
+            raise PermissionDenied("No tienes permiso para crear citas.")
+
+        # ── Resolve nutritionist ───────────────────────────────────────────────
+        if user.role == "nutritionist":
+            nutritionist = user
+            # athlete is read_only in the serializer — read from raw request data
+            athlete_id = self.request.data.get("athlete")
+            if not athlete_id:
+                raise DRFValidationError({"athlete": "Se requiere un atleta para crear la cita."})
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            athlete = User.objects.filter(pk=athlete_id, gym_id=user.gym_id, role="athlete").first()
+            if not athlete:
+                raise DRFValidationError({"athlete": "Atleta no encontrado o no pertenece a este gimnasio."})
+        else:
+            assignment = NutritionistAssignment.objects.filter(
+                athlete=user, gym_id=user.gym_id, is_active=True
+            ).select_related("nutritionist").first()
+            if not assignment:
+                raise PermissionDenied("No tienes un nutricionista asignado.")
+            nutritionist = assignment.nutritionist
+            athlete = user
+
+        scheduled_at = serializer.validated_data.get("scheduled_at")
+        duration = serializer.validated_data.get("duration_minutes", 30)
+
+        # Paso 4 — Rechazar fechas pasadas y más allá del límite de antelación
+        MAX_ADVANCE_DAYS = 21
+        if scheduled_at and scheduled_at < timezone.now():
+            raise DRFValidationError({"scheduled_at": "No puedes agendar una cita en el pasado."})
+        if scheduled_at and scheduled_at > timezone.now() + timedelta(days=MAX_ADVANCE_DAYS):
+            raise DRFValidationError({
+                "scheduled_at": f"No puedes agendar con más de {MAX_ADVANCE_DAYS} días de antelación."
+            })
+
+        if scheduled_at:
+            appt_end = scheduled_at + timedelta(minutes=duration)
+            target_date = scheduled_at.date()
+
+            # Paso 1 — Detección de conflictos por duración (solapamiento real)
+            existing = NutritionistAppointment.objects.filter(
+                nutritionist=nutritionist,
+                gym=gym,
+            ).exclude(status=NutritionistAppointment.Status.CANCELLED).values_list(
+                "scheduled_at", "duration_minutes"
+            )
+            for existing_start, existing_dur in existing:
+                existing_end = existing_start + timedelta(minutes=existing_dur)
+                if scheduled_at < existing_end and appt_end > existing_start:
+                    raise DRFValidationError({"scheduled_at": "Este horario se solapa con una cita existente."})
+
+            # Verificar si la fecha está bloqueada por un override
+            if AvailabilityOverride.objects.filter(
+                nutritionist=nutritionist,
+                gym=gym,
+                date=target_date,
+            ).exists():
+                raise DRFValidationError({
+                    "scheduled_at": "El nutricionista no está disponible ese día."
+                })
+
+            # Paso 2 — Validar que el horario caiga dentro de un bloque activo
+            day_of_week = target_date.weekday()  # 0=lunes … 6=domingo
+            blocks = NutritionistAvailability.objects.filter(
+                nutritionist=nutritionist,
+                gym=gym,
+                day_of_week=day_of_week,
+                is_active=True,
+            )
+            local_scheduled_at = timezone.localtime(scheduled_at)
+            slot_time = local_scheduled_at.time().replace(second=0, microsecond=0)
+            slot_end_time = (local_scheduled_at + timedelta(minutes=duration)).time().replace(second=0, microsecond=0)
+            within_block = any(
+                b.start_time <= slot_time and slot_end_time <= b.end_time
+                for b in blocks
+            )
+            if not within_block:
+                raise DRFValidationError({
+                    "scheduled_at": "El horario seleccionado no está dentro de la disponibilidad del nutricionista."
+                })
+
+        if user.role == "nutritionist":
+            appt = serializer.save(nutritionist=nutritionist, athlete=athlete, gym=gym)
+            # Notificar al atleta que el nutricionista le agendó una cita
+            if athlete:
+                appt_date = appt.scheduled_at.strftime("%d/%m/%Y %H:%M")
+                create_notification(
+                    recipient=athlete,
+                    notification_type=Notification.Type.APPOINTMENT_SCHEDULED,
+                    title="Nueva cita agendada",
+                    message=f"Tu nutricionista {nutritionist.first_name} {nutritionist.last_name} agendó una cita para el {appt_date}.",
+                    actor=nutritionist,
+                    gym=gym,
+                    link=f"/{gym.id}/panel/mis-citas",
+                )
+        else:
+            appt = serializer.save(nutritionist=nutritionist, athlete=athlete, gym=gym)
+            # Notificar al nutricionista que el atleta se autoagendó
+            appt_date = appt.scheduled_at.strftime("%d/%m/%Y %H:%M")
+            create_notification(
+                recipient=nutritionist,
+                notification_type=Notification.Type.APPOINTMENT_SCHEDULED,
+                title="Nueva cita solicitada",
+                message=f"{athlete.first_name} {athlete.last_name} agendó una cita para el {appt_date}.",
+                actor=athlete,
+                gym=gym,
+                link=f"/{gym.id}/panel/agenda",
+            )
+
+    @action(detail=True, methods=["patch"], url_path="save-notes")
+    def save_notes(self, request, pk=None):
+        """Nutricionista guarda o actualiza las notas clínicas de una cita."""
+        appt = self.get_object()
+        user = request.user
+        if user.role != "nutritionist" or appt.nutritionist != user:
+            raise PermissionDenied("Solo el nutricionista de esta cita puede editar las notas clínicas.")
+        clinical_notes = request.data.get("clinical_notes", "").strip()
+        appt.clinical_notes = clinical_notes
+        appt.save(update_fields=["clinical_notes", "updated_at"])
+        return Response(NutritionistAppointmentSerializer(appt).data)
+
+    @action(detail=True, methods=["post"])
+    def confirm(self, request, pk=None):
+        """Atleta confirma asistencia a la cita."""
+        appt = self.get_object()
+        user = request.user
+        if user.role != "athlete" or appt.athlete != user:
+            raise PermissionDenied("Solo el atleta puede confirmar la cita.")
+        if appt.status not in {
+            NutritionistAppointment.Status.SCHEDULED,
+            NutritionistAppointment.Status.RESCHEDULE_REQUESTED,
+        }:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"detail": "Solo puedes confirmar citas programadas."})
+        appt.status = NutritionistAppointment.Status.CONFIRMED
+        appt.save(update_fields=["status", "updated_at"])
+        gym = appt.gym
+        create_notification(
+            recipient=appt.nutritionist,
+            notification_type=Notification.Type.APPOINTMENT_CONFIRMED,
+            title="Cita confirmada",
+            message=f"{user.first_name} {user.last_name} confirmó su cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}.",
+            actor=user,
+            gym=gym,
+            link=f"/{gym.id}/panel/agenda",
+        )
+        return Response(NutritionistAppointmentSerializer(appt).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Atleta o nutricionista cancela la cita."""
+        appt = self.get_object()
+        user = request.user
+        if user.role == "athlete" and appt.athlete != user:
+            raise PermissionDenied("No tienes permiso para cancelar esta cita.")
+        if user.role == "nutritionist" and appt.nutritionist != user:
+            raise PermissionDenied("No tienes permiso para cancelar esta cita.")
+        if appt.status in {
+            NutritionistAppointment.Status.COMPLETED,
+            NutritionistAppointment.Status.CANCELLED,
+        }:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"detail": "Esta cita ya no se puede cancelar."})
+
+        appt.status = NutritionistAppointment.Status.CANCELLED
+        appt.cancelled_by = user.role
+        appt.save(update_fields=["status", "cancelled_by", "updated_at"])
+        gym = appt.gym
+
+        if user.role == "athlete":
+            recipient = appt.nutritionist
+            msg = f"{user.first_name} {user.last_name} canceló su cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}."
+            link = f"/{gym.id}/panel/agenda"
+        else:
+            recipient = appt.athlete
+            msg = f"Tu nutricionista {user.first_name} {user.last_name} canceló la cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}."
+            link = f"/{gym.id}/panel/mis-citas"
+
+        create_notification(
+            recipient=recipient,
+            notification_type=Notification.Type.APPOINTMENT_CANCELLED,
+            title="Cita cancelada",
+            message=msg,
+            actor=user,
+            gym=gym,
+            link=link,
+        )
+        return Response(NutritionistAppointmentSerializer(appt).data)
+
+    @action(detail=True, methods=["post"], url_path="request-reschedule")
+    def request_reschedule(self, request, pk=None):
+        """Atleta solicita reprogramar la cita, con nota opcional."""
+        appt = self.get_object()
+        user = request.user
+        if user.role != "athlete" or appt.athlete != user:
+            raise PermissionDenied("Solo el atleta puede solicitar reprogramación.")
+        if appt.status not in {
+            NutritionistAppointment.Status.SCHEDULED,
+            NutritionistAppointment.Status.CONFIRMED,
+        }:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"detail": "Solo puedes solicitar reprogramación de citas programadas."})
+
+        note = request.data.get("note", "").strip()
+        appt.status = NutritionistAppointment.Status.RESCHEDULE_REQUESTED
+        appt.reschedule_note = note
+        appt.save(update_fields=["status", "reschedule_note", "updated_at"])
+        gym = appt.gym
+        create_notification(
+            recipient=appt.nutritionist,
+            notification_type=Notification.Type.APPOINTMENT_RESCHEDULE_REQUESTED,
+            title="Solicitud de reprogramación",
+            message=f"{user.first_name} {user.last_name} solicita reprogramar la cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}."
+                    + (f" Motivo: {note}" if note else ""),
+            actor=user,
+            gym=gym,
+            link=f"/{gym.id}/panel/agenda",
+        )
+        return Response(NutritionistAppointmentSerializer(appt).data)
+
+    @action(detail=True, methods=["post"], url_path="accept-reschedule")
+    def accept_reschedule(self, request, pk=None):
+        """Nutricionista acepta la reprogramación: cambia el horario de la cita."""
+        appt = self.get_object()
+        user = request.user
+        if user.role != "nutritionist" or appt.nutritionist != user:
+            raise PermissionDenied("Solo el nutricionista puede aceptar la reprogramación.")
+        if appt.status != NutritionistAppointment.Status.RESCHEDULE_REQUESTED:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"detail": "La cita no tiene solicitud de reprogramación pendiente."})
+
+        new_scheduled_at = request.data.get("scheduled_at")
+        if not new_scheduled_at:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"scheduled_at": "Se requiere el nuevo horario."})
+
+        from rest_framework.fields import DateTimeField as DRFDateTimeField
+        try:
+            new_dt = DRFDateTimeField().to_internal_value(new_scheduled_at)
+        except Exception:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"scheduled_at": "Formato de fecha inválido."})
+
+        appt.scheduled_at = new_dt
+        appt.status = NutritionistAppointment.Status.SCHEDULED
+        appt.reschedule_note = ""
+        appt.save(update_fields=["scheduled_at", "status", "reschedule_note", "updated_at"])
+        gym = appt.gym
+        create_notification(
+            recipient=appt.athlete,
+            notification_type=Notification.Type.APPOINTMENT_RESCHEDULED,
+            title="Cita reprogramada",
+            message=f"Tu cita fue reprogramada para el {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}.",
+            actor=user,
+            gym=gym,
+            link=f"/{gym.id}/panel/mis-citas",
+        )
+        return Response(NutritionistAppointmentSerializer(appt).data)
+
+    @action(detail=True, methods=["post"], url_path="reject-reschedule")
+    def reject_reschedule(self, request, pk=None):
+        """Nutricionista rechaza la solicitud (deja la cita como estaba: scheduled)."""
+        appt = self.get_object()
+        user = request.user
+        if user.role != "nutritionist" or appt.nutritionist != user:
+            raise PermissionDenied("Solo el nutricionista puede rechazar la reprogramación.")
+        if appt.status != NutritionistAppointment.Status.RESCHEDULE_REQUESTED:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"detail": "La cita no tiene solicitud de reprogramación pendiente."})
+
+        appt.status = NutritionistAppointment.Status.SCHEDULED
+        appt.reschedule_note = ""
+        appt.save(update_fields=["status", "reschedule_note", "updated_at"])
+        gym = appt.gym
+        create_notification(
+            recipient=appt.athlete,
+            notification_type=Notification.Type.SYSTEM,
+            title="Reprogramación rechazada",
+            message=f"Tu nutricionista no pudo reprogramar la cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}. La cita sigue en pie.",
+            actor=user,
+            gym=gym,
+            link=f"/{gym.id}/panel/mis-citas",
+        )
+        return Response(NutritionistAppointmentSerializer(appt).data)
 
     @action(detail=False, methods=["get"])
     def upcoming(self, request):
         now = timezone.now()
         qs = self.get_queryset().filter(
             scheduled_at__gte=now,
-            status=NutritionistAppointment.Status.SCHEDULED,
+            status__in=[
+                NutritionistAppointment.Status.SCHEDULED,
+                NutritionistAppointment.Status.CONFIRMED,
+                NutritionistAppointment.Status.RESCHEDULE_REQUESTED,
+            ],
         ).order_by("scheduled_at")[:10]
         return Response(NutritionistAppointmentSerializer(qs, many=True).data)
 
@@ -1498,7 +2005,11 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         appt = self.get_queryset().filter(
             scheduled_at__gte=now,
-            status=NutritionistAppointment.Status.SCHEDULED,
+            status__in=[
+                NutritionistAppointment.Status.SCHEDULED,
+                NutritionistAppointment.Status.CONFIRMED,
+                NutritionistAppointment.Status.RESCHEDULE_REQUESTED,
+            ],
         ).order_by("scheduled_at").first()
         if not appt:
             return Response(None)
@@ -1600,33 +2111,50 @@ class NutritionistMessageViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def threads(self, request):
-        """Lista de conversaciones agrupadas por atleta."""
+        """
+        Lista de conversaciones agrupadas por atleta.
+        Una sola query con anotaciones + subconsulta para el último mensaje.
+        """
         user = request.user
         if user.role != "nutritionist":
             return Response({"detail": "Solo para nutricionistas."}, status=403)
+
+        from django.db.models import Max, Count, OuterRef, Subquery
+        from django.db.models.functions import Substr
+
         qs = self.get_queryset()
-        from django.db.models import Max, Count
-        athletes = (
-            qs.values("athlete")
-            .annotate(last_message=Max("created_at"), total=Count("id"), unread=Count("id", filter=Q(is_read=False, sender_is_nutritionist=False)))
-            .order_by("-last_message")
+
+        # Subconsulta: body del mensaje más reciente por atleta
+        latest_body = (
+            qs.filter(athlete=OuterRef("athlete"))
+            .order_by("-created_at")
+            .values("body")[:1]
         )
-        result = []
-        for a in athletes:
-            try:
-                athlete_obj = User.objects.get(id=a["athlete"])
-                last_msg = qs.filter(athlete=athlete_obj).order_by("-created_at").first()
-                result.append({
-                    "athlete_id": str(athlete_obj.id),
-                    "athlete_name": f"{athlete_obj.first_name} {athlete_obj.last_name}".strip(),
-                    "athlete_email": athlete_obj.email,
-                    "last_message": last_msg.body[:80] if last_msg else "",
-                    "last_message_at": last_msg.created_at.isoformat() if last_msg else None,
-                    "unread": a["unread"],
-                    "total": a["total"],
-                })
-            except User.DoesNotExist:
-                pass
+
+        threads = (
+            qs
+            .values("athlete", "athlete__first_name", "athlete__last_name", "athlete__email")
+            .annotate(
+                last_message_at=Max("created_at"),
+                total=Count("id"),
+                unread=Count("id", filter=Q(is_read=False, sender_is_nutritionist=False)),
+                last_message=Subquery(latest_body),
+            )
+            .order_by("-last_message_at")
+        )
+
+        result = [
+            {
+                "athlete_id": str(t["athlete"]),
+                "athlete_name": f"{t['athlete__first_name']} {t['athlete__last_name']}".strip(),
+                "athlete_email": t["athlete__email"],
+                "last_message": (t["last_message"] or "")[:80],
+                "last_message_at": t["last_message_at"].isoformat() if t["last_message_at"] else None,
+                "unread": t["unread"],
+                "total": t["total"],
+            }
+            for t in threads
+        ]
         return Response(result)
 
     @action(detail=False, methods=["get"])
@@ -1670,13 +2198,23 @@ class BodyMeasurementViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
-            raise PermissionDenied("Solo nutricionistas pueden registrar medidas.")
+        if user.role not in {"nutritionist", "gym_admin", "super_admin", "athlete"}:
+            raise PermissionDenied("No tienes permiso para registrar medidas.")
         try:
             gym = Gym.objects.get(id=user.gym_id)
         except Gym.DoesNotExist:
             raise PermissionDenied("Gimnasio no encontrado.")
-        serializer.save(nutritionist=user, gym=gym)
+
+        if user.role == "athlete":
+            # El atleta solo puede registrar sus propias medidas, sin nutritionist
+            serializer.save(athlete=user, gym=gym)
+        else:
+            # Nutricionista registra para un atleta específico
+            athlete_id = self.request.data.get("athlete")
+            if not athlete_id:
+                from rest_framework.exceptions import ValidationError as DRFValidationError
+                raise DRFValidationError({"athlete": "Se requiere el atleta."})
+            serializer.save(nutritionist=user, gym=gym)
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -1741,6 +2279,68 @@ class BodyMeasurementViewSet(viewsets.ModelViewSet):
         )
         qs = BodyMeasurement.objects.filter(id__in=latest_ids).select_related("athlete", "nutritionist")
         return Response(BodyMeasurementSerializer(qs, many=True).data)
+
+
+class AthleteGoalViewSet(viewsets.ModelViewSet):
+    serializer_class = AthleteGoalSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "put", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.gym_id:
+            return AthleteGoal.objects.none()
+        if user.role == "athlete":
+            return AthleteGoal.objects.filter(athlete=user)
+        if user.role == "nutritionist":
+            assigned_ids = NutritionistAssignment.objects.filter(
+                nutritionist=user, is_active=True
+            ).values_list("athlete_id", flat=True)
+            return AthleteGoal.objects.filter(athlete_id__in=assigned_ids, gym_id=user.gym_id)
+        if user.role in {"gym_admin", "super_admin", "coach"}:
+            return AthleteGoal.objects.filter(gym_id=user.gym_id)
+        return AthleteGoal.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role != "athlete":
+            raise PermissionDenied("Solo el atleta puede definir su propia meta.")
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            raise PermissionDenied("Gimnasio no encontrado.")
+        if AthleteGoal.objects.filter(athlete=user).exists():
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError("Ya tienes una meta. Usa PATCH para actualizarla.")
+        serializer.save(athlete=user, gym=gym)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if instance.athlete != user and user.role not in {"gym_admin", "super_admin"}:
+            raise PermissionDenied("Solo el atleta puede modificar su meta.")
+        serializer.save()
+
+    @action(detail=False, methods=["get", "put", "patch"], url_path="mine")
+    def mine(self, request):
+        """GET o PUT/PATCH del objetivo del atleta autenticado (upsert)."""
+        user = request.user
+        if user.role != "athlete":
+            return Response({"detail": "Solo para atletas."}, status=403)
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            return Response({"detail": "Gimnasio no encontrado."}, status=400)
+
+        goal, _ = AthleteGoal.objects.get_or_create(athlete=user, defaults={"gym": gym})
+
+        if request.method == "GET":
+            return Response(AthleteGoalSerializer(goal).data)
+
+        serializer = AthleteGoalSerializer(goal, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 def create_notification(recipient, notification_type, title, message="", actor=None, gym=None, link=""):
@@ -1815,10 +2415,10 @@ def athlete_profile(request, athlete_id):
     ).count()
 
     week_meals = UserMealLog.objects.filter(
-        user=athlete, date__gte=week_ago.isoformat(), completed=True
+        user=athlete, date__gte=week_ago.isoformat(), status="completed"
     ).count()
     today_meals = UserMealLog.objects.filter(
-        user=athlete, date=today.isoformat(), completed=True
+        user=athlete, date=today.isoformat(), status="completed"
     ).select_related("meal_template").count()
 
     total_meal_templates = 0
@@ -1828,13 +2428,14 @@ def athlete_profile(request, athlete_id):
     compliance_pct = 0
     if active_plan and total_meal_templates > 0:
         completed_logs = UserMealLog.objects.filter(
-            user=athlete, meal_template__plan=active_plan.plan, completed=True
+            user=athlete, meal_template__plan=active_plan.plan, status="completed"
         ).values("meal_template").distinct().count()
         compliance_pct = round((completed_logs / total_meal_templates) * 100, 1)
 
     active_challenges = ChallengeParticipation.objects.filter(
-        user=athlete, status="active"
-    ).select_related("challenge").count()
+        user=athlete,
+        status=ChallengeParticipation.ParticipationStatus.JOINED,
+    ).count()
 
     badges_earned = UserBadge.objects.filter(user=athlete).count()
 
@@ -1849,30 +2450,43 @@ def athlete_profile(request, athlete_id):
     checkins_month = athlete.checkins.filter(timestamp__date__gte=month_ago).count()
     checkins_total = athlete.checkins.count()
 
-    from gyms.models import CoachAssignment, NutritionistAssignment, BodyMeasurement, NutritionistAppointment
+    from gyms.models import AthleteGoal, CoachAssignment, NutritionistAssignment, BodyMeasurement, NutritionistAppointment
     coach_assign = CoachAssignment.objects.filter(athlete=athlete, is_active=True).select_related("coach").first()
     nutri_assign = NutritionistAssignment.objects.filter(athlete=athlete, is_active=True).select_related("nutritionist").first()
 
     # Medidas antropométricas — últimas 10
-    measurements = list(
-        BodyMeasurement.objects.filter(athlete=athlete)
-        .order_by("-measured_at")[:10]
-        .values(
-            "id", "measured_at", "weight_kg", "height_cm", "body_fat_pct",
-            "muscle_mass_kg", "waist_cm", "hip_cm", "arm_cm", "visceral_fat",
-            "bmi", "notes", "recorded_by",
-        )
-    )
+    measurements = [
+        {
+            "id": str(m.id),
+            "measured_at": m.measured_at.isoformat() if hasattr(m.measured_at, 'isoformat') else str(m.measured_at),
+            "weight_kg": str(m.weight_kg) if m.weight_kg is not None else None,
+            "height_cm": str(m.height_cm) if m.height_cm is not None else None,
+            "body_fat_pct": str(m.body_fat_pct) if m.body_fat_pct is not None else None,
+            "muscle_mass_kg": str(m.muscle_mass_kg) if m.muscle_mass_kg is not None else None,
+            "waist_cm": str(m.waist_cm) if m.waist_cm is not None else None,
+            "hip_cm": str(m.hip_cm) if m.hip_cm is not None else None,
+            "arm_cm": str(m.arm_cm) if m.arm_cm is not None else None,
+            "visceral_fat": m.visceral_fat,
+            "bmi": m.bmi,
+            "notes": m.notes,
+        }
+        for m in BodyMeasurement.objects.filter(athlete=athlete).order_by("-measured_at")[:10]
+    ]
 
     # Citas — próximas y recientes
-    appointments = list(
-        NutritionistAppointment.objects.filter(athlete=athlete)
-        .order_by("-scheduled_at")[:10]
-        .values(
-            "id", "scheduled_at", "duration_minutes", "appointment_type",
-            "appointment_type_display", "status", "status_display", "notes",
-        )
-    )
+    appointments = [
+        {
+            "id": str(apt.id),
+            "scheduled_at": apt.scheduled_at.isoformat(),
+            "duration_minutes": apt.duration_minutes,
+            "appointment_type": apt.appointment_type,
+            "appointment_type_display": apt.get_appointment_type_display(),
+            "status": apt.status,
+            "status_display": apt.get_status_display(),
+            "notes": apt.notes,
+        }
+        for apt in NutritionistAppointment.objects.filter(athlete=athlete).order_by("-scheduled_at")[:10]
+    ]
 
     # Tier de membresía del atleta
     from core.permissions import get_athlete_tier
@@ -1890,6 +2504,8 @@ def athlete_profile(request, athlete_id):
             "dni": athlete.dni,
             "date_joined": athlete.date_joined.isoformat() if athlete.date_joined else None,
             "is_active": athlete.is_active,
+            "fitness_goal": athlete.fitness_goal,
+            "goal_notes": athlete.goal_notes,
         },
         "coach": {
             "id": str(coach_assign.coach.id),
@@ -1937,6 +2553,12 @@ def athlete_profile(request, athlete_id):
         "measurements": measurements,
         "appointments": appointments,
         "membership_tier": membership_tier,
+        "goal": (lambda g: {
+            "target_weight_kg": str(g.target_weight_kg) if g.target_weight_kg else None,
+            "target_body_fat_pct": str(g.target_body_fat_pct) if g.target_body_fat_pct else None,
+            "target_date": g.target_date.isoformat() if g.target_date else None,
+            "notes": g.notes,
+        } if g else None)(AthleteGoal.objects.filter(athlete=athlete).first()),
     })
 
 
@@ -2084,3 +2706,112 @@ def gym_dashboard_stats(request):
 
     cache.set(cache_key, data, CACHE_TTL)
     return Response(data)
+
+
+class CoachMessageViewSet(viewsets.ModelViewSet):
+    serializer_class = CoachMessageSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.gym_id:
+            return CoachMessage.objects.none()
+        if user.role == "coach":
+            return CoachMessage.objects.filter(
+                coach=user, gym_id=user.gym_id
+            ).select_related("athlete", "coach")
+        if user.role == "athlete":
+            return CoachMessage.objects.filter(
+                athlete=user, gym_id=user.gym_id
+            ).select_related("athlete", "coach")
+        return CoachMessage.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user.gym_id:
+            raise PermissionDenied("Sin gimnasio asignado.")
+        try:
+            gym = Gym.objects.get(id=user.gym_id)
+        except Gym.DoesNotExist:
+            raise PermissionDenied("Gimnasio no encontrado.")
+        if user.role == "coach":
+            athlete_id = self.request.data.get("athlete")
+            if not athlete_id:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({"athlete": "Este campo es requerido."})
+            serializer.save(coach=user, gym=gym, sender_is_coach=True)
+        elif user.role == "athlete":
+            coach_assign = CoachAssignment.objects.filter(
+                athlete=user, gym=gym, is_active=True
+            ).first()
+            if not coach_assign:
+                raise PermissionDenied("No tienes coach asignado.")
+            serializer.save(coach=coach_assign.coach, athlete=user, gym=gym, sender_is_coach=False)
+        else:
+            raise PermissionDenied("Sin permisos para enviar mensajes.")
+
+    @action(detail=False, methods=["get"])
+    def threads(self, request):
+        """
+        Lista de conversaciones del coach agrupadas por atleta.
+        Una sola query con anotaciones + subconsulta para el último mensaje.
+        """
+        user = request.user
+        if user.role != "coach":
+            return Response({"detail": "Solo para coaches."}, status=403)
+
+        from django.db.models import Max, Count, OuterRef, Subquery
+
+        qs = self.get_queryset()
+
+        latest_body = (
+            qs.filter(athlete=OuterRef("athlete"))
+            .order_by("-created_at")
+            .values("body")[:1]
+        )
+
+        threads = (
+            qs
+            .values("athlete", "athlete__first_name", "athlete__last_name", "athlete__email")
+            .annotate(
+                last_message_at=Max("created_at"),
+                total=Count("id"),
+                unread=Count("id", filter=Q(is_read=False, sender_is_coach=False)),
+                last_message=Subquery(latest_body),
+            )
+            .order_by("-last_message_at")
+        )
+
+        result = [
+            {
+                "athlete_id": str(t["athlete"]),
+                "athlete_name": f"{t['athlete__first_name']} {t['athlete__last_name']}".strip(),
+                "athlete_email": t["athlete__email"],
+                "last_message": (t["last_message"] or "")[:80],
+                "last_message_at": t["last_message_at"].isoformat() if t["last_message_at"] else None,
+                "unread": t["unread"],
+                "total": t["total"],
+            }
+            for t in threads
+        ]
+        return Response(result)
+
+    @action(detail=False, methods=["get"])
+    def with_athlete(self, request):
+        athlete_id = request.query_params.get("athlete_id")
+        if not athlete_id:
+            return Response({"detail": "athlete_id requerido."}, status=400)
+        qs = self.get_queryset().filter(athlete_id=athlete_id).order_by("created_at")
+        qs.filter(sender_is_coach=False, is_read=False).update(is_read=True)
+        return Response(CoachMessageSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def my_conversation(self, request):
+        """El atleta ve su conversación con el coach (sin necesitar athlete_id)."""
+        user = request.user
+        if user.role != "athlete":
+            return Response({"detail": "Solo para atletas."}, status=403)
+        qs = self.get_queryset().order_by("created_at")
+        qs.filter(sender_is_coach=True, is_read=False).update(is_read=True)
+        return Response(CoachMessageSerializer(qs, many=True).data)

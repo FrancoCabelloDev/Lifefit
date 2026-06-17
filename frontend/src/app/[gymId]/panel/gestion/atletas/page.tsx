@@ -80,6 +80,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
   const isStaffPage = currentRole === 'gym_admin' || currentRole === 'super_admin' || currentRole === 'receptionist'
   const isCoach = currentRole === 'coach'
   const isNutritionist = currentRole === 'nutritionist'
+  const canDeactivate = currentRole === 'gym_admin' || currentRole === 'receptionist' || currentRole === 'super_admin'
   
   const [athletes, setAthletes] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -254,7 +255,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
         fetchNutritionAssignments()
       }
     } catch (error) {
-      console.error('Error removing nutrition assignment:', error)
+      showError(error, 'Error al quitar el nutricionista')
     }
   }
 
@@ -270,7 +271,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
       setSelectedCoach('')
       fetchAssignments()
     } catch (error: any) {
-      alert(error?.message || 'Error al asignar coach')
+      showError(error, 'Error al asignar coach')
     } finally {
       setIsAssigning(false)
     }
@@ -286,7 +287,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
         fetchAssignments()
       }
     } catch (error) {
-      console.error('Error removing assignment:', error)
+      showError(error, 'Error al quitar el coach')
     }
   }
 
@@ -294,6 +295,9 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
     if (isSubmittingRef.current) return
     isSubmittingRef.current = true
     setIsSubmitting(true)
+    // Cerrar modal optimistamente para que el spinner nunca quede atascado
+    setIsModalOpen(false)
+    athleteForm.reset()
     try {
       const payload: any = {
         first_name: data.first_name,
@@ -307,16 +311,12 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
       if (data.start_date) payload.start_date = data.start_date
 
       await api.post<any>("/api/auth/gym-members/", payload)
-
-      setIsModalOpen(false)
-      athleteForm.reset()
       showSuccess('Atleta registrado correctamente.')
     } catch (error: any) {
       showError(error, 'Error al registrar atleta')
     } finally {
       setIsSubmitting(false)
       isSubmittingRef.current = false
-      // Siempre refrescar la lista al terminar (éxito o error)
       fetchAthletes()
     }
   }
@@ -359,7 +359,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
       }
     } catch (e) {
       console.error(e)
-      alert('Error al entrar como este miembro / atleta.')
+      showError(e, 'Error al entrar como este miembro / atleta.')
     }
   }
 
@@ -408,7 +408,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button
+          {canDeactivate && <Button
             variant="outline"
             className="h-11 px-4 rounded-xl border-slate-200 gap-2"
             onClick={async () => {
@@ -433,8 +433,8 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
           >
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Exportar</span>
-          </Button>
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          </Button>}
+          {canDeactivate && <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogTrigger asChild>
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white h-11 px-6 rounded-xl gap-2 shadow-xl shadow-emerald-600/10 transition-all active:scale-95 font-bold">
                 <Plus className="w-4 h-4" />
@@ -564,11 +564,11 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                 </div>
               </form>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
+      {canDeactivate && selectedIds.size > 0 && (
         <div className="flex items-center gap-3 px-6 py-3 bg-emerald-50 border border-emerald-200 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-2">
           <span className="text-sm font-semibold text-emerald-800">{selectedIds.size} seleccionados</span>
           <div className="h-4 w-px bg-emerald-200" />
@@ -688,7 +688,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
               <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/50 border-b border-slate-100">
-                      <th className="px-4 py-5 w-10">
+                      {canDeactivate && <th className="px-4 py-5 w-10">
                         <input
                           type="checkbox"
                           checked={selectedIds.size === filteredAthletes.length && filteredAthletes.length > 0}
@@ -698,7 +698,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                           }}
                           className="w-4 h-4 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                         />
-                      </th>
+                      </th>}
                       <th className="px-8 py-5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-lexend">Atleta</th>
                     <th className="px-8 py-5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-lexend">Contacto</th>
                     <th className="px-8 py-5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-lexend">Plan de Suscripción</th>
@@ -711,8 +711,12 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredAthletes.map((athlete) => (
-                    <tr key={athlete.id} className={`hover:bg-slate-50/80 transition-all group ${selectedIds.has(athlete.id) ? 'bg-emerald-50/50' : ''}`}>
-                      <td className="px-4 py-5">
+                    <tr
+                      key={athlete.id}
+                      className={`hover:bg-slate-50/80 transition-all group ${selectedIds.has(athlete.id) ? 'bg-emerald-50/50' : ''} ${isNutritionist ? 'cursor-pointer' : ''}`}
+                      onClick={isNutritionist ? () => router.push(`/${gymId}/panel/gestion/atletas/${athlete.id}`) : undefined}
+                    >
+                      {canDeactivate && <td className="px-4 py-5">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(athlete.id)}
@@ -725,7 +729,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                           }}
                           className="w-4 h-4 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                         />
-                      </td>
+                      </td>}
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shadow-sm group-hover:scale-105 transition-transform">
@@ -825,15 +829,17 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                       </td>
                       <td className="px-8 py-5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleImpersonateStaff(athlete.id)}
-                            className="h-10 px-3 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Ver perspectiva de este atleta"
-                          >
-                            <Eye className="h-5 w-5" />
-                          </Button>
+                          {canDeactivate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleImpersonateStaff(athlete.id)}
+                              className="h-10 px-3 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Ver perspectiva de este atleta"
+                            >
+                              <Eye className="h-5 w-5" />
+                            </Button>
+                          )}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" className="h-10 w-10 p-0 rounded-xl hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100 transition-all">
@@ -843,12 +849,14 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                             <DropdownMenuContent align="end" className="w-56 p-2 shadow-2xl border-none rounded-2xl bg-white">
                               <DropdownMenuLabel className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 py-2">Opciones de Atleta</DropdownMenuLabel>
                               <DropdownMenuSeparator className="bg-slate-100" />
-                              <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-slate-50" onClick={() => handleImpersonateStaff(athlete.id)}>
-                                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-                                  <Eye className="w-4 h-4" />
-                                </div>
-                                <span className="font-bold text-slate-700 text-sm">Entrar como Atleta</span>
-                              </DropdownMenuItem>
+                              {canDeactivate && (
+                                <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-slate-50" onClick={() => handleImpersonateStaff(athlete.id)}>
+                                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                                    <Eye className="w-4 h-4" />
+                                  </div>
+                                  <span className="font-bold text-slate-700 text-sm">Entrar como Atleta</span>
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-slate-50"
                                 onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${athlete.id}`)}>
                                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
@@ -920,13 +928,15 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                                   )}
                                 </>
                               )}
-                              <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-rose-50 group/item text-rose-600"
-                                onClick={() => handleDeactivateAthlete(athlete.id)}>
-                                <div className="p-2 bg-rose-50 rounded-lg group-hover/item:bg-rose-600 group-hover/item:text-white transition-colors">
-                                  <Trash2 className="w-4 h-4" />
-                                </div>
-                                <span className="font-bold text-sm">Dar de Baja</span>
-                              </DropdownMenuItem>
+                              {canDeactivate && (
+                                <DropdownMenuItem className="gap-3 py-3 rounded-xl cursor-pointer hover:bg-rose-50 group/item text-rose-600"
+                                  onClick={() => handleDeactivateAthlete(athlete.id)}>
+                                  <div className="p-2 bg-rose-50 rounded-lg group-hover/item:bg-rose-600 group-hover/item:text-white transition-colors">
+                                    <Trash2 className="w-4 h-4" />
+                                  </div>
+                                  <span className="font-bold text-sm">Dar de Baja</span>
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

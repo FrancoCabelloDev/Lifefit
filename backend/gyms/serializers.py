@@ -2,9 +2,9 @@ from rest_framework import serializers
 
 from core.serializers import FeatureFlagSerializer
 from .models import (
-    BodyMeasurement, Branch, CheckIn, CoachAssignment, Gym, GymMembershipPlan,
-    GymFeatureFlag, GymPayment, GymSubscription, Notification, NutritionistAssignment,
-    NutritionistAppointment, NutritionistMessage,
+    AthleteGoal, BodyMeasurement, Branch, CheckIn, CoachAssignment, CoachMessage, Gym,
+    GymMembershipPlan, GymFeatureFlag, GymPayment, GymSubscription, Notification,
+    NutritionistAssignment, NutritionistAppointment, NutritionistAvailability, NutritionistMessage,
 )
 
 
@@ -386,27 +386,75 @@ class BodyMeasurementSerializer(serializers.ModelSerializer):
         return None
 
 
+class AthleteGoalSerializer(serializers.ModelSerializer):
+    days_remaining = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AthleteGoal
+        fields = [
+            "id", "athlete", "gym",
+            "target_weight_kg", "target_body_fat_pct", "target_date",
+            "notes", "days_remaining", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "athlete", "gym", "created_at", "updated_at"]
+
+    def get_days_remaining(self, obj):
+        if not obj.target_date:
+            return None
+        from datetime import date
+        delta = obj.target_date - date.today()
+        return max(delta.days, 0)
+
+
+class NutritionistAvailabilitySerializer(serializers.ModelSerializer):
+    day_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NutritionistAvailability
+        fields = [
+            "id", "nutritionist", "gym", "day_of_week", "day_label",
+            "start_time", "end_time", "slot_duration_minutes", "is_active",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "nutritionist", "gym", "created_at", "updated_at"]
+
+    def get_day_label(self, obj):
+        return dict(NutritionistAvailability.DAY_CHOICES).get(obj.day_of_week, "")
+
+    def validate(self, attrs):
+        start = attrs.get("start_time")
+        end = attrs.get("end_time")
+        if start and end and start >= end:
+            raise serializers.ValidationError("La hora de inicio debe ser anterior a la hora de fin.")
+        return attrs
+
+
 class NutritionistAppointmentSerializer(serializers.ModelSerializer):
     athlete_name = serializers.SerializerMethodField()
     athlete_email = serializers.SerializerMethodField()
+    nutritionist_name = serializers.SerializerMethodField()
     appointment_type_display = serializers.CharField(source="get_appointment_type_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
         model = NutritionistAppointment
         fields = [
-            "id", "nutritionist", "athlete", "athlete_name", "athlete_email",
+            "id", "nutritionist", "nutritionist_name", "athlete", "athlete_name", "athlete_email",
             "gym", "scheduled_at", "duration_minutes", "appointment_type",
             "appointment_type_display", "status", "status_display", "notes",
+            "clinical_notes", "reschedule_note", "cancelled_by",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "nutritionist", "gym", "created_at", "updated_at"]
+        read_only_fields = ["id", "nutritionist", "athlete", "gym", "reschedule_note", "cancelled_by", "created_at", "updated_at"]
 
     def get_athlete_name(self, obj):
         return f"{obj.athlete.first_name} {obj.athlete.last_name}".strip() or obj.athlete.email
 
     def get_athlete_email(self, obj):
         return obj.athlete.email
+
+    def get_nutritionist_name(self, obj):
+        return f"{obj.nutritionist.first_name} {obj.nutritionist.last_name}".strip() or obj.nutritionist.email
 
 
 class NutritionistMessageSerializer(serializers.ModelSerializer):
@@ -424,6 +472,26 @@ class NutritionistMessageSerializer(serializers.ModelSerializer):
     def get_sender_name(self, obj):
         if obj.sender_is_nutritionist:
             return f"{obj.nutritionist.first_name} {obj.nutritionist.last_name}".strip()
+        return f"{obj.athlete.first_name} {obj.athlete.last_name}".strip()
+
+    def get_athlete_name(self, obj):
+        return f"{obj.athlete.first_name} {obj.athlete.last_name}".strip() or obj.athlete.email
+
+class CoachMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+    athlete_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CoachMessage
+        fields = [
+            "id", "coach", "athlete", "athlete_name", "sender_name",
+            "gym", "sender_is_coach", "body", "is_read", "created_at",
+        ]
+        read_only_fields = ["id", "coach", "gym", "created_at"]
+
+    def get_sender_name(self, obj):
+        if obj.sender_is_coach:
+            return f"{obj.coach.first_name} {obj.coach.last_name}".strip()
         return f"{obj.athlete.first_name} {obj.athlete.last_name}".strip()
 
     def get_athlete_name(self, obj):

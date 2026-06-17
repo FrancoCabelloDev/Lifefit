@@ -1,6 +1,9 @@
 import base64
 import json
+import logging
 from urllib.parse import urlencode
+
+logger = logging.getLogger(__name__)
 
 import requests
 from django.conf import settings
@@ -13,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from core.permissions import IsGymAdmin, IsSuperAdmin
+from core.permissions import IsGymAdmin, IsGymAdminOrReceptionist, IsSuperAdmin
 from .serializers import PasswordChangeSerializer, RegisterSerializer, UserSerializer, UserUpdateSerializer
 
 
@@ -78,13 +81,15 @@ class GymMemberViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
             return [IsAuthenticated()]
+        if self.request.method == 'DELETE':
+            return [IsGymAdminOrReceptionist()]
         return [IsGymAdmin()]
 
     def get_queryset(self):
         user = self.request.user
         if user.role not in self.STAFF_READ_ROLES:
             return User.objects.none()
-        queryset = User.objects.filter(gym=user.gym, gym__deleted_at__isnull=True).exclude(id=user.id).select_related("gym")
+        queryset = User.objects.filter(gym=user.gym, gym__deleted_at__isnull=True).exclude(id=user.id).select_related("gym").prefetch_related("gym_subscriptions__plan")
         
         role = self.request.query_params.get('role')
         if role:
@@ -599,7 +604,7 @@ class ImpersonateView(APIView):
             ip_address=request.META.get('REMOTE_ADDR')
         )
         
-        print(f"🔒 AUDITORÍA GUARDADA: SuperAdmin '{request.user.email}' inició sesión como '{gym_admin.email}' (Gimnasio ID: {gym_id})")
+        logger.info("AUDITORIA: SuperAdmin %s inicio sesion como %s (Gimnasio ID: %s)", request.user.email, gym_admin.email, gym_id)
         
         refresh = RefreshToken.for_user(gym_admin)
         refresh['is_impersonating'] = True
@@ -668,7 +673,7 @@ class ImpersonateStaffView(APIView):
             details={"reason": "Vista de perspectiva del admin"},
             ip_address=request.META.get('REMOTE_ADDR')
         )
-        print(f"🔒 AUDITORÍA: GymAdmin '{request.user.email}' viendo perspectiva de '{staff_member.email}' ({staff_member.role})")
+        logger.info("AUDITORIA: GymAdmin %s viendo perspectiva de %s (%s)", request.user.email, staff_member.email, staff_member.role)
 
         refresh = RefreshToken.for_user(staff_member)
         refresh['is_impersonating'] = True

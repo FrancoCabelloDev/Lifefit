@@ -39,6 +39,9 @@ class UserSerializer(serializers.ModelSerializer):
             # Objetivos atleta
             "fitness_goal",
             "goal_notes",
+            # Datos físicos autoreportados
+            "height_cm",
+            "weight_kg",
         ]
         read_only_fields = [
             "id", "date_joined", "puntos", "nivel",
@@ -60,6 +63,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "first_name", "last_name", "phone", "dni",
             "profile_picture", "bio", "specialty",
             "years_experience", "max_clients",
+            "fitness_goal", "goal_notes",
+            "height_cm", "weight_kg",
         ]
 
 

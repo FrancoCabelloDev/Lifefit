@@ -28,23 +28,10 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
+import { roleColors, roleLabels } from '@/lib/constants'
 import type { CheckIn, User, PaginatedResponse } from '@/lib/types'
 
-const roleLabels: Record<string, string> = {
-  athlete: 'Atleta',
-  coach: 'Coach',
-  nutritionist: 'Nutricionista',
-  receptionist: 'Recepción',
-  gym_admin: 'Admin',
-}
-
-const roleColors: Record<string, string> = {
-  athlete: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  coach: 'bg-blue-50 text-blue-700 border-blue-200',
-  nutritionist: 'bg-amber-50 text-amber-700 border-amber-200',
-  receptionist: 'bg-purple-50 text-purple-700 border-purple-200',
-  gym_admin: 'bg-rose-50 text-rose-700 border-rose-200',
-}
 
 export default function CheckInPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
@@ -146,7 +133,7 @@ export default function CheckInPage({ params }: { params: Promise<{ gymId: strin
       setSearchTerm('')
       fetchCheckins()
     } catch (error: any) {
-      alert(error?.message || 'Error al registrar check-in')
+      showError(error, 'Error al registrar check-in')
     } finally {
       setIsSubmitting(false)
     }

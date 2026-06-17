@@ -2,16 +2,19 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AthleteGoalViewSet,
     BodyMeasurementViewSet,
     BranchViewSet,
     CheckInViewSet,
     CoachAssignmentViewSet,
+    CoachMessageViewSet,
     GymPaymentViewSet,
     GymSubscriptionViewSet,
     GymViewSet,
     NotificationViewSet,
     NutritionistAssignmentViewSet,
     NutritionistAppointmentViewSet,
+    NutritionistAvailabilityViewSet,
     NutritionistMessageViewSet,
     PublicGymViewSet,
     GymMembershipPlanViewSet,
@@ -31,12 +34,15 @@ router.register("feature-flags", GymFeatureFlagViewSet, basename="gym-feature-fl
 router.register("checkins", CheckInViewSet, basename="checkin")
 router.register("coach-assignments", CoachAssignmentViewSet, basename="coach-assignment")
 router.register("nutritionist-assignments", NutritionistAssignmentViewSet, basename="nutritionist-assignment")
+router.register("availability", NutritionistAvailabilityViewSet, basename="nutri-availability")
 router.register("appointments", NutritionistAppointmentViewSet, basename="nutri-appointment")
 router.register("messages", NutritionistMessageViewSet, basename="nutri-message")
+router.register("coach-messages", CoachMessageViewSet, basename="coach-message")
 router.register("notifications", NotificationViewSet, basename="notification")
 router.register("subscriptions", GymSubscriptionViewSet, basename="gym-subscription")
 router.register("payments", GymPaymentViewSet, basename="gym-payment")
 router.register("body-measurements", BodyMeasurementViewSet, basename="body-measurement")
+router.register("athlete-goals", AthleteGoalViewSet, basename="athlete-goal")
 
 urlpatterns = [
     path("dashboard/stats/", gym_dashboard_stats, name="gym-dashboard-stats"),

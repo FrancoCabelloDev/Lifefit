@@ -153,9 +153,16 @@ class Notification(BaseModel):
         PLAN_ASSIGNED = "plan_assigned", "Plan Nutricional Asignado"
         PLAN_UPDATED = "plan_updated", "Plan Nutricional Actualizado"
         CHALLENGE_COMPLETED = "challenge_completed", "Reto Completado"
+        CHALLENGE_PENDING_REVIEW = "challenge_pending_review", "Reto Pendiente de Revisión"
+        CHALLENGE_REJECTED = "challenge_rejected", "Reto Rechazado"
         BADGE_EARNED = "badge_earned", "Medalla Obtenida"
         CHECKIN_REMINDER = "checkin_reminder", "Recordatorio de Check-in"
         MESSAGE = "message", "Mensaje"
+        APPOINTMENT_SCHEDULED = "appointment_scheduled", "Cita Agendada"
+        APPOINTMENT_CONFIRMED = "appointment_confirmed", "Cita Confirmada"
+        APPOINTMENT_CANCELLED = "appointment_cancelled", "Cita Cancelada"
+        APPOINTMENT_RESCHEDULE_REQUESTED = "appointment_reschedule_requested", "Reprogramación Solicitada"
+        APPOINTMENT_RESCHEDULED = "appointment_rescheduled", "Cita Reprogramada"
         SYSTEM = "system", "Sistema"
 
     recipient = models.ForeignKey(
@@ -164,7 +171,7 @@ class Notification(BaseModel):
     actor = models.ForeignKey(
         "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="acted_notifications"
     )
-    notification_type = models.CharField(max_length=30, choices=Type.choices)
+    notification_type = models.CharField(max_length=40, choices=Type.choices)
     title = models.CharField(max_length=255)
     message = models.TextField(blank=True)
     gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="notifications", null=True, blank=True)
@@ -272,9 +279,11 @@ class NutritionistAppointment(BaseModel):
 
     class Status(models.TextChoices):
         SCHEDULED = "scheduled", "Programada"
+        CONFIRMED = "confirmed", "Confirmada"
         COMPLETED = "completed", "Completada"
         CANCELLED = "cancelled", "Cancelada"
         NO_SHOW = "no_show", "No Asistió"
+        RESCHEDULE_REQUESTED = "reschedule_requested", "Reprogramación Solicitada"
 
     nutritionist = models.ForeignKey(
         "accounts.User",
@@ -294,8 +303,14 @@ class NutritionistAppointment(BaseModel):
     appointment_type = models.CharField(
         max_length=20, choices=AppointmentType.choices, default=AppointmentType.FOLLOWUP
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SCHEDULED)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.SCHEDULED)
     notes = models.TextField(blank=True)
+    clinical_notes = models.TextField(
+        blank=True,
+        help_text="Notas clínicas privadas del nutricionista: anamnesis, diagnóstico, plan de acción"
+    )
+    reschedule_note = models.TextField(blank=True, help_text="Nota del atleta al solicitar reprogramación")
+    cancelled_by = models.CharField(max_length=20, blank=True, help_text="athlete o nutritionist")
 
     class Meta:
         ordering = ["scheduled_at"]
@@ -307,6 +322,61 @@ class NutritionistAppointment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.nutritionist.email} + {self.athlete.email} @ {self.scheduled_at:%Y-%m-%d %H:%M}"
+
+
+class NutritionistAvailability(BaseModel):
+    """Recurring weekly availability block for a nutritionist."""
+
+    DAY_CHOICES = [
+        (0, "Lunes"), (1, "Martes"), (2, "Miércoles"), (3, "Jueves"),
+        (4, "Viernes"), (5, "Sábado"), (6, "Domingo"),
+    ]
+
+    nutritionist = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="availability_blocks",
+        limit_choices_to={"role": "nutritionist"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="nutritionist_availability")
+    day_of_week = models.IntegerField(choices=DAY_CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    slot_duration_minutes = models.PositiveIntegerField(default=30)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["day_of_week", "start_time"]
+        unique_together = [("nutritionist", "gym", "day_of_week", "start_time")]
+        verbose_name = "Disponibilidad del nutricionista"
+        verbose_name_plural = "Disponibilidad de nutricionistas"
+
+    def __str__(self) -> str:
+        day = dict(self.DAY_CHOICES).get(self.day_of_week, self.day_of_week)
+        return f"{self.nutritionist.email} — {day} {self.start_time:%H:%M}–{self.end_time:%H:%M}"
+
+
+class AvailabilityOverride(BaseModel):
+    """Bloquea una fecha específica en la agenda de un nutricionista (feriados, vacaciones, etc.)."""
+
+    nutritionist = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="availability_overrides",
+        limit_choices_to={"role": "nutritionist"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="availability_overrides")
+    date = models.DateField()
+    reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        unique_together = [("nutritionist", "gym", "date")]
+        ordering = ["date"]
+        verbose_name = "Excepción de disponibilidad"
+        verbose_name_plural = "Excepciones de disponibilidad"
+
+    def __str__(self) -> str:
+        return f"{self.nutritionist.email} — bloqueado {self.date}"
 
 
 class BodyMeasurement(BaseModel):
@@ -354,6 +424,27 @@ class BodyMeasurement(BaseModel):
         return f"{self.athlete.email} @ {self.measured_at} — {self.weight_kg}kg"
 
 
+class AthleteGoal(BaseModel):
+    athlete = models.OneToOneField(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="goal",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="athlete_goals")
+
+    target_weight_kg   = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    target_body_fat_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    target_date        = models.DateField(null=True, blank=True)
+    notes              = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["athlete"])]
+
+    def __str__(self) -> str:
+        return f"Meta de {self.athlete.email}"
+
+
 class NutritionistMessage(BaseModel):
     nutritionist = models.ForeignKey(
         "accounts.User",
@@ -381,3 +472,32 @@ class NutritionistMessage(BaseModel):
     def __str__(self) -> str:
         sender = self.nutritionist.email if self.sender_is_nutritionist else self.athlete.email
         return f"[MSG] {sender} → {self.athlete.email if self.sender_is_nutritionist else self.nutritionist.email}"
+
+
+class CoachMessage(BaseModel):
+    coach = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="sent_coach_messages",
+        limit_choices_to={"role": "coach"},
+    )
+    athlete = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="received_coach_messages",
+        limit_choices_to={"role": "athlete"},
+    )
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE, related_name="coach_messages")
+    sender_is_coach = models.BooleanField(default=True)
+    body = models.TextField()
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["coach", "athlete", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        sender = self.coach.email if self.sender_is_coach else self.athlete.email
+        return f"[COACH MSG] {sender}"

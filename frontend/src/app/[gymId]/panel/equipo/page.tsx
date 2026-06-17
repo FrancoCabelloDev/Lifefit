@@ -2,21 +2,24 @@
 
 import { useEffect, useState, use } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { 
-  Users2, 
-  UserPlus, 
-  Search, 
-  MoreHorizontal, 
-  Mail, 
-  Shield,
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Users2,
+  UserPlus,
+  Search,
+  MoreHorizontal,
+  Mail,
   Loader2,
   Trash2,
   Edit,
   Award,
   Apple,
   Headphones,
-  Filter,
-  Eye
+  Eye,
+  CalendarRange,
+  Plus,
+  Info,
+  Clock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,11 +35,230 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { api } from '@/lib/api'
+import { showError, showSuccess } from '@/lib/toast'
 import { setTokens, setStoredUser, dispatchAuthEvent, backupAdminTokens } from '@/lib/auth'
+import { cn } from '@/lib/utils'
 import type { StaffMember } from '@/lib/types'
+
+// ── Availability types & constants ────────────────────────────────────────────
+
+interface AvailabilityBlock {
+  id: string
+  day_of_week: number
+  start_time: string
+  end_time: string
+  slot_duration_minutes: number
+  is_active: boolean
+}
+
+const DAYS = [
+  { value: 0, short: 'Lun', label: 'Lunes' },
+  { value: 1, short: 'Mar', label: 'Martes' },
+  { value: 2, short: 'Mié', label: 'Miércoles' },
+  { value: 3, short: 'Jue', label: 'Jueves' },
+  { value: 4, short: 'Vie', label: 'Viernes' },
+  { value: 5, short: 'Sáb', label: 'Sábado' },
+  { value: 6, short: 'Dom', label: 'Domingo' },
+]
+const SLOT_DURATIONS = [15, 20, 30, 45, 60]
+
+// ── ScheduleDrawer ─────────────────────────────────────────────────────────────
+
+function ScheduleDrawer({ member, open, onClose }: { member: StaffMember | null; open: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [showForm, setShowForm] = useState(false)
+  const [day, setDay]           = useState(0)
+  const [start, setStart]       = useState('09:00')
+  const [end, setEnd]           = useState('12:00')
+  const [duration, setDuration] = useState(30)
+
+  const { data: blocks, isLoading } = useQuery({
+    queryKey: ['nutri-availability', member?.id],
+    queryFn: async () => {
+      const res = await api.get<any>('/api/gyms/availability/', { params: { nutritionist_id: member!.id } })
+      return (res?.results ?? res ?? []) as AvailabilityBlock[]
+    },
+    enabled: !!member?.id && open,
+  })
+
+  const addMutation = useMutation({
+    mutationFn: () => api.post('/api/gyms/availability/', {
+      nutritionist_id: member!.id,
+      day_of_week: day,
+      start_time: start,
+      end_time: end,
+      slot_duration_minutes: duration,
+    }),
+    onSuccess: () => {
+      showSuccess('Bloque agregado')
+      setShowForm(false)
+      queryClient.invalidateQueries({ queryKey: ['nutri-availability', member?.id] })
+    },
+    onError: (err) => showError(err, 'No se pudo agregar el bloque'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/gyms/availability/${id}/`),
+    onSuccess: () => {
+      showSuccess('Bloque eliminado')
+      queryClient.invalidateQueries({ queryKey: ['nutri-availability', member?.id] })
+    },
+    onError: (err) => showError(err, 'No se pudo eliminar'),
+  })
+
+  const blocksByDay = DAYS.map(d => ({
+    ...d,
+    blocks: (blocks ?? []).filter(b => b.day_of_week === d.value),
+  }))
+
+  const totalSlots = (blocks ?? []).reduce((acc, b) => {
+    const [sh, sm] = b.start_time.split(':').map(Number)
+    const [eh, em] = b.end_time.split(':').map(Number)
+    return acc + Math.floor(((eh * 60 + em) - (sh * 60 + sm)) / b.slot_duration_minutes)
+  }, 0)
+
+  return (
+    <Sheet open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetHeader className="pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
+              {member?.first_name[0]}{member?.last_name[0]}
+            </div>
+            <div>
+              <SheetTitle className="text-base">{member?.first_name} {member?.last_name}</SheetTitle>
+              <SheetDescription className="text-xs">Horario semanal de disponibilidad</SheetDescription>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="py-5 space-y-5">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-slate-400 py-8 justify-center">
+              <Loader2 className="w-5 h-5 animate-spin" /> Cargando horario...
+            </div>
+          ) : (
+            <>
+              {/* Stats */}
+              {blocks && blocks.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Días activos', value: blocksByDay.filter(d => d.blocks.length > 0).length },
+                    { label: 'Bloques', value: blocks.length },
+                    { label: 'Slots/sem.', value: totalSlots },
+                  ].map(s => (
+                    <div key={s.label} className="bg-slate-50 rounded-xl border border-slate-100 p-3 text-center">
+                      <p className="text-xl font-black text-slate-800">{s.value}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Week grid */}
+              <div className="grid grid-cols-7 gap-1.5">
+                {blocksByDay.map(day => (
+                  <div key={day.value} className="min-w-0">
+                    <p className={cn(
+                      'text-[10px] font-bold text-center pb-1.5 mb-1.5 border-b',
+                      day.blocks.length > 0 ? 'text-emerald-700 border-emerald-100' : 'text-slate-300 border-slate-100',
+                    )}>
+                      {day.short}
+                    </p>
+                    <div className="space-y-1">
+                      {day.blocks.length === 0 ? (
+                        <div className="h-10 rounded-lg bg-slate-50 border border-dashed border-slate-100 flex items-center justify-center">
+                          <span className="text-[9px] text-slate-200">—</span>
+                        </div>
+                      ) : (
+                        day.blocks.map(b => (
+                          <div key={b.id} className="bg-emerald-50 border border-emerald-100 rounded-lg p-1.5 group relative">
+                            <p className="text-[9px] font-bold text-emerald-800 leading-none">
+                              {b.start_time.slice(0, 5)}–{b.end_time.slice(0, 5)}
+                            </p>
+                            <p className="text-[8px] text-emerald-500 mt-0.5">{b.slot_duration_minutes}m</p>
+                            <button
+                              onClick={() => deleteMutation.mutate(b.id)}
+                              disabled={deleteMutation.isPending}
+                              className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 rounded bg-rose-100 hover:bg-rose-200 text-rose-500 flex items-center justify-center"
+                            >
+                              <Trash2 className="w-2 h-2" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add block form */}
+              {showForm ? (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-emerald-700">Nuevo bloque horario</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Día</label>
+                      <select value={day} onChange={e => setDay(Number(e.target.value))}
+                        className="w-full h-9 rounded-xl text-sm border border-slate-200 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                        {DAYS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Duración slot</label>
+                      <select value={duration} onChange={e => setDuration(Number(e.target.value))}
+                        className="w-full h-9 rounded-xl text-sm border border-slate-200 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                        {SLOT_DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Desde</label>
+                      <input type="time" value={start} onChange={e => setStart(e.target.value)}
+                        className="w-full h-9 rounded-xl text-sm border border-slate-200 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Hasta</label>
+                      <input type="time" value={end} onChange={e => setEnd(e.target.value)}
+                        className="w-full h-9 rounded-xl text-sm border border-slate-200 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setShowForm(false)} className="rounded-xl">Cancelar</Button>
+                    <Button size="sm" disabled={addMutation.isPending} onClick={() => addMutation.mutate()}
+                      className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+                      {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
+                      Agregar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button onClick={() => setShowForm(true)} size="sm" variant="outline"
+                  className="w-full border-dashed border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl">
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Agregar bloque horario
+                </Button>
+              )}
+
+              <div className="flex items-start gap-2 bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
+                <Info className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-slate-400">Los atletas solo podrán agendar citas dentro de estos bloques.</p>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
 
 export default function EquipoPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
@@ -48,6 +270,9 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Schedule drawer
+  const [scheduleTarget, setScheduleTarget] = useState<StaffMember | null>(null)
 
   // Invite Modal States
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
@@ -113,7 +338,7 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
       fetchStaff()
     } catch (error) {
       console.error('Error deleting staff member:', error)
-      alert('Error al eliminar al miembro del equipo.')
+      showError(error, 'Error al eliminar al miembro del equipo.')
     }
   }
 
@@ -129,7 +354,7 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
       }
     } catch (e) {
       console.error(e)
-      alert('Error al entrar como este miembro del staff.')
+      showError(e, 'Error al entrar como este miembro del staff.')
     }
   }
 
@@ -246,12 +471,21 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
                                 <MoreHorizontal className="h-4 w-4 text-slate-400" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48 shadow-xl border-slate-200">
+                            <DropdownMenuContent align="end" className="w-52 shadow-xl border-slate-200">
                               <DropdownMenuLabel className="text-xs text-slate-500">Acciones de Staff</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="gap-2 text-sm font-medium">
                                 <Edit className="w-4 h-4 text-slate-400" /> Editar Miembro
                               </DropdownMenuItem>
+                              {member.role === 'nutritionist' && (
+                                <DropdownMenuItem
+                                  onClick={() => setScheduleTarget(member)}
+                                  className="gap-2 text-sm font-medium cursor-pointer"
+                                >
+                                  <CalendarRange className="w-4 h-4 text-emerald-500" /> Gestionar Horario
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleDeleteMember(member.id)} className="gap-2 text-sm font-medium text-rose-600 cursor-pointer">
                                 <Trash2 className="w-4 h-4" /> Eliminar del Equipo
                               </DropdownMenuItem>
@@ -276,6 +510,12 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
           )}
         </CardContent>
       </Card>
+
+      <ScheduleDrawer
+        member={scheduleTarget}
+        open={!!scheduleTarget}
+        onClose={() => setScheduleTarget(null)}
+      />
 
       {/* Centered glassmorphic invite modal with backdrop blur */}
       {isInviteModalOpen && (

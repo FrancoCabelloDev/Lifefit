@@ -7,7 +7,7 @@ import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Users, Dumbbell, Activity, TrendingUp, CalendarCheck, Calendar, Clock, UserPlus, CheckCircle2, AlertTriangle, Target, Zap, Award, Medal, Trophy, Apple, ListOrdered } from 'lucide-react'
+import { Users, Dumbbell, Activity, TrendingUp, CalendarCheck, Calendar, Clock, UserPlus, CheckCircle2, AlertTriangle, Target, Zap, Award, Medal, Trophy, Apple, ListOrdered, MessageSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { TableSkeleton, ChartSkeleton, StatsCardSkeleton, CardSkeleton } from '@/components/ui/skeletons'
@@ -18,6 +18,7 @@ import type { User, DashboardStats, Role, CoachDashboard, CoachAthlete, Nutritio
 import { useSubscriptionTier } from '@/lib/hooks'
 import NutritionistDashboardView from '@/components/nutritionist/NutritionistDashboard'
 import CoachDashboardView from '@/components/coach/CoachDashboard'
+import OnboardingModal from '@/components/athlete/OnboardingModal'
 import { BookUser, UserCheck } from 'lucide-react'
 
 export default function GymDashboard({ params }: { params: Promise<{ gymId: string }> }) {
@@ -132,17 +133,17 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
   const nutriAthletes = nutriAthletesQuery.data?.athletes || []
   const nutriTotalPages = nutriAthletesQuery.data?.total_pages || 1
 
+  // ⚠️ Todos los hooks deben llamarse antes de cualquier return condicional (Rules of Hooks)
+  const { tier: athleteTier } = useSubscriptionTier()
+  const isBasic = user?.role === 'athlete' && athleteTier !== 'premium'
+
   if (user?.role === 'coach') {
     return <CoachDashboardView gymId={gymId} user={user} />
   }
 
-
   if (user?.role === 'nutritionist') {
     return <NutritionistDashboardView gymId={gymId} user={user} />
   }
-
-  const { tier: athleteTier } = useSubscriptionTier()
-  const isBasic = user?.role === 'athlete' && athleteTier !== 'premium'
 
   if (user?.role === 'athlete') {
     const ad = athleteDashboardQuery.data
@@ -186,6 +187,8 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
 
     return (
       <div className="space-y-8">
+        <OnboardingModal gymId={gymId} />
+
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
             Hola, {adminName} 👋
@@ -300,11 +303,18 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
                     {myTeamQuery.data.myCoach.first_name?.[0]}{myTeamQuery.data.myCoach.last_name?.[0]}
                   </div>
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Tu Coach</p>
                   <p className="text-sm font-semibold text-slate-900 truncate">{myTeamQuery.data.myCoach.first_name} {myTeamQuery.data.myCoach.last_name}</p>
                   {myTeamQuery.data.myCoach.specialty && <p className="text-[10px] text-slate-500 truncate">{myTeamQuery.data.myCoach.specialty}</p>}
                 </div>
+                <button
+                  onClick={() => router.push(`/${gymId}/panel/mensajes-coach`)}
+                  className="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 flex items-center justify-center text-slate-400 hover:text-emerald-600 transition-colors flex-shrink-0"
+                  title="Enviar mensaje al coach"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
               </div>
             ) : (
               <button

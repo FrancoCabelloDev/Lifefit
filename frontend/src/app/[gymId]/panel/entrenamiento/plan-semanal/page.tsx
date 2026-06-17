@@ -211,51 +211,70 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
-              {DAYS.map(day => {
-                const daySlots = slots.filter(s => s.day_of_week === day.value)
-                if (daySlots.length === 0) return null
-                return (
-                  <Card key={day.value} className="border-slate-200 shadow-sm">
-                    <CardHeader className="pb-2 pt-4 px-5">
-                      <CardTitle className="text-sm font-bold text-slate-600 uppercase tracking-wide">
+            <div className="overflow-x-auto pb-2">
+              <div className="flex gap-3 min-w-max">
+                {DAYS.map(day => {
+                  const daySlots = slots.filter(s => s.day_of_week === day.value)
+                  return (
+                    <div key={day.value} className="w-52 flex-shrink-0 flex flex-col gap-2">
+                      {/* Day header */}
+                      <div className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide text-center ${
+                        daySlots.length > 0
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 text-slate-400'
+                      }`}>
                         {day.label}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5 pb-4 space-y-2">
-                      {daySlots.map(slot => (
-                        <div key={slot.id} className="flex items-center justify-between gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <Dumbbell className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-800 truncate">
-                                {slot.routine_detail?.name || 'Rutina'}
-                              </p>
-                              <div className="flex items-center gap-2 mt-0.5">
+                        {daySlots.length > 0 && (
+                          <span className="ml-1.5 bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
+                            {daySlots.length}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Slots */}
+                      {daySlots.length === 0 ? (
+                        <div className="flex-1 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center py-8">
+                          <p className="text-xs text-slate-300">Descanso</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {daySlots.map(slot => (
+                            <div key={slot.id} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm group">
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Dumbbell className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                  <p className="text-xs font-semibold text-slate-800 leading-snug">
+                                    {slot.routine_detail?.name || 'Rutina'}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleDelete(slot.id)}
+                                  className="text-slate-300 hover:text-rose-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <div className="mt-1.5 space-y-0.5">
                                 {slot.suggested_time && (
-                                  <span className="text-xs text-slate-400">{slot.suggested_time.slice(0, 5)}</span>
+                                  <p className="text-[10px] text-slate-400">{slot.suggested_time.slice(0, 5)}</p>
                                 )}
                                 {slot.routine_detail && (
-                                  <span className="text-xs text-slate-400">
+                                  <p className="text-[10px] text-slate-400">
                                     {slot.routine_detail.duration_minutes} min · {slot.routine_detail.routine_exercises?.length || 0} ejercicios · {slot.routine_detail.points_reward} pts
-                                  </span>
+                                  </p>
+                                )}
+                                {slot.notes && (
+                                  <p className="text-[10px] text-slate-400 italic">{slot.notes}</p>
                                 )}
                               </div>
-                              {slot.notes && <p className="text-xs text-slate-400 italic mt-0.5">{slot.notes}</p>}
                             </div>
-                          </div>
-                          <button
-                            onClick={() => handleDelete(slot.id)}
-                            className="text-rose-400 hover:text-rose-600 transition-colors shrink-0 p-1"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          ))}
                         </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )
-              })}
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </>

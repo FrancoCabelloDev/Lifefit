@@ -1,6 +1,9 @@
+import logging
 from datetime import date, timedelta
 
 from django.db.models import Sum
+
+logger = logging.getLogger(__name__)
 from django.db.models.functions import TruncMonth
 from rest_framework import permissions, status, viewsets, filters
 from rest_framework.decorators import action
@@ -152,7 +155,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         subscription.save(update_fields=["plan", "updated_at"])
 
         # Registrar cambio de plan (para auditoría)
-        print(f"📝 Cambio de plan: {subscription.owner_gym} cambió de {old_plan_name} a {new_plan.name}")
+        logger.info("Cambio de plan: %s cambió de %s a %s", subscription.owner_gym, old_plan_name, new_plan.name)
 
         return Response({
             "detail": f"Plan cambiado de {old_plan_name} a {new_plan.name} exitosamente.",

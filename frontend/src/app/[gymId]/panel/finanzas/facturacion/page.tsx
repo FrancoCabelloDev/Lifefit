@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
 import type {
   GymPayment, GymPaymentMetrics, GymPaymentStatus,
   RevenuePoint, PaginatedResponse,
@@ -112,8 +113,8 @@ export default function FacturacionPage({ params }: { params: Promise<{ gymId: s
       setPayments(paymentsData.results || [])
       setTotalPages(Math.ceil((paymentsData.count || 0) / pageSize))
       setRevenueData(revenueData)
-    } catch {
-      // silent
+    } catch (err) {
+      showError(err, 'Error al cargar los datos de facturación')
     } finally {
       setIsLoading(false)
     }

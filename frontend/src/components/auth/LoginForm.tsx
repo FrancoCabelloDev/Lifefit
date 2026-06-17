@@ -41,6 +41,8 @@ export default function LoginForm({ gymId }: LoginFormProps) {
         router.push(`/${gymId}/panel`)
       } else if (data.user.role === 'athlete' || data.user.role === 'coach') {
         router.push(`/${gymId}/panel-atleta`)
+      } else if (data.user.role === 'nutritionist' || data.user.role === 'receptionist') {
+        router.push(`/${gymId}/panel`)
       } else {
         router.push('/panel-saas')
       }

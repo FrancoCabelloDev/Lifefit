@@ -3,11 +3,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.constants import XP_PER_LEVEL
 from gyms.models import Gym
 from .models import AthleteStreak, UserPoints
 from .serializers import AthleteStreakSerializer, AthleteStatsSerializer
-
-XP_PER_LEVEL = 500
 
 
 def compute_level(total_points):

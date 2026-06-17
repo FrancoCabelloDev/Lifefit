@@ -40,31 +40,11 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
+import { levelColors, levelLabels, routineStatusColors, routineStatusLabels } from '@/lib/constants'
 import type { User, WorkoutRoutine, RoutineExercise, Exercise, PaginatedResponse } from '@/lib/types'
 
-const levelColors: Record<string, string> = {
-  beginner: 'bg-green-50 text-green-700 border-green-100',
-  intermediate: 'bg-amber-50 text-amber-700 border-amber-100',
-  advanced: 'bg-rose-50 text-rose-700 border-rose-100',
-}
 
-const statusColors: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-600 border-slate-200',
-  published: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  archived: 'bg-red-50 text-red-700 border-red-100',
-}
-
-const levelLabels: Record<string, string> = {
-  beginner: 'Principiante',
-  intermediate: 'Intermedio',
-  advanced: 'Avanzado',
-}
-
-const statusLabels: Record<string, string> = {
-  draft: 'Borrador',
-  published: 'Publicado',
-  archived: 'Archivado',
-}
 
 export default function RoutinesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
@@ -154,7 +134,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
       setAssignRoutine(null)
       setSelectedAthleteId('')
     } catch (error: any) {
-      alert(error?.message || 'Error al asignar rutina')
+      showError(error, 'Error al asignar rutina')
     } finally {
       setIsAssigning(false)
     }
@@ -206,7 +186,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
         fetchExercises()
       }
     } catch (error: any) {
-      alert(error?.message || 'Error al guardar rutina')
+      showError(error, 'Error al guardar rutina')
     } finally {
       setIsSubmitting(false)
     }
@@ -230,7 +210,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
         return next
       })
     } catch (error: any) {
-      alert(error?.message || 'Error al agregar ejercicio')
+      showError(error, 'Error al agregar ejercicio')
     }
   }
 
@@ -246,7 +226,7 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
       await api.delete(`/api/workouts/routines/${routine.id}/`)
       fetchRoutines()
     } catch (error: any) {
-      alert(error?.message || 'Error al eliminar rutina')
+      showError(error, 'Error al eliminar rutina')
     }
   }
 
@@ -588,8 +568,8 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
                             <Badge variant="outline" className={`text-[10px] px-2.5 py-0.5 font-bold border ${levelColors[routine.level] || 'border-slate-200 text-slate-600'}`}>
                               {levelLabels[routine.level] || routine.level}
                             </Badge>
-                            <Badge variant="outline" className={`text-[10px] px-2.5 py-0.5 font-bold border ${statusColors[routine.status] || 'border-slate-200 text-slate-600'}`}>
-                              {statusLabels[routine.status] || routine.status}
+                            <Badge variant="outline" className={`text-[10px] px-2.5 py-0.5 font-bold border ${routineStatusColors[routine.status] || 'border-slate-200 text-slate-600'}`}>
+                              {routineStatusLabels[routine.status] || routine.status}
                             </Badge>
                             {routine.is_public && (
                               <Badge variant="outline" className="text-[10px] px-2.5 py-0.5 font-bold border bg-blue-50 text-blue-700 border-blue-100">

@@ -54,8 +54,8 @@ class MealTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(UserMealLog)
 class UserMealLogAdmin(admin.ModelAdmin):
-    list_display = ("user", "meal_template", "date", "completed", "created_at")
-    list_filter = ("completed", "date", "meal_template__meal_type")
+    list_display = ("user", "meal_template", "date", "status", "created_at")
+    list_filter = ("status", "date", "meal_template__meal_type")
     search_fields = ("user__email", "meal_template__name", "notes")
     date_hierarchy = "date"
     readonly_fields = ("created_at", "updated_at")

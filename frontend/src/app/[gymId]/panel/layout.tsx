@@ -33,6 +33,8 @@ import {
   MessageSquare,
   TrendingUp,
   BookUser,
+  Ruler,
+  CalendarRange,
 } from 'lucide-react'
 import { useSubscriptionTier } from '@/lib/hooks'
 import {
@@ -88,8 +90,10 @@ interface NavGroup {
   items: NavItem[]
 }
 
-function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: Set<string>): { navMain: NavGroup[] } {
+function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: Set<string>, tier?: string | null): { navMain: NavGroup[] } {
   const isEnabled = (flag: string) => !activeFlags || activeFlags.has(flag)
+  const isPremium = tier === 'premium'
+
   if (role === 'athlete') {
     return {
       navMain: [
@@ -100,32 +104,46 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           ],
         },
         {
-          title: "Mi Entrenamiento",
+          title: "Mi Coach",
           items: [
-            { title: "Mi Plan Semanal", url: `/${gymId}/panel/mi-plan-semanal`, icon: CalendarDays },
-            { title: "Mi Plan Nutricional", url: `/${gymId}/panel/mi-nutricion`, icon: UtensilsCrossed },
+            { title: "Plan Semanal", url: `/${gymId}/panel/mi-plan-semanal`, icon: CalendarDays },
+            { title: "Rutinas", url: `/${gymId}/panel/mis-rutinas`, icon: Dumbbell },
+            { title: "Mensajes", url: `/${gymId}/panel/mensajes-coach`, icon: MessageSquare },
           ],
         },
         {
-          title: "Mi Juego",
+          title: "Mi Nutrición",
           items: [
-            { title: "Retos", url: `/${gymId}/panel/mis-retos`, icon: Target },
-            { title: "Mis Logros", url: `/${gymId}/panel/mis-logros`, icon: Award },
-            { title: "Mi Racha", url: `/${gymId}/panel/mi-racha`, icon: TrendingUp },
-            { title: "Mi Nivel", url: `/${gymId}/panel/mi-nivel`, icon: Trophy },
-            { title: "Tabla de posiciones", url: `/${gymId}/panel/mi-ranking`, icon: Medal },
+            { title: "Plan Alimentario", url: `/${gymId}/panel/mi-nutricion`, icon: UtensilsCrossed },
+            // Citas y mensajes con nutricionista requieren Premium (necesitan asignación activa)
+            ...(isPremium ? [
+              { title: "Citas", url: `/${gymId}/panel/mis-citas`, icon: CalendarDays },
+              { title: "Mensajes", url: `/${gymId}/panel/mensajes-nutricionista`, icon: MessageSquare },
+            ] : []),
           ],
         },
         {
-          title: "Mi Equipo",
+          title: "Retos",
           items: [
+            // Retos solo para Premium
+            ...(isPremium ? [
+              { title: "Retos Activos", url: `/${gymId}/panel/mis-retos`, icon: Target },
+            ] : [
+              { title: "Retos 🔒 Premium", url: `/${gymId}/panel/mis-retos`, icon: Target },
+            ]),
+          ],
+        },
+        {
+          title: "Mi Perfil",
+          items: [
+            { title: "Progreso", url: `/${gymId}/panel/mi-progreso`, icon: TrendingUp },
+            // Logros, Ranking y Retos son exclusivos Premium
+            ...(isPremium ? [
+              { title: "Logros y Racha", url: `/${gymId}/panel/mis-logros`, icon: Award },
+              { title: "Ranking", url: `/${gymId}/panel/mi-ranking`, icon: Medal },
+            ] : []),
             { title: "Mi Equipo", url: `/${gymId}/panel/directorio`, icon: BookUser },
-          ],
-        },
-        {
-          title: "Cuenta",
-          items: [
-            { title: "Perfil", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+            { title: "Configuración", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
           ],
         },
       ],
@@ -145,6 +163,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           title: "Mis Atletas",
           items: [
             { title: "Atletas", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
+            { title: "Mensajes", url: `/${gymId}/panel/mensajes-coach`, icon: MessageSquare },
           ],
         },
         {
@@ -186,20 +205,23 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           title: "Gestión",
           items: [
             { title: "Agenda", url: `/${gymId}/panel/agenda`, icon: CalendarDays },
+            { title: "Mi Horario", url: `/${gymId}/panel/mi-horario`, icon: CalendarRange },
             { title: "Clientes", url: `/${gymId}/panel/gestion/atletas`, icon: Users },
           ],
         },
         {
           title: "Acompañamiento",
           items: [
-            { title: "Mensajes", url: `/${gymId}/panel/mensajes`, icon: MessageSquare },
+            { title: "Mensajes", url: `/${gymId}/panel/mensajes-nutricionista`, icon: MessageSquare },
             { title: "Progreso", url: `/${gymId}/panel/progreso`, icon: TrendingUp },
           ],
         },
         {
           title: "Plan de Alimentación",
           items: [
-            { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: Apple },
+            { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: ClipboardList },
+            { title: "Alimentos", url: `/${gymId}/panel/nutricion/alimentos`, icon: Apple },
+            { title: "Evidencias Pendientes", url: `/${gymId}/panel/nutricion/evidencias`, icon: CheckCheck },
           ],
         },
         {
@@ -256,7 +278,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
     isEnabled('ranking') && { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking` },
   ].filter(Boolean) as { title: string; url: string }[]
 
-  const operacionesItems: (NavItem | { title: string; icon: any; isActive: boolean; items: { title: string; url: string }[] })[] = [
+  const operacionesItems = ([
     isEnabled('checkin') && { title: "Check-in", url: `/${gymId}/panel/gestion/checkins`, icon: Radio },
     {
       title: "Gestión",
@@ -281,14 +303,6 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
         { title: "Rutinas", url: `/${gymId}/panel/entrenamiento/rutinas` },
       ],
     },
-    isEnabled('nutricion') && {
-      title: "Nutrición",
-      icon: UtensilsCrossed,
-      isActive: pathname.includes('/nutricion/'),
-      items: [
-        { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales` },
-      ],
-    },
     gamificationItems.length > 0 && {
       title: "Gamificación",
       icon: Target,
@@ -305,7 +319,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
         { title: "Facturación", url: `/${gymId}/panel/finanzas/facturacion` },
       ],
     },
-  ].filter(Boolean)
+  ] as const).filter(Boolean) as (NavItem | { title: string; icon: any; isActive: boolean; items: { title: string; url: string }[] })[]
 
   return {
     navMain: [
@@ -473,7 +487,7 @@ export default function GymPanelLayout({
     )
   }
 
-  const navData = getNavData(userRole, gymId, pathname, featureFlags)
+  const navData = getNavData(userRole, gymId, pathname, featureFlags, subscriptionTier)
   const roleLabel = ROLE_LABELS[userRole]
   const roleHeader = ROLE_HEADERS[userRole]
 
@@ -558,7 +572,7 @@ export default function GymPanelLayout({
                             </SidebarMenuItem>
                           </Collapsible>
                         ) : (() => {
-                          const premiumRoutes = ['mis-retos', 'mi-nivel', 'mi-ranking', 'mis-logros', 'mi-racha']
+                          const premiumRoutes = ['mis-retos', 'mi-ranking', 'mis-logros']
                           const isPremiumRoute = item.url && premiumRoutes.some(r => item.url!.includes(r))
                           const isLocked = isPremiumRoute && userRole === 'athlete' && subscriptionTier === 'basic'
                           return (

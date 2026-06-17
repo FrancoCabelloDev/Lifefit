@@ -2,6 +2,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    FoodViewSet,
+    MealFoodItemViewSet,
     MealTemplateViewSet,
     NutritionItemViewSet,
     NutritionMealViewSet,
@@ -11,6 +13,8 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register("foods", FoodViewSet, basename="nutrition-food")
+router.register("meal-food-items", MealFoodItemViewSet, basename="meal-food-item")
 router.register("plans", NutritionPlanViewSet, basename="nutrition-plan")
 router.register("meal-templates", MealTemplateViewSet, basename="meal-template")
 router.register("meal-logs", UserMealLogViewSet, basename="meal-log")

@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from core.constants import XP_PER_LEVEL
 from core.filters import global_or_user_gym_filter
 from .models import Exercise, RoutineExercise, UserRoutineAssignment, WorkoutRoutine, WorkoutSession, WeeklyRoutinePlan
 from .serializers import (
@@ -225,6 +226,21 @@ class RoutineExerciseViewSet(viewsets.ModelViewSet):
         raise PermissionDenied("No puedes eliminar este bloque de rutina.")
 
 
+def _sync_user_progress(user_id, delta_points: int):
+    """Update UserProgress.total_points/current_xp/level by delta_points."""
+    if not delta_points:
+        return
+    from challenges.models import UserProgress
+    progress, _ = UserProgress.objects.get_or_create(user_id=user_id)
+    progress.total_points = max(0, progress.total_points + delta_points)
+    progress.current_xp = max(0, progress.current_xp + delta_points)
+    while progress.current_xp >= XP_PER_LEVEL:
+        progress.current_xp -= XP_PER_LEVEL
+        progress.level += 1
+        progress.next_level_xp = XP_PER_LEVEL
+    progress.save(update_fields=["total_points", "current_xp", "level", "next_level_xp"])
+
+
 class WorkoutSessionViewSet(viewsets.ModelViewSet):
     serializer_class = WorkoutSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -261,6 +277,7 @@ class WorkoutSessionViewSet(viewsets.ModelViewSet):
         delta = reward - (session.points_awarded or 0)
         if delta:
             User.objects.filter(pk=session.user_id).update(puntos=F("puntos") + delta)
+            _sync_user_progress(session.user_id, delta)
         if reward != session.points_awarded:
             session.points_awarded = reward
             session.save(update_fields=["points_awarded"])

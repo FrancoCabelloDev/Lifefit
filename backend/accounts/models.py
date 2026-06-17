@@ -80,6 +80,10 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     years_experience = models.PositiveSmallIntegerField(null=True, blank=True)
     max_clients = models.PositiveSmallIntegerField(default=20)
 
+    # Datos físicos del atleta (autoreportados)
+    height_cm = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    weight_kg = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+
     # Objetivos del atleta
     class FitnessGoal(models.TextChoices):
         WEIGHT_LOSS     = "weight_loss",     "Pérdida de peso"

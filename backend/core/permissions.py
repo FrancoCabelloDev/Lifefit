@@ -31,6 +31,15 @@ class IsReceptionist(IsAuthenticated):
         return super().has_permission(request, view) and request.user.role == User.Role.RECEPTIONIST
 
 
+class IsGymAdminOrReceptionist(IsAuthenticated):
+    """Permite dar de baja atletas: solo gym_admin y receptionist."""
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.role in {
+            User.Role.GYM_ADMIN,
+            User.Role.RECEPTIONIST,
+        }
+
+
 class IsAthlete(IsAuthenticated):
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role == User.Role.ATHLETE

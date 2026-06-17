@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
 import type { Challenge, ChallengeParticipation, PaginatedResponse } from '@/lib/types'
 import PremiumGate from '@/components/PremiumGate'
 
@@ -66,7 +67,7 @@ export default function MisRetosPage({ params }: { params: Promise<{ gymId: stri
       await api.post(`/api/challenges/challenges/${challengeId}/join/`)
       await fetchData()
     } catch (err) {
-      console.error('Error joining challenge', err)
+      showError(err, 'Error al unirse al reto')
     } finally {
       setJoining(null)
     }

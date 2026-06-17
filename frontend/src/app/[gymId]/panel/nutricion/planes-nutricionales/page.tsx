@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { UtensilsCrossed, Plus, Search, Loader2, Edit, Trash, Check, X, Apple, Beef, Wheat, Droplets, UserPlus } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { UtensilsCrossed, Plus, Search, Loader2, Edit, Trash, Check, X, Apple, Beef, Wheat, Droplets, UserPlus, ChefHat } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
 import type { NutritionPlan, MealTemplate, User, PaginatedResponse } from '@/lib/types'
 
 const STATUES: Record<string, { label: string; color: string }> = {
@@ -39,6 +41,7 @@ type DayMeals = {
 
 export default function NutritionPlansPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  const router = useRouter()
   const [plans, setPlans] = useState<NutritionPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -92,7 +95,7 @@ export default function NutritionPlansPage({ params }: { params: Promise<{ gymId
       setAssignPlan(null)
       setSelectedAthleteId('')
     } catch (error: any) {
-      alert(error?.message || 'Error al asignar plan')
+      showError(error, 'Error al asignar plan')
     } finally {
       setIsAssigning(false)
     }
@@ -353,6 +356,15 @@ export default function NutritionPlansPage({ params }: { params: Promise<{ gymId
                     </span>
                     <span>{plan.duration_days} días</span>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => router.push(`/${gymId}/panel/nutricion/planes-nutricionales/${plan.id}`)}
+                  >
+                    <ChefHat className="h-3.5 w-3.5 mr-1.5" />
+                    Gestionar comidas
+                  </Button>
                 </CardContent>
               </Card>
             )

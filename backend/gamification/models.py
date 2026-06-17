@@ -64,3 +64,12 @@ class AthleteStreak(BaseModel):
             self.longest_streak = self.current_streak
         self.last_activity_date = today
         self.save(update_fields=["current_streak", "longest_streak", "last_activity_date", "updated_at"])
+
+    def get_multiplier(self) -> float:
+        if self.current_streak >= 30:
+            return 3.0
+        if self.current_streak >= 14:
+            return 2.0
+        if self.current_streak >= 7:
+            return 1.5
+        return 1.0

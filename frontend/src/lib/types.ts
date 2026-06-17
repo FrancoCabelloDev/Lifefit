@@ -58,6 +58,9 @@ export type User = {
   specialty?: string
   years_experience?: number | null
   max_clients?: number
+  // Datos físicos autoreportados (atletas)
+  height_cm?: number | null
+  weight_kg?: number | null
 }
 
 export type StaffProfile = {
@@ -108,6 +111,9 @@ export type PaginatedResponse<T> = {
   results: T[]
 }
 
+export type ChallengeVerificationType = "automatic" | "manual"
+export type ChallengeTargetRole = "all" | "athlete" | "coach" | "nutritionist"
+
 export type Challenge = {
   id: string
   gym: string | null
@@ -123,6 +129,14 @@ export type Challenge = {
   reward_points: number
   goal_value: number
   status: "draft" | "active" | "completed" | "archived"
+  // Verificación
+  verification_type: ChallengeVerificationType
+  // Participantes
+  max_participants: number | null
+  current_participants: number
+  is_full: boolean
+  // Audiencia
+  target_role: ChallengeTargetRole
   created_at: string
   updated_at: string
 }
@@ -471,11 +485,16 @@ export type NutritionPlan = {
   updated_at: string
 }
 
+export type MealWeekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+export type MealType = 'breakfast' | 'mid_morning' | 'lunch' | 'afternoon_snack' | 'dinner' | 'late_snack'
+
 export type MealTemplate = {
   id: string
   plan: string
-  day_number: number
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  day_number: number | null
+  weekday: MealWeekday | null
+  weekday_display: string
+  meal_type: MealType
   meal_type_display: string
   name: string
   description: string
@@ -486,6 +505,7 @@ export type MealTemplate = {
   ingredients: string
   instructions: string
   order: number
+  food_items?: any[]
   created_at: string
   updated_at: string
 }
@@ -504,6 +524,8 @@ export type UserRoutineAssignment = {
   updated_at: string
 }
 
+export type ParticipationStatus = "joined" | "pending_review" | "completed" | "rejected" | "dropped"
+
 export type ChallengeParticipation = {
   id: string
   challenge: string
@@ -511,9 +533,16 @@ export type ChallengeParticipation = {
   user: string
   user_detail: { id: string; email: string; first_name?: string; last_name?: string } | null
   progress: number
-  status: string
+  progress_percentage: number
+  status: ParticipationStatus
   points_earned: number
   last_update: string
+  // Verificación manual
+  evidence_note: string
+  verified_by: string | null
+  verified_by_name: string | null
+  verified_at: string | null
+  rejection_note: string
   created_at: string
   updated_at: string
 }
@@ -524,6 +553,21 @@ export type UserBadge = {
   badge: string
   badge_detail: Badge | null
   awarded_at: string
+}
+
+export type MealLogStatus = 'completed' | 'skipped' | 'alternative'
+
+export type UserMealLog = {
+  id: string
+  user: string
+  meal_template: string
+  date: string
+  completed: boolean
+  status: MealLogStatus
+  alternative_food_text: string
+  notes: string
+  created_at: string
+  updated_at: string
 }
 
 export type UserNutritionPlan = {
@@ -556,6 +600,7 @@ export type UserProgress = {
 export type NutritionistAppointment = {
   id: string
   nutritionist: string
+  nutritionist_name: string
   athlete: string
   athlete_name: string
   athlete_email: string
@@ -564,9 +609,12 @@ export type NutritionistAppointment = {
   duration_minutes: number
   appointment_type: 'first' | 'followup'
   appointment_type_display: string
-  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'reschedule_requested'
   status_display: string
   notes: string
+  clinical_notes: string
+  reschedule_note: string
+  cancelled_by: string
   created_at: string
   updated_at: string
 }

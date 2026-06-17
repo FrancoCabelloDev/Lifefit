@@ -1,25 +1,30 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Dumbbell, Apple, Target, Award, Zap,
   UserCheck, AlertTriangle, Activity, Ruler, Scale,
-  Calendar, CheckCircle2, Clock, Star,
+  Calendar, CheckCircle2, Clock, Star, MessageSquare,
+  UtensilsCrossed, Plus, Loader2, ChevronLeft, ChevronRight,
+  Search, Trash2, X, Flame,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import type { User } from '@/lib/types'
 import { ProfileSkeleton } from '@/components/ui/skeletons'
+import { showSuccess, showError } from '@/lib/toast'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(val: any, unit = '') {
   if (val === null || val === undefined) return '—'
@@ -72,74 +77,680 @@ function AppointmentStatusBadge({ status }: { status: string }) {
   )
 }
 
-// ─── Sección: Medidas Antropométricas ────────────────────────────────────────
+const WEEKDAY_LABELS: Record<string, string> = {
+  monday: 'Lunes', tuesday: 'Martes', wednesday: 'Miércoles',
+  thursday: 'Jueves', friday: 'Viernes', saturday: 'Sábado', sunday: 'Domingo',
+}
+const WEEKDAY_ORDER = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
 
-function MeasurementsSection({ measurements }: { measurements: any[] }) {
+const MEAL_TYPE_LABELS: Record<string, string> = {
+  breakfast:       'Desayuno',
+  mid_morning:     'Media mañana',
+  lunch:           'Almuerzo',
+  afternoon_snack: 'Merienda',
+  dinner:          'Cena',
+  late_snack:      'Recena',
+  snack:           'Snack',
+}
+
+const MEAL_TYPE_COLORS: Record<string, string> = {
+  breakfast:       'bg-amber-50 text-amber-700 border-amber-100',
+  mid_morning:     'bg-lime-50 text-lime-700 border-lime-100',
+  lunch:           'bg-emerald-50 text-emerald-700 border-emerald-100',
+  afternoon_snack: 'bg-orange-50 text-orange-700 border-orange-100',
+  dinner:          'bg-indigo-50 text-indigo-700 border-indigo-100',
+  late_snack:      'bg-purple-50 text-purple-700 border-purple-100',
+  snack:           'bg-rose-50 text-rose-700 border-rose-100',
+}
+
+// ─── Tab: Plan de Alimentación (interactivo estilo Nutrium) ──────────────────
+
+function AddFoodModal({ mealId, gymId, onClose, onAdded }: {
+  mealId: string; gymId: string; onClose: () => void; onAdded: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const [selectedFood, setSelectedFood] = useState<any>(null)
+  const [quantity, setQuantity] = useState('100')
+
+  const foodsQuery = useQuery({
+    queryKey: ['foods-search', gymId, search],
+    queryFn: async () => {
+      const params: any = {}
+      if (search.trim()) params.search = search.trim()
+      const res = await api.get<any>('/api/nutrition/foods/', { params })
+      return Array.isArray(res) ? res : (res?.results ?? [])
+    },
+  })
+
+  const addMutation = useMutation({
+    mutationFn: () => api.post('/api/nutrition/meal-food-items/', {
+      meal: mealId, food: selectedFood.id, quantity_g: parseFloat(quantity) || 100,
+    }),
+    onSuccess: () => { showSuccess('Alimento agregado'); onAdded(); onClose() },
+    onError: (err) => showError(err, 'Error al agregar alimento'),
+  })
+
+  // Macros preview en tiempo real
+  const factor = (parseFloat(quantity) || 0) / 100
+  const preview = selectedFood ? {
+    cal: (parseFloat(selectedFood.calories_per_100g) * factor).toFixed(1),
+    p:   (parseFloat(selectedFood.protein_per_100g)  * factor).toFixed(1),
+    c:   (parseFloat(selectedFood.carbs_per_100g)    * factor).toFixed(1),
+    g:   (parseFloat(selectedFood.fats_per_100g)     * factor).toFixed(1),
+  } : null
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-md bg-white rounded-2xl border-none shadow-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-base font-bold text-slate-900">Agregar alimento</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-1">
+          {!selectedFood ? (
+            <>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar alimento..."
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-1">
+                {foodsQuery.isLoading ? (
+                  <div className="flex justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-emerald-600" /></div>
+                ) : (foodsQuery.data || []).length === 0 ? (
+                  <p className="text-center text-sm text-slate-400 py-6">Sin resultados</p>
+                ) : (
+                  (foodsQuery.data || []).map((food: any) => (
+                    <button
+                      key={food.id}
+                      onClick={() => setSelectedFood(food)}
+                      className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-emerald-50 transition-colors group"
+                    >
+                      <p className="text-sm font-medium text-slate-800 group-hover:text-emerald-700">{food.name}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {food.food_group_display} · {food.calories_per_100g} kcal/100g
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2.5">
+                <p className="text-sm font-semibold text-emerald-800 flex-1">{selectedFood.name}</p>
+                <button onClick={() => setSelectedFood(null)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Cantidad (gramos)</label>
+                <input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  value={quantity}
+                  onChange={e => setQuantity(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+
+              {preview && (
+                <div className="grid grid-cols-4 gap-2 bg-slate-50 rounded-xl p-3">
+                  {[
+                    { label: 'Energía', value: preview.cal, unit: 'kcal', color: 'text-orange-600' },
+                    { label: 'Proteína', value: preview.p, unit: 'g', color: 'text-blue-600' },
+                    { label: 'H. Carbono', value: preview.c, unit: 'g', color: 'text-amber-600' },
+                    { label: 'Grasa', value: preview.g, unit: 'g', color: 'text-rose-600' },
+                  ].map(({ label, value, unit, color }) => (
+                    <div key={label} className="text-center">
+                      <p className={`text-sm font-bold ${color}`}>{value}</p>
+                      <p className="text-[9px] text-slate-400">{unit}</p>
+                      <p className="text-[9px] text-slate-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
+                <Button
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-1"
+                  disabled={addMutation.isPending || !quantity}
+                  onClick={() => addMutation.mutate()}
+                >
+                  {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" />Agregar</>}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MealBlock({ meal, gymId, onRefresh }: { meal: any; gymId: string; onRefresh: () => void }) {
+  const queryClient = useQueryClient()
+  const [addingFood, setAddingFood]         = useState(false)
+  const [confirmDelete, setConfirmDelete]   = useState(false)
+
+  const deleteItemMutation = useMutation({
+    mutationFn: (itemId: string) => api.delete(`/api/nutrition/meal-food-items/${itemId}/`),
+    onSuccess: () => { onRefresh() },
+    onError: (err) => showError(err, 'Error al eliminar'),
+  })
+
+  const deleteMealMutation = useMutation({
+    mutationFn: () => api.delete(`/api/nutrition/meal-templates/${meal.id}/`),
+    onSuccess: () => { showSuccess('Comida eliminada'); onRefresh() },
+    onError: (err) => showError(err, 'Error al eliminar la comida'),
+  })
+
+  const items: any[] = meal.food_items || []
+  const totalCal = items.reduce((s: number, i: any) => s + parseFloat(i.calories || 0), 0)
+  const totalP   = items.reduce((s: number, i: any) => s + parseFloat(i.protein_g || 0), 0)
+  const totalC   = items.reduce((s: number, i: any) => s + parseFloat(i.carbs_g || 0), 0)
+  const totalG   = items.reduce((s: number, i: any) => s + parseFloat(i.fats_g || 0), 0)
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+      {/* Header de la comida */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-50 bg-slate-50/60 group">
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${MEAL_TYPE_COLORS[meal.meal_type] || 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+          {MEAL_TYPE_LABELS[meal.meal_type] || meal.meal_type}
+        </span>
+        <p className="text-sm font-semibold text-slate-800 flex-1">{meal.name}</p>
+        {items.length > 0 && (
+          <div className="flex gap-3 text-[11px] text-slate-400">
+            <span className="font-medium text-orange-600">{totalCal.toFixed(0)} kcal</span>
+            <span>P {totalP.toFixed(1)}g</span>
+            <span>C {totalC.toFixed(1)}g</span>
+            <span>G {totalG.toFixed(1)}g</span>
+          </div>
+        )}
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+            title="Eliminar esta comida del día"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-2 duration-150">
+            <span className="text-[11px] text-slate-500">¿Eliminar?</span>
+            <button
+              onClick={() => deleteMealMutation.mutate()}
+              disabled={deleteMealMutation.isPending}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors"
+            >
+              {deleteMealMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Sí'}
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              No
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Lista de alimentos */}
+      {items.length > 0 && (
+        <div className="divide-y divide-slate-50">
+          {items.map((item: any) => (
+            <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/50 group">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-slate-700">{item.food_name}
+                  <span className="text-slate-400 ml-1.5">({item.quantity_g}g)</span>
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  {parseFloat(item.calories).toFixed(0)} kcal · P {parseFloat(item.protein_g).toFixed(1)}g · C {parseFloat(item.carbs_g).toFixed(1)}g · G {parseFloat(item.fats_g).toFixed(1)}g
+                </p>
+              </div>
+              <button
+                onClick={() => deleteItemMutation.mutate(item.id)}
+                disabled={deleteItemMutation.isPending}
+                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Botón agregar alimento */}
+      <button
+        onClick={() => setAddingFood(true)}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors border-t border-slate-50"
+      >
+        <Plus className="w-3.5 h-3.5" /> Agregar alimento
+      </button>
+
+      {addingFood && (
+        <AddFoodModal
+          mealId={meal.id}
+          gymId={gymId}
+          onClose={() => setAddingFood(false)}
+          onAdded={onRefresh}
+        />
+      )}
+    </div>
+  )
+}
+
+function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
+  athleteId: string; gymId: string; membership_tier: string | null
+}) {
+  const queryClient = useQueryClient()
+  const [selectedDay, setSelectedDay] = useState<string | number>(1)
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [addDayOpen, setAddDayOpen] = useState(false)
+  const [addingDay, setAddingDay] = useState(false)
+  const [removeDayConfirm, setRemoveDayConfirm] = useState(false)
+  const [removingDay, setRemovingDay] = useState(false)
+
+  const nutritionQuery = useQuery({
+    queryKey: ['athlete-nutrition', athleteId],
+    queryFn: () => api.get<any>(`/api/nutrition/assignments/athlete_nutrition/?athlete_id=${athleteId}`),
+  })
+
+  const plansQuery = useQuery({
+    queryKey: ['nutrition-plans-list', gymId],
+    queryFn: async () => {
+      const res = await api.get<any>('/api/nutrition/plans/')
+      return Array.isArray(res) ? res : (res?.results ?? [])
+    },
+    enabled: assignModalOpen,
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: (planId: string) => api.post('/api/nutrition/assignments/', {
+      user: athleteId, plan: planId,
+      start_date: new Date().toISOString().split('T')[0],
+    }),
+    onSuccess: () => {
+      showSuccess('Plan asignado correctamente')
+      setAssignModalOpen(false)
+      setSelectedPlanId('')
+      queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+    },
+    onError: (err) => showError(err, 'Error al asignar el plan'),
+  })
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+
+  if (nutritionQuery.isLoading) {
+    return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
+  }
+
+  if (nutritionQuery.isError) {
+    return (
+      <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4">
+        <AlertTriangle className="w-5 h-5 text-rose-500 flex-shrink-0" />
+        <p className="text-sm text-rose-800 font-medium">
+          Error al cargar el plan nutricional. Intenta recargar la página.
+        </p>
+      </div>
+    )
+  }
+
+  if (membership_tier !== 'premium') {
+    return (
+      <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+        <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+        <p className="text-sm text-amber-800 font-medium">
+          Este atleta no tiene Plan Premium. No puede recibir un plan nutricional personalizado.
+        </p>
+      </div>
+    )
+  }
+
+  const nutData = nutritionQuery.data
+  const activePlan = nutData?.active_plan?.plan_detail ?? null
+  const assignment = nutData?.active_plan ?? null
+
+  if (!activePlan) {
+    return (
+      <>
+        <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-4 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+            <UtensilsCrossed className="w-7 h-7 text-slate-300" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Sin plan nutricional activo</p>
+            <p className="text-xs text-slate-400 mt-1">Asigna un plan para comenzar a construirlo.</p>
+          </div>
+          <Button onClick={() => setAssignModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+            <Plus className="w-4 h-4" /> Asignar plan nutricional
+          </Button>
+        </div>
+        {assignModalOpen && (
+          <AssignPlanModal
+            plans={plansQuery.data || []}
+            loading={plansQuery.isLoading}
+            selectedPlanId={selectedPlanId}
+            onSelectPlan={setSelectedPlanId}
+            onConfirm={() => selectedPlanId && assignMutation.mutate(selectedPlanId)}
+            saving={assignMutation.isPending}
+            onClose={() => setAssignModalOpen(false)}
+          />
+        )}
+      </>
+    )
+  }
+
+  const mealsByDay: Record<string, any[]> = activePlan.meals_by_day || {}
+  const addedWeekdays = WEEKDAY_ORDER.filter(d => mealsByDay[d] && mealsByDay[d].length > 0)
+  const remainingWeekdays = WEEKDAY_ORDER.filter(d => !addedWeekdays.includes(d))
+
+  const effectiveKey = addedWeekdays.includes(String(selectedDay))
+    ? String(selectedDay)
+    : (addedWeekdays[0] ?? '')
+  const dayMeals: any[] = mealsByDay[effectiveKey] || []
+
+  const handleAddDay = async (weekday: string) => {
+    setAddingDay(true)
+    try {
+      await api.post(`/api/nutrition/plans/${activePlan.id}/add_day/`, { weekday })
+      setSelectedDay(weekday as any)
+      setAddDayOpen(false)
+      refresh()
+      showSuccess(`${WEEKDAY_LABELS[weekday]} agregado`)
+    } catch (err) { showError(err, 'Error al agregar día') }
+    finally { setAddingDay(false) }
+  }
+
+  const handleRemoveDay = async () => {
+    setRemovingDay(true)
+    try {
+      await api.post(`/api/nutrition/plans/${activePlan.id}/remove_day/`, { weekday: effectiveKey })
+      const remaining = addedWeekdays.filter(d => d !== effectiveKey)
+      setSelectedDay(remaining[0] as any ?? '')
+      setRemoveDayConfirm(false)
+      refresh()
+      showSuccess('Día eliminado')
+    } catch (err) { showError(err, 'Error al eliminar día') }
+    finally { setRemovingDay(false) }
+  }
+
+  // Totales del día (desde food_items)
+  const allItems = dayMeals.flatMap((m: any) => m.food_items || [])
+  const totalCal = allItems.reduce((s: number, i: any) => s + parseFloat(i.calories || 0), 0)
+  const totalP   = allItems.reduce((s: number, i: any) => s + parseFloat(i.protein_g || 0), 0)
+  const totalC   = allItems.reduce((s: number, i: any) => s + parseFloat(i.carbs_g || 0), 0)
+  const totalG   = allItems.reduce((s: number, i: any) => s + parseFloat(i.fats_g || 0), 0)
+  const targetCal = activePlan.calories_per_day || 0
+
+  return (
+    <div className="flex gap-5">
+      {/* Panel izquierdo — plan */}
+      <div className="flex-1 min-w-0 space-y-4">
+
+        {/* Selector de días + añadir/eliminar */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {addedWeekdays.map(day => (
+            <button
+              key={day}
+              onClick={() => setSelectedDay(day as any)}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                effectiveKey === day
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {WEEKDAY_LABELS[day]}
+            </button>
+          ))}
+
+          {/* Botón añadir día */}
+          {remainingWeekdays.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setAddDayOpen(v => !v)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border-2 border-dashed border-slate-300 text-slate-400 hover:border-emerald-400 hover:text-emerald-600 transition-all"
+              >
+                <Plus className="w-3 h-3" /> Añadir día
+              </button>
+              {addDayOpen && (
+                <div className="absolute top-full left-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-20 min-w-[130px] overflow-hidden">
+                  {remainingWeekdays.map(d => (
+                    <button
+                      key={d}
+                      disabled={addingDay}
+                      onClick={() => handleAddDay(d)}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-1.5"
+                    >
+                      {addingDay ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      {WEEKDAY_LABELS[d]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Botón eliminar día actual */}
+          {effectiveKey && (
+            <button
+              onClick={() => setRemoveDayConfirm(true)}
+              className="ml-auto flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+            >
+              <Trash2 className="w-3 h-3" /> Eliminar {WEEKDAY_LABELS[effectiveKey]}
+            </button>
+          )}
+        </div>
+
+        {/* Comidas del día */}
+        {addedWeekdays.length === 0 ? (
+          <div className="bg-white rounded-xl border border-dashed border-slate-200 py-12 text-center">
+            <UtensilsCrossed className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">Sin días configurados</p>
+            <p className="text-xs text-slate-300 mt-1">Haz clic en "Añadir día" para comenzar.</p>
+          </div>
+        ) : dayMeals.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-100 py-10 text-center">
+            <p className="text-sm text-slate-400">Sin comidas para este día</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {dayMeals.map((meal: any) => (
+              <MealBlock key={meal.id} meal={meal} gymId={gymId} onRefresh={refresh} />
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={() => setAssignModalOpen(true)}
+          className="text-xs text-slate-400 hover:text-emerald-600 transition-colors hover:underline underline-offset-2"
+        >
+          Cambiar plan nutricional
+        </button>
+
+        {/* Confirm remove day */}
+        <Dialog open={removeDayConfirm} onOpenChange={setRemoveDayConfirm}>
+          <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>¿Eliminar {WEEKDAY_LABELS[effectiveKey]}?</DialogTitle></DialogHeader>
+            <p className="text-sm text-slate-500">Se eliminarán todas las comidas y alimentos del {WEEKDAY_LABELS[effectiveKey]}.</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRemoveDayConfirm(false)}>Cancelar</Button>
+              <Button variant="destructive" onClick={handleRemoveDay} disabled={removingDay}>
+                {removingDay ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Eliminar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Panel derecho — análisis */}
+      <div className="w-56 shrink-0 space-y-4">
+        <div className="bg-white rounded-xl border border-slate-100 p-4 sticky top-4">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Análisis del día</p>
+
+          {/* Energía con barra */}
+          <div className="mb-4">
+            <div className="flex justify-between items-baseline mb-1">
+              <span className="text-xs text-slate-500">Energía</span>
+              <span className="text-xs font-bold text-slate-700">
+                {totalCal.toFixed(0)}<span className="text-slate-400 font-normal">/{targetCal} kcal</span>
+              </span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-orange-400 rounded-full transition-all"
+                style={{ width: `${Math.min((totalCal / (targetCal || 1)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Macros */}
+          {[
+            { label: 'Grasa', value: totalG, target: activePlan.fats_g, color: 'bg-yellow-400', unit: 'g' },
+            { label: 'H. Carbono', value: totalC, target: activePlan.carbs_g, color: 'bg-red-400', unit: 'g' },
+            { label: 'Proteína', value: totalP, target: activePlan.protein_g, color: 'bg-blue-400', unit: 'g' },
+          ].map(({ label, value, target, color, unit }) => (
+            <div key={label} className="mb-3">
+              <div className="flex justify-between items-baseline mb-1">
+                <span className="text-xs text-slate-500">{label}</span>
+                <span className="text-xs font-bold text-slate-700">
+                  {value.toFixed(1)}<span className="text-slate-400 font-normal">/{target}{unit}</span>
+                </span>
+              </div>
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${color} rounded-full transition-all`}
+                  style={{ width: `${Math.min((value / (target || 1)) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <p className="text-[10px] text-slate-400 text-center">Desde {fmtDate(assignment?.start_date)}</p>
+          </div>
+        </div>
+      </div>
+
+      {assignModalOpen && (
+        <AssignPlanModal
+          plans={plansQuery.data || []}
+          loading={plansQuery.isLoading}
+          selectedPlanId={selectedPlanId}
+          onSelectPlan={setSelectedPlanId}
+          onConfirm={() => selectedPlanId && assignMutation.mutate(selectedPlanId)}
+          saving={assignMutation.isPending}
+          onClose={() => setAssignModalOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function AssignPlanModal({ onClose, plans, loading, selectedPlanId, onSelectPlan, onConfirm, saving }: {
+  onClose: () => void; plans: any[]; loading: boolean
+  selectedPlanId: string; onSelectPlan: (id: string) => void
+  onConfirm: () => void; saving: boolean
+}) {
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-sm bg-white rounded-2xl border-none shadow-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-base font-bold text-slate-900">Asignar plan nutricional</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          {loading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-emerald-600" /></div>
+          ) : (
+            <Select value={selectedPlanId} onValueChange={onSelectPlan}>
+              <SelectTrigger><SelectValue placeholder="Seleccionar plan..." /></SelectTrigger>
+              <SelectContent>
+                {plans.map((p: any) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name} — {p.calories_per_day} kcal/día</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
+            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={!selectedPlanId || saving} onClick={onConfirm}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Asignar'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Tab: Medidas ─────────────────────────────────────────────────────────────
+
+function MeasurementsTab({ measurements }: { measurements: any[] }) {
   if (!measurements || measurements.length === 0) {
     return (
-      <Card className="border-slate-200 shadow-sm">
-        <CardContent className="py-12 text-center text-slate-400">
-          <Ruler className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Sin medidas registradas</p>
-          <p className="text-sm mt-1">Registra la primera medida antropométrica desde la agenda.</p>
-        </CardContent>
-      </Card>
+      <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-3 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+          <Ruler className="w-7 h-7 text-slate-300" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-slate-600">Sin medidas registradas</p>
+          <p className="text-xs text-slate-400 mt-1">Registra las primeras medidas desde la agenda.</p>
+        </div>
+      </div>
     )
   }
 
   const latest = measurements[0]
-
   const statItems = [
-    { label: 'Peso', value: fmt(latest.weight_kg, ' kg'), icon: Scale },
-    { label: 'Altura', value: fmt(latest.height_cm, ' cm'), icon: Ruler },
-    { label: 'IMC', value: fmt(latest.bmi), icon: Activity },
-    { label: '% Grasa', value: fmt(latest.body_fat_pct, '%'), icon: Activity },
-    { label: 'Masa muscular', value: fmt(latest.muscle_mass_kg, ' kg'), icon: Dumbbell },
-    { label: 'Cintura', value: fmt(latest.waist_cm, ' cm'), icon: Ruler },
-    { label: 'Cadera', value: fmt(latest.hip_cm, ' cm'), icon: Ruler },
-    { label: 'Brazo', value: fmt(latest.arm_cm, ' cm'), icon: Ruler },
-    { label: 'Grasa visceral', value: fmt(latest.visceral_fat), icon: Activity },
+    { label: 'Peso', value: fmt(latest.weight_kg, ' kg') },
+    { label: 'Talla', value: fmt(latest.height_cm, ' cm') },
+    { label: 'IMC', value: fmt(latest.bmi) },
+    { label: '% Grasa', value: fmt(latest.body_fat_pct, '%') },
+    { label: 'Masa muscular', value: fmt(latest.muscle_mass_kg, ' kg') },
+    { label: 'Cintura', value: fmt(latest.waist_cm, ' cm') },
+    { label: 'Cadera', value: fmt(latest.hip_cm, ' cm') },
+    { label: 'Brazo', value: fmt(latest.arm_cm, ' cm') },
+    { label: 'Grasa visceral', value: fmt(latest.visceral_fat) },
   ]
 
   return (
     <div className="space-y-4">
-      {/* Última medida */}
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="border-b border-slate-100 pb-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center">
-                <Scale className="w-5 h-5 text-teal-600" />
-              </div>
-              <div>
-                <CardTitle className="text-base font-semibold text-slate-800">Última medición</CardTitle>
-                <CardDescription>{fmtDate(latest.measured_at)}</CardDescription>
-              </div>
-            </div>
+            <CardTitle className="text-base font-semibold text-slate-800">Última medición</CardTitle>
+            <span className="text-xs text-slate-400">{fmtDate(latest.measured_at)}</span>
           </div>
         </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-3 gap-4">
+        <CardContent className="p-5">
+          <div className="grid grid-cols-3 gap-3">
             {statItems.map(({ label, value }) => (
               <div key={label} className="bg-slate-50 rounded-xl p-3 text-center">
-                <p className="text-xs text-slate-400 mb-1">{label}</p>
+                <p className="text-[10px] text-slate-400 mb-1 uppercase tracking-wide">{label}</p>
                 <p className="font-bold text-slate-900">{value}</p>
               </div>
             ))}
           </div>
           {latest.notes && (
-            <p className="mt-4 text-sm text-slate-500 bg-slate-50 rounded-xl p-3 italic">
-              {latest.notes}
-            </p>
+            <p className="mt-4 text-sm text-slate-500 bg-slate-50 rounded-xl p-3 italic">"{latest.notes}"</p>
           )}
         </CardContent>
       </Card>
 
-      {/* Historial */}
       {measurements.length > 1 && (
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-slate-800">Historial de mediciones</CardTitle>
+            <CardTitle className="text-base font-semibold text-slate-800">
+              Historial <span className="text-slate-400 font-normal text-sm">({measurements.length} registros)</span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -172,61 +783,7 @@ function MeasurementsSection({ measurements }: { measurements: any[] }) {
   )
 }
 
-// ─── Sección: Citas ──────────────────────────────────────────────────────────
-
-function AppointmentsSection({ appointments }: { appointments: any[] }) {
-  if (!appointments || appointments.length === 0) {
-    return (
-      <Card className="border-slate-200 shadow-sm">
-        <CardContent className="py-12 text-center text-slate-400">
-          <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Sin citas registradas</p>
-          <p className="text-sm mt-1">Las citas agendadas con este atleta aparecerán aquí.</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card className="border-slate-200 shadow-sm">
-      <CardHeader className="border-b border-slate-100 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-            <Calendar className="w-5 h-5 text-blue-600" />
-          </div>
-          <CardTitle className="text-base font-semibold text-slate-800">
-            Historial de citas ({appointments.length})
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-slate-50">
-          {appointments.map((apt: any) => (
-            <div key={apt.id} className="px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-50/60">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-                  {apt.status === 'completed'
-                    ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    : <Clock className="w-4 h-4 text-slate-400" />
-                  }
-                </div>
-                <div>
-                  <p className="font-semibold text-slate-900 text-sm">{apt.appointment_type_display || apt.appointment_type}</p>
-                  <p className="text-xs text-slate-500">{fmtDateTime(apt.scheduled_at)} · {apt.duration_minutes} min</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <AppointmentStatusBadge status={apt.status} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Página principal ──────────────────────────────────────────────────────────
 
 export default function AthleteProfilePage({ params }: { params: Promise<{ gymId: string; id: string }> }) {
   const { gymId, id } = use(params)
@@ -254,195 +811,251 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
 
   const { athlete: a, stats: s, routine, nutrition_plan, points_history, measurements, appointments, membership_tier } = data
 
-  const defaultTab = isNutritionist ? 'nutricion' : 'general'
+  const initials = `${a.first_name?.[0] || ''}${a.last_name?.[0] || ''}`.toUpperCase()
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-10 w-10 rounded-xl">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              {a.first_name} {a.last_name}
-            </h1>
-            <TierBadge tier={membership_tier} />
-            <Badge className={a.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500'}>
-              {a.is_active ? 'Activo' : 'Inactivo'}
-            </Badge>
+      {/* Header tipo Nutrium */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5">
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.back()} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg flex-shrink-0">
+            {initials}
           </div>
-          <p className="text-slate-500 text-sm mt-0.5">{a.email}</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold text-slate-900">{a.first_name} {a.last_name}</h1>
+              <TierBadge tier={membership_tier} />
+              <Badge className={`text-[10px] ${a.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
+                {a.is_active ? 'Activo' : 'Inactivo'}
+              </Badge>
+            </div>
+            <p className="text-sm text-slate-400 mt-0.5">{a.email}</p>
+          </div>
+          {isNutritionist && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 flex-shrink-0"
+              onClick={() => router.push(`/${gymId}/panel/mensajes?athlete=${id}`)}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Mensajes
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Stats rápidos */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-        {[
-          { label: 'Sesiones semana', value: s.sessions_week, sub: `${s.sessions_month} este mes`, icon: Dumbbell, color: 'bg-blue-100 text-blue-600' },
-          { label: 'Comidas (7d)', value: s.meals_week, sub: `${s.meals_today} hoy`, icon: Apple, color: 'bg-amber-100 text-amber-600' },
-          { label: 'Retos activos', value: s.active_challenges, sub: 'En progreso', icon: Target, color: 'bg-indigo-100 text-indigo-600' },
-          { label: 'Insignias', value: s.badges_earned, sub: 'Logros', icon: Award, color: 'bg-rose-100 text-rose-600' },
-        ].map(({ label, value, sub, icon: Icon, color }) => (
-          <Card key={label} className="border-slate-200 shadow-sm">
-            <CardContent className="p-5 text-center">
-              <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center mb-3 ${color}`}>
-                <Icon className="w-5 h-5" />
-              </div>
-              <p className="text-2xl font-bold text-slate-900">{value}</p>
-              <p className="text-xs text-slate-500">{label}</p>
-              <p className="text-[10px] text-slate-400">{sub}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Stats rápidos — solo para admin/coach */}
+      {!isNutritionist && (
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+          {[
+            { label: 'Sesiones semana', value: s.sessions_week, sub: `${s.sessions_month} este mes`, icon: Dumbbell, color: 'bg-blue-100 text-blue-600' },
+            { label: 'Comidas (7d)', value: s.meals_week, sub: `${s.meals_today} hoy`, icon: Apple, color: 'bg-amber-100 text-amber-600' },
+            { label: 'Retos activos', value: s.active_challenges, sub: 'En progreso', icon: Target, color: 'bg-indigo-100 text-indigo-600' },
+            { label: 'Insignias', value: s.badges_earned, sub: 'Logros', icon: Award, color: 'bg-rose-100 text-rose-600' },
+          ].map(({ label, value, sub, icon: Icon, color }) => (
+            <Card key={label} className="border-slate-200 shadow-sm">
+              <CardContent className="p-5 text-center">
+                <div className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center mb-3 ${color}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <p className="text-2xl font-bold text-slate-900">{value}</p>
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="text-[10px] text-slate-400">{sub}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Tabs */}
-      <Tabs defaultValue={defaultTab}>
-        <TabsList className="bg-slate-100 rounded-xl p-1 h-auto">
-          <TabsTrigger value="general" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-            General
-          </TabsTrigger>
-          <TabsTrigger value="nutricion" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-            Nutrición
-          </TabsTrigger>
-          {!isNutritionist && (
-            <TabsTrigger value="puntos" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Puntos
+      {isNutritionist ? (
+        // Vista nutricionista — tabs dedicados
+        <Tabs defaultValue="plan">
+          <TabsList className="bg-slate-100 rounded-xl p-1 h-auto w-full">
+            <TabsTrigger value="info" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Información
             </TabsTrigger>
-          )}
-        </TabsList>
+            <TabsTrigger value="medidas" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Medidas
+            </TabsTrigger>
+            <TabsTrigger value="plan" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Plan de Alimentación
+            </TabsTrigger>
+            <TabsTrigger value="citas" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Citas
+            </TabsTrigger>
+          </TabsList>
 
-        {/* ── Tab General ── */}
-        <TabsContent value="general" className="mt-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Info personal */}
+          {/* Info */}
+          <TabsContent value="info" className="mt-4">
             <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="border-b border-slate-100 pb-4">
-                <CardTitle className="text-base font-semibold text-slate-800">Información personal</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 grid grid-cols-2 gap-4">
+              <CardContent className="p-6 grid grid-cols-2 gap-5">
                 {[
                   { label: 'DNI', value: a.dni },
                   { label: 'Celular', value: a.phone },
                   { label: 'Miembro desde', value: fmtDate(a.date_joined) },
-                  { label: 'Check-ins totales', value: s.checkins_total },
-                  { label: 'Check-ins este mes', value: s.checkins_month },
                   { label: 'Nivel', value: `Nivel ${a.nivel}` },
+                  { label: 'Objetivo fitness', value: a.fitness_goal?.replace(/_/g, ' ') },
+                  { label: 'Check-ins totales', value: s.checkins_total },
                 ].map(({ label, value }) => (
                   <div key={label}>
-                    <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
-                    <p className="font-medium text-slate-700 mt-0.5">{value || '—'}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{label}</p>
+                    <p className="text-sm font-medium text-slate-700 mt-0.5">{value || '—'}</p>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-
-            {/* Staff asignado */}
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="border-b border-slate-100 pb-4">
-                <CardTitle className="text-base font-semibold text-slate-800">Staff asignado</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                {data.coach ? (
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <UserCheck className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Coach</p>
-                      <p className="font-semibold text-slate-800">{data.coach.name}</p>
-                    </div>
+                {a.goal_notes && (
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Notas del atleta</p>
+                    <p className="text-sm text-slate-600 mt-0.5 italic">"{a.goal_notes}"</p>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-400">Sin coach asignado</p>
-                )}
-                {data.nutritionist ? (
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-                      <Apple className="w-4 h-4 text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Nutricionista</p>
-                      <p className="font-semibold text-slate-800">{data.nutritionist.name}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-400">Sin nutricionista asignado</p>
                 )}
               </CardContent>
             </Card>
-          </div>
+          </TabsContent>
 
-          {/* Plan nutricional */}
-          {nutrition_plan && (
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="border-b border-slate-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <Apple className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base font-semibold text-slate-800">Plan Nutricional Activo</CardTitle>
-                    <CardDescription>Asignado por {nutrition_plan.assigned_by || 'el sistema'}</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <p className="font-bold text-slate-900">{nutrition_plan.name}</p>
-                <p className="text-sm text-slate-500 mb-3">Inicio: {fmtDate(nutrition_plan.start_date)}</p>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-slate-500">Cumplimiento</span>
-                  <span className={`font-bold ${nutrition_plan.compliance_percentage >= 80 ? 'text-emerald-600' : nutrition_plan.compliance_percentage >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
-                    {nutrition_plan.compliance_percentage}%
-                  </span>
-                </div>
-                <Progress value={nutrition_plan.compliance_percentage} className="h-2" />
-              </CardContent>
-            </Card>
-          )}
+          {/* Medidas */}
+          <TabsContent value="medidas" className="mt-4">
+            <MeasurementsTab measurements={measurements || []} />
+          </TabsContent>
 
-          {/* Rutina */}
-          {routine && (
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="border-b border-slate-100 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                    <Dumbbell className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base font-semibold text-slate-800">Rutina Activa</CardTitle>
-                    <CardDescription>Asignada por {routine.assigned_by || 'el sistema'}</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">{routine.name}</p>
-                  <p className="text-sm text-slate-500">Inicio: {fmtDate(routine.start_date)}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+          {/* Plan de Alimentación */}
+          <TabsContent value="plan" className="mt-4">
+            <NutritionPlanTab athleteId={id} gymId={gymId} membership_tier={membership_tier} />
+          </TabsContent>
 
-        {/* ── Tab Nutrición ── */}
-        <TabsContent value="nutricion" className="mt-4 space-y-4">
-          {membership_tier !== 'premium' && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
-              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-              <p className="text-sm text-amber-800 font-medium">
-                Este atleta no tiene Plan Premium activo. No puede ser atendido por un nutricionista.
-              </p>
+          {/* Citas */}
+          <TabsContent value="citas" className="mt-4">
+            {appointments && appointments.length > 0 ? (
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="border-b border-slate-100 pb-4">
+                  <CardTitle className="text-base font-semibold text-slate-800">
+                    Historial de citas <span className="text-slate-400 font-normal text-sm">({appointments.length})</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 divide-y divide-slate-50">
+                  {appointments.map((apt: any) => (
+                    <div key={apt.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          {apt.status === 'completed'
+                            ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                            : <Clock className="w-4 h-4 text-slate-400" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">{apt.appointment_type_display || apt.appointment_type}</p>
+                          <p className="text-xs text-slate-500">{fmtDateTime(apt.scheduled_at)} · {apt.duration_minutes} min</p>
+                        </div>
+                      </div>
+                      <AppointmentStatusBadge status={apt.status} />
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-3 text-center">
+                <Calendar className="w-10 h-10 text-slate-200" />
+                <p className="text-sm text-slate-500">Sin citas registradas</p>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        // Vista admin/coach — tabs originales
+        <Tabs defaultValue="general">
+          <TabsList className="bg-slate-100 rounded-xl p-1 h-auto">
+            <TabsTrigger value="general" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              General
+            </TabsTrigger>
+            <TabsTrigger value="nutricion" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Nutrición
+            </TabsTrigger>
+            <TabsTrigger value="puntos" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Puntos
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="general" className="mt-4 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="border-b border-slate-100 pb-4">
+                  <CardTitle className="text-base font-semibold text-slate-800">Información personal</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 grid grid-cols-2 gap-4">
+                  {[
+                    { label: 'DNI', value: a.dni },
+                    { label: 'Celular', value: a.phone },
+                    { label: 'Miembro desde', value: fmtDate(a.date_joined) },
+                    { label: 'Check-ins totales', value: s.checkins_total },
+                    { label: 'Check-ins este mes', value: s.checkins_month },
+                    { label: 'Nivel', value: `Nivel ${a.nivel}` },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
+                      <p className="font-medium text-slate-700 mt-0.5">{value || '—'}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="border-b border-slate-100 pb-4">
+                  <CardTitle className="text-base font-semibold text-slate-800">Staff asignado</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  {data.coach ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center">
+                        <UserCheck className="w-4 h-4 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Coach</p>
+                        <p className="font-semibold text-slate-800">{data.coach.name}</p>
+                      </div>
+                    </div>
+                  ) : <p className="text-sm text-slate-400">Sin coach asignado</p>}
+                  {data.nutritionist ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
+                        <Apple className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Nutricionista</p>
+                        <p className="font-semibold text-slate-800">{data.nutritionist.name}</p>
+                      </div>
+                    </div>
+                  ) : <p className="text-sm text-slate-400">Sin nutricionista asignado</p>}
+                </CardContent>
+              </Card>
             </div>
-          )}
-          <MeasurementsSection measurements={measurements || []} />
-          <AppointmentsSection appointments={appointments || []} />
-        </TabsContent>
 
-        {/* ── Tab Puntos ── */}
-        {!isNutritionist && (
+            {nutrition_plan && (
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                      <Apple className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <CardTitle className="text-base font-semibold text-slate-800">Plan Nutricional Activo</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <p className="font-bold text-slate-900">{nutrition_plan.name}</p>
+                  <p className="text-sm text-slate-500 mb-3">Inicio: {fmtDate(nutrition_plan.start_date)}</p>
+                  <Progress value={nutrition_plan.compliance_percentage} className="h-2" />
+                  <p className="text-xs text-slate-400 mt-1">{nutrition_plan.compliance_percentage}% cumplimiento</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="nutricion" className="mt-4">
+            <MeasurementsTab measurements={measurements || []} />
+          </TabsContent>
+
           <TabsContent value="puntos" className="mt-4">
             {points_history && points_history.length > 0 ? (
               <Card className="border-slate-200 shadow-sm">
@@ -453,7 +1066,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
                     </div>
                     <div>
                       <CardTitle className="text-base font-semibold text-slate-800">Historial de Puntos</CardTitle>
-                      <CardDescription>Últimas 20 transacciones · Total: {s.total_points_earned} pts</CardDescription>
+                      <CardDescription>Total: {s.total_points_earned} pts</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -494,8 +1107,8 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
               </Card>
             )}
           </TabsContent>
-        )}
-      </Tabs>
+        </Tabs>
+      )}
     </div>
   )
 }

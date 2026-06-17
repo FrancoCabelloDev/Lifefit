@@ -46,6 +46,8 @@ export default function PerfilPage() {
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
   const [dni, setDni] = useState('')
+  const [heightCm, setHeightCm] = useState('')
+  const [weightKg, setWeightKg] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Contraseña
@@ -105,6 +107,8 @@ export default function PerfilPage() {
       setLastName(userRes.last_name || '')
       setPhone(userRes.phone || '')
       setDni(userRes.dni || '')
+      setHeightCm(userRes.height_cm != null ? String(userRes.height_cm) : '')
+      setWeightKg(userRes.weight_kg != null ? String(userRes.weight_kg) : '')
       setFitnessGoal(userRes.fitness_goal || '')
       setGoalNotes(userRes.goal_notes || '')
       setBio(userRes.bio || '')
@@ -128,7 +132,12 @@ export default function PerfilPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      await api.patch('/api/auth/me/', { first_name: firstName, last_name: lastName, phone, dni })
+      const body: Record<string, any> = { first_name: firstName, last_name: lastName, phone, dni }
+      if (isAthlete) {
+        body.height_cm = heightCm ? parseFloat(heightCm) : null
+        body.weight_kg = weightKg ? parseFloat(weightKg) : null
+      }
+      await api.patch('/api/auth/me/', body)
       showSuccess('Perfil actualizado correctamente')
       setEditing(false)
       fetchData()
@@ -429,6 +438,34 @@ export default function PerfilPage() {
                       <Input value={dni} onChange={e => setDni(e.target.value)} />
                     </div>
                   </div>
+                  {isAthlete && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Estatura (cm)</Label>
+                        <Input
+                          type="number"
+                          min={100}
+                          max={250}
+                          step={0.1}
+                          value={heightCm}
+                          onChange={e => setHeightCm(e.target.value)}
+                          placeholder="Ej: 175"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Peso actual (kg)</Label>
+                        <Input
+                          type="number"
+                          min={30}
+                          max={300}
+                          step={0.1}
+                          value={weightKg}
+                          onChange={e => setWeightKg(e.target.value)}
+                          placeholder="Ej: 70.5"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <Button type="submit" disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
                     {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                     Guardar Cambios
@@ -456,6 +493,18 @@ export default function PerfilPage() {
                       <p className="text-sm text-slate-900 mt-0.5">{user.dni || '—'}</p>
                     </div>
                   </div>
+                  {isAthlete && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Estatura</p>
+                        <p className="text-sm text-slate-900 mt-0.5">{user.height_cm ? `${user.height_cm} cm` : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Peso actual</p>
+                        <p className="text-sm text-slate-900 mt-0.5">{user.weight_kg ? `${user.weight_kg} kg` : '—'}</p>
+                      </div>
+                    </div>
+                  )}
                   <Separator />
                   <div className="grid grid-cols-2 gap-4">
                     <div>

@@ -14,15 +14,17 @@ const FEATURES_LIST = [
 const PlansSection: React.FC = () => {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchFailed, setFetchFailed] = useState(false)
 
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const data = await api.get<PaginatedResponse<SubscriptionPlan>>("/api/subscriptions/plans/")
-        // As it's already ordered by price in the backend
+        const data = await api.get<PaginatedResponse<SubscriptionPlan>>("/api/subscriptions/plans/", {
+          authenticated: false,
+        })
         setPlans(data.results || [])
-      } catch (error) {
-        console.error("Error fetching plans:", error)
+      } catch {
+        setFetchFailed(true)
       } finally {
         setLoading(false)
       }
@@ -50,6 +52,11 @@ const PlansSection: React.FC = () => {
         
         {loading ? (
           <div className="w-full text-center text-on-surface-variant">Cargando planes...</div>
+        ) : fetchFailed ? (
+          <div className="w-full text-center py-12 text-on-surface-variant">
+            <p className="font-body-lg text-body-lg">No se pudieron cargar los planes en este momento.</p>
+            <p className="font-body-md text-body-md mt-2">Contáctanos para conocer nuestros precios.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
             {plans.map((plan, index) => {

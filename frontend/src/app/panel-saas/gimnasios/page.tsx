@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
 import type { Gym, PaginatedResponse } from '@/lib/types'
 import { setTokens, setStoredUser, dispatchAuthEvent, backupAdminTokens } from '@/lib/auth'
 
@@ -113,7 +114,7 @@ export default function GymsPage() {
       const res = await api.get(`/api/gyms/feature-flags/?gym_id=${gymId}`)
       setGymModules((res as any).results || res)
     } catch (e) {
-      console.error(e)
+      showError(e, 'Error al cambiar el módulo')
     }
   }
 
@@ -129,7 +130,7 @@ export default function GymsPage() {
       }
     } catch (e) {
       console.error(e)
-      alert("Error al entrar como administrador. Asegúrate de que este gimnasio tiene un admin creado.")
+      showError(e, 'Error al entrar como administrador. Asegúrate de que este gimnasio tiene un admin creado.')
     }
   }
 
@@ -140,7 +141,7 @@ export default function GymsPage() {
       fetchGyms()
     } catch (e) {
       console.error(e)
-      alert('Error al cambiar el estado del gimnasio.')
+      showError(e, 'Error al cambiar el estado del gimnasio.')
     }
   }
 
@@ -233,7 +234,7 @@ export default function GymsPage() {
       setLogoFile(null)
       fetchGyms()
     } catch (e: any) {
-      alert('Error al crear gimnasio: ' + (e?.message || 'Error de conexión'))
+      showError(e, 'Error al crear gimnasio')
     }
   }
 

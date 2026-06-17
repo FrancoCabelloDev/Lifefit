@@ -2,9 +2,10 @@
 
 import { useState, use } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import {
   Users, CheckCircle2, Star, Briefcase, UserCheck,
-  Apple, Dumbbell,
+  Apple, Dumbbell, MessageSquare,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -23,9 +24,10 @@ interface StaffCardProps {
   onAssign: (id: string) => void
   assigning: boolean
   role: 'coach' | 'nutritionist'
+  onMessage?: () => void
 }
 
-function StaffCard({ staff, isAssigned, onAssign, assigning, role }: StaffCardProps) {
+function StaffCard({ staff, isAssigned, onAssign, assigning, role, onMessage }: StaffCardProps) {
   const capacityPct = staff.max_clients > 0
     ? Math.min((staff.current_clients / staff.max_clients) * 100, 100)
     : 0
@@ -106,13 +108,24 @@ function StaffCard({ staff, isAssigned, onAssign, assigning, role }: StaffCardPr
 
       {/* Botón */}
       {isAssigned ? (
-        <button
-          disabled
-          className="w-full h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-default"
-        >
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          {role === 'coach' ? 'Tu coach actual' : 'Tu nutricionista actual'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            disabled
+            className="flex-1 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-default"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            {role === 'coach' ? 'Tu coach actual' : 'Tu nutricionista actual'}
+          </button>
+          {onMessage && (
+            <button
+              onClick={onMessage}
+              className="h-9 w-9 rounded-xl bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-700 flex items-center justify-center transition-colors flex-shrink-0"
+              title="Enviar mensaje"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       ) : (
         <button
           disabled={!staff.is_available || assigning}
@@ -143,6 +156,7 @@ type TabType = 'coach' | 'nutritionist'
 
 export default function DirectorioPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  const router = useRouter()
   const queryClient = useQueryClient()
   const user = getStoredUser<User>()
   const [tab, setTab] = useState<TabType>('coach')
@@ -304,6 +318,13 @@ export default function DirectorioPage({ params }: { params: Promise<{ gymId: st
               isAssigned={tab === 'coach' ? staff.id === currentCoachId : staff.id === currentNutriId}
               onAssign={handleAssign}
               assigning={assigningId === staff.id}
+              onMessage={
+                tab === 'coach' && staff.id === currentCoachId
+                  ? () => router.push(`/${gymId}/panel/mensajes-coach`)
+                  : tab === 'nutritionist' && staff.id === currentNutriId
+                  ? () => router.push(`/${gymId}/panel/mensajes`)
+                  : undefined
+              }
             />
           ))}
         </div>

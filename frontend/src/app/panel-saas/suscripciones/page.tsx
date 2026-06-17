@@ -23,6 +23,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
 import type { Subscription, SubscriptionPlan, PaginatedResponse, Gym } from '@/lib/types'
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
@@ -145,7 +146,7 @@ export default function SuscripcionesPage() {
       fetchData()
     } catch (err) {
       console.error(err)
-      alert('Error al crear suscripción')
+      showError(err, 'Error al crear suscripción')
     } finally {
       setSaving(false)
     }
@@ -164,7 +165,7 @@ export default function SuscripcionesPage() {
       fetchData()
     } catch (err) {
       console.error(err)
-      alert('Error al cambiar plan')
+      showError(err, 'Error al cambiar plan')
     } finally {
       setSaving(false)
     }
@@ -179,7 +180,7 @@ export default function SuscripcionesPage() {
       fetchData()
     } catch (err) {
       console.error(err)
-      alert('Error al cancelar suscripción')
+      showError(err, 'Error al cancelar suscripción')
     }
   }
 
@@ -191,7 +192,7 @@ export default function SuscripcionesPage() {
       fetchData()
     } catch (err) {
       console.error(err)
-      alert('Error al reactivar suscripción')
+      showError(err, 'Error al reactivar suscripción')
     }
   }
 

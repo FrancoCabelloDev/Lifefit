@@ -7,7 +7,7 @@ import {
   TrendingUp, Users, AlertTriangle, CheckCircle2, Search,
   ChevronLeft, ChevronRight, Ruler, Plus, X, Scale,
   Activity, Minus, ChevronDown, ChevronUp, FileText,
-  BarChart2,
+  BarChart2, Salad, Circle,
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -69,11 +69,38 @@ function AthleteDrawer({ gymId, athlete, onClose }: AthleteDrawerProps) {
   const [form, setForm] = useState<NewMeasForm>(EMPTY_FORM)
   const [activeChart, setActiveChart] = useState<'weight' | 'fat' | 'waist'>('weight')
 
+  const [logsWeek, setLogsWeek] = useState(0) // 0 = esta semana, -1 = semana anterior, etc.
+  const [activeTab, setActiveTab] = useState<'medidas' | 'nutricion'>('medidas')
+
   const historyQuery = useQuery({
     queryKey: ['body-measurements', gymId, athlete.id],
     queryFn: () => api.get<BodyMeasurement[]>('/api/gyms/body-measurements/athlete_history/', {
       params: { athlete_id: athlete.id },
     }),
+  })
+
+  const weekComplianceQuery = useQuery({
+    queryKey: ['athlete-weekly-compliance', athlete.id, logsWeek],
+    queryFn: async () => {
+      const today = new Date()
+      const monday = new Date(today)
+      monday.setDate(today.getDate() - today.getDay() + 1 + logsWeek * 7)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      const fmt = (d: Date) => d.toISOString().slice(0, 10)
+      const res = await api.get<any>('/api/nutrition/meal-logs/', {
+        params: { athlete_id: athlete.id, date_from: fmt(monday), date_to: fmt(sunday) },
+      })
+      const logs = (res?.results ?? res ?? []) as any[]
+      const days: Record<string, { total: number; completed: number }> = {}
+      logs.forEach((l: any) => {
+        if (!days[l.date]) days[l.date] = { total: 0, completed: 0 }
+        days[l.date].total++
+        if (l.status === 'completed') days[l.date].completed++
+      })
+      return { days, dateFrom: fmt(monday), dateTo: fmt(sunday) }
+    },
+    staleTime: 30000,
   })
 
   const saveMutation = useMutation({
@@ -156,7 +183,116 @@ function AthleteDrawer({ gymId, athlete, onClose }: AthleteDrawerProps) {
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-slate-100 px-6">
+          {(['medidas', 'nutricion'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`pb-3 pt-2 mr-6 text-sm font-semibold border-b-2 transition-colors ${
+                activeTab === tab
+                  ? 'border-emerald-600 text-emerald-700'
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {tab === 'medidas' ? '⚖️ Medidas' : '🥗 Nutrición'}
+            </button>
+          ))}
+        </div>
+
         <div className="p-6 space-y-6 flex-1">
+
+          {/* ── TAB NUTRICIÓN ─────────────────────────────────────── */}
+          {activeTab === 'nutricion' && (
+            <div className="space-y-4">
+              {/* Navegación semanas */}
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-700">
+                  Registro de comidas
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setLogsWeek(w => w - 1)}
+                    className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 text-slate-500" />
+                  </button>
+                  <span className="text-xs text-slate-500 min-w-[80px] text-center">
+                    {logsWeek === 0 ? 'Esta semana' : logsWeek === -1 ? 'Semana pasada' : `Hace ${Math.abs(logsWeek)} semanas`}
+                  </span>
+                  <button
+                    onClick={() => setLogsWeek(w => Math.min(w + 1, 0))}
+                    disabled={logsWeek === 0}
+                    className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+
+              {weekComplianceQuery.isLoading ? (
+                <div className="space-y-2">
+                  {[1,2,3,4,5].map(i => <div key={i} className="h-12 bg-slate-50 rounded-xl animate-pulse" />)}
+                </div>
+              ) : !weekComplianceQuery.data || Object.keys(weekComplianceQuery.data.days).length === 0 ? (
+                <div className="py-10 text-center">
+                  <Salad className="w-10 h-10 mx-auto text-slate-200 mb-2" />
+                  <p className="text-sm text-slate-400">Sin registros esta semana</p>
+                  <p className="text-xs text-slate-300 mt-1">El atleta no ha registrado comidas</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(weekComplianceQuery.data.days)
+                    .sort(([a], [b]) => b.localeCompare(a))
+                    .map(([date, data]) => {
+                      const pct = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0
+                      const color = pct >= 80 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-rose-500'
+                      const bg    = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'
+                      return (
+                        <div key={date} className="bg-slate-50 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-slate-700">
+                              {new Date(date + 'T00:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })}
+                            </span>
+                            <span className={`text-xs font-bold ${color}`}>{pct}%</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${bg} transition-all`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1.5">
+                            {data.completed} de {data.total} comidas completadas
+                          </p>
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+
+              {/* Resumen de la semana */}
+              {weekComplianceQuery.data && Object.keys(weekComplianceQuery.data.days).length > 0 && (() => {
+                const days = weekComplianceQuery.data!.days
+                const totalDays = Object.keys(days).length
+                const avgPct = Math.round(
+                  Object.values(days).reduce((acc, d) => acc + (d.total > 0 ? (d.completed / d.total) * 100 : 0), 0) / totalDays
+                )
+                return (
+                  <div className={`rounded-xl border p-3 flex items-center gap-3 ${avgPct >= 80 ? 'bg-emerald-50 border-emerald-100' : avgPct >= 50 ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
+                    <div className={`text-2xl font-black ${avgPct >= 80 ? 'text-emerald-600' : avgPct >= 50 ? 'text-amber-500' : 'text-rose-500'}`}>
+                      {avgPct}%
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Promedio semanal</p>
+                      <p className="text-[10px] text-slate-500">{totalDays} días con registro</p>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* ── TAB MEDIDAS ───────────────────────────────────────── */}
+          {activeTab === 'medidas' && <>
+
           {/* Latest snapshot */}
           {latest && (
             <div className="grid grid-cols-4 gap-3">
@@ -333,6 +469,8 @@ function AthleteDrawer({ gymId, athlete, onClose }: AthleteDrawerProps) {
               </div>
             )}
           </div>
+
+          </> /* fin tab medidas */}
         </div>
       </div>
     </div>

@@ -2,3 +2,8 @@
 Thumbs.db
 .idea/
 .vscode/
+
+# Environment files — NEVER commit secrets
+.env
+.env.*
+!.env.example

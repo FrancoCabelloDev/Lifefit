@@ -1,6 +1,9 @@
+import logging
 from datetime import date
 
 from django.contrib.auth import get_user_model
+
+logger = logging.getLogger(__name__)
 from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
 from rest_framework import permissions, status, viewsets
@@ -8,8 +11,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.filters import global_or_user_gym_filter
-from .models import MealTemplate, NutritionItem, NutritionMeal, NutritionPlan, UserMealLog, UserNutritionPlan
+from .models import Food, MealFoodItem, MealTemplate, NutritionItem, NutritionMeal, NutritionPlan, UserMealLog, UserNutritionPlan
 from .serializers import (
+    FoodSerializer,
+    MealFoodItemSerializer,
     MealTemplateSerializer,
     NutritionItemSerializer,
     NutritionMealSerializer,
@@ -20,6 +25,67 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+XP_PER_APPROVED_MEAL = 10
+XP_WEEKLY_BONUS_THRESHOLD = 0.7   # 70% de comidas aprobadas = bonus
+XP_WEEKLY_BONUS = 50
+
+
+def _award_meal_xp(meal_log: "UserMealLog") -> int:
+    """
+    Otorga XP base al atleta por una comida aprobada por el nutricionista.
+    Si al aprobar esta comida se supera el umbral semanal, suma un bonus único.
+    Retorna los puntos totales otorgados en esta llamada.
+    """
+    from gamification.models import UserPoints
+    from datetime import timedelta
+
+    user = meal_log.user
+    awarded = XP_PER_APPROVED_MEAL
+
+    meal_log.xp_awarded = True
+    meal_log.save(update_fields=["xp_awarded", "updated_at"])
+
+    UserPoints.objects.create(
+        user=user,
+        points=XP_PER_APPROVED_MEAL,
+        source="meal_photo_approved",
+        description=f"Comida verificada: {meal_log.meal_template.name} ({meal_log.date})",
+        related_nutrition_plan=meal_log.meal_template.plan,
+    )
+
+    # Verificar si corresponde bonus semanal (lunes a domingo de la semana del log)
+    log_date = meal_log.date
+    week_start = log_date - timedelta(days=log_date.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    week_logs = UserMealLog.objects.filter(
+        user=user,
+        date__range=(week_start, week_end),
+        status=UserMealLog.MealLogStatus.COMPLETED,
+    ).exclude(photo="").exclude(photo__isnull=True)
+
+    total = week_logs.count()
+    approved_count = week_logs.filter(nutritionist_approved=True).count()
+
+    if total > 0 and (approved_count / total) >= XP_WEEKLY_BONUS_THRESHOLD:
+        bonus_already_awarded = UserPoints.objects.filter(
+            user=user,
+            source="weekly_nutrition_bonus",
+            description__contains=week_start.isoformat(),
+        ).exists()
+
+        if not bonus_already_awarded:
+            UserPoints.objects.create(
+                user=user,
+                points=XP_WEEKLY_BONUS,
+                source="weekly_nutrition_bonus",
+                description=f"Bonus semanal nutrición ≥70%: semana {week_start.isoformat()}",
+                related_nutrition_plan=meal_log.meal_template.plan,
+            )
+            awarded += XP_WEEKLY_BONUS
+
+    return awarded
 
 
 class NutritionPlanViewSet(viewsets.ModelViewSet):
@@ -72,6 +138,39 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar este plan.")
+
+    @action(detail=True, methods=["post"])
+    def add_day(self, request, pk=None):
+        """Crea los 6 MealTemplates (uno por tipo) para un día de la semana."""
+        plan = self.get_object()
+        weekday = request.data.get("weekday", "").lower()
+        valid_weekdays = dict(MealTemplate.Weekday.choices)
+        if weekday not in valid_weekdays:
+            return Response({"detail": "weekday inválido"}, status=status.HTTP_400_BAD_REQUEST)
+        if MealTemplate.objects.filter(plan=plan, weekday=weekday).exists():
+            return Response({"detail": "Este día ya fue agregado"}, status=status.HTTP_400_BAD_REQUEST)
+        MEAL_DEFAULTS = [
+            (MealTemplate.MealType.BREAKFAST,       "Desayuno",     1),
+            (MealTemplate.MealType.MID_MORNING,     "Media mañana", 2),
+            (MealTemplate.MealType.LUNCH,           "Almuerzo",     3),
+            (MealTemplate.MealType.AFTERNOON_SNACK, "Merienda",     4),
+            (MealTemplate.MealType.DINNER,          "Cena",         5),
+            (MealTemplate.MealType.LATE_SNACK,      "Recena",       6),
+        ]
+        created = [
+            MealTemplate.objects.create(plan=plan, weekday=weekday, meal_type=mt, name=name, order=order)
+            for mt, name, order in MEAL_DEFAULTS
+        ]
+        from .serializers import MealTemplateSerializer as MTS
+        return Response(MTS(created, many=True).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def remove_day(self, request, pk=None):
+        """Elimina todos los MealTemplates de un día de la semana."""
+        plan = self.get_object()
+        weekday = request.data.get("weekday", "").lower()
+        deleted, _ = MealTemplate.objects.filter(plan=plan, weekday=weekday).delete()
+        return Response({"deleted": deleted}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def start_plan(self, request, pk=None):
@@ -198,17 +297,40 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = UserMealLog.objects.filter(user=self.request.user)
+        user = self.request.user
+        # Nutricionista puede ver logs de sus atletas pasando ?athlete_id=
+        athlete_id = self.request.query_params.get("athlete_id")
+        if user.role == "nutritionist" and athlete_id:
+            from gyms.models import NutritionistAssignment
+            assigned = NutritionistAssignment.objects.filter(
+                nutritionist=user, athlete_id=athlete_id, is_active=True
+            ).exists()
+            if not assigned:
+                return UserMealLog.objects.none()
+            queryset = UserMealLog.objects.filter(user_id=athlete_id)
+        else:
+            queryset = UserMealLog.objects.filter(user=user)
+
         date_param = self.request.query_params.get("date")
         if date_param:
             queryset = queryset.filter(date=date_param)
+
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+
         return queryset.select_related("meal_template")
 
     @action(detail=False, methods=["post"])
-    def toggle_complete(self, request):
-        """Marca o desmarca una comida como completada"""
+    def update_status(self, request):
+        """Actualiza el estado de una comida: completed | skipped | alternative"""
         meal_template_id = request.data.get("meal_template_id")
         date_str = request.data.get("date")
+        new_status = request.data.get("status", UserMealLog.MealLogStatus.COMPLETED)
+        alt_text = request.data.get("alternative_food_text", "")
 
         if not meal_template_id or not date_str:
             return Response(
@@ -216,42 +338,238 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        valid_statuses = [s[0] for s in UserMealLog.MealLogStatus.choices]
+        if new_status not in valid_statuses:
+            return Response(
+                {"detail": f"status debe ser uno de: {valid_statuses}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             meal_template = MealTemplate.objects.get(id=meal_template_id)
         except MealTemplate.DoesNotExist:
-            return Response(
-                {"detail": "Comida no encontrada"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"detail": "Comida no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Verificar si el plan está completado
         user_assignment = UserNutritionPlan.objects.filter(
-            user=request.user,
-            plan=meal_template.plan,
-            status='completed'
+            user=request.user, plan=meal_template.plan, status="completed"
         ).first()
-        
         if user_assignment:
             return Response(
                 {"detail": "No puedes modificar comidas de un plan completado"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Buscar o crear el log
-        meal_log, created = UserMealLog.objects.get_or_create(
+        meal_log, _ = UserMealLog.objects.get_or_create(
             user=request.user,
             meal_template=meal_template,
             date=date_str,
-            defaults={"completed": True}
         )
-
-        # Si ya existía, hacer toggle del estado
-        if not created:
-            meal_log.completed = not meal_log.completed
-            meal_log.save()
+        meal_log.status = new_status
+        meal_log.alternative_food_text = alt_text if new_status == UserMealLog.MealLogStatus.ALTERNATIVE else ""
+        meal_log.save()
 
         serializer = self.get_serializer(meal_log)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def weekly_compliance(self, request):
+        """
+        GET /api/nutrition/meal-logs/weekly_compliance/
+        Atleta: su propio cumplimiento.
+        Nutricionista: pasa ?athlete_id= para ver el de su atleta.
+        """
+        from .services import calc_weekly_compliance
+        user = request.user
+        athlete_id = request.query_params.get("athlete_id")
+
+        if user.role == "nutritionist" and athlete_id:
+            from gyms.models import NutritionistAssignment
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            assigned = NutritionistAssignment.objects.filter(
+                nutritionist=user, athlete_id=athlete_id, is_active=True
+            ).exists()
+            if not assigned:
+                return Response({"detail": "Atleta no asignado."}, status=403)
+            try:
+                athlete = User.objects.get(pk=athlete_id)
+            except User.DoesNotExist:
+                return Response({"detail": "Atleta no encontrado."}, status=404)
+            result = calc_weekly_compliance(athlete)
+        else:
+            result = calc_weekly_compliance(user)
+
+        return Response(result)
+
+    @action(detail=False, methods=["post"])
+    def award_daily(self, request):
+        """
+        Calcula y otorga puntos por cumplimiento nutricional diario.
+        Body: { date? }  — si no se pasa, usa ayer.
+        Idempotente: si ya se otorgaron puntos para esa fecha, responde con awarded=false.
+        """
+        from datetime import date as date_cls
+        from .services import award_daily_points, calc_daily_compliance
+
+        date_str = request.data.get("date")
+        if date_str:
+            try:
+                target_date = date_cls.fromisoformat(date_str)
+            except ValueError:
+                return Response({"detail": "Formato de fecha inválido. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            from datetime import timedelta
+            target_date = date_cls.today() - timedelta(days=1)
+
+        result = award_daily_points(request.user, target_date)
+
+        if result is None:
+            # Already awarded or no active plan
+            compliance = calc_daily_compliance(request.user, target_date)
+            return Response({
+                "awarded": False,
+                "date": target_date.isoformat(),
+                "compliance_pct": compliance["compliance_pct"] if compliance else 0,
+            })
+
+        return Response({
+            "awarded":        result["points_awarded"] > 0,
+            "date":           target_date.isoformat(),
+            "points_awarded": result["points_awarded"],
+            "compliance_pct": result["compliance_pct"],
+            "streak":         result["streak"],
+            "multiplier":     result["multiplier"],
+        })
+
+    @action(detail=True, methods=["post"], url_path="upload-photo")
+    def upload_photo(self, request, pk=None):
+        """Atleta sube foto como evidencia de una comida completada."""
+        meal_log = self.get_object()
+
+        if meal_log.user != request.user:
+            return Response({"detail": "No tienes permiso."}, status=403)
+
+        if meal_log.status != UserMealLog.MealLogStatus.COMPLETED:
+            return Response(
+                {"detail": "Solo puedes subir evidencia de comidas marcadas como completadas."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        photo = request.FILES.get("photo")
+        if not photo:
+            return Response({"detail": "Se requiere el archivo 'photo'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed_types = {"image/jpeg", "image/png", "image/webp"}
+        if photo.content_type not in allowed_types:
+            return Response({"detail": "Solo se permiten imágenes JPG, PNG o WebP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if photo.size > 10 * 1024 * 1024:
+            return Response({"detail": "La imagen no puede superar 10 MB."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if meal_log.photo:
+            meal_log.photo.delete(save=False)
+
+        meal_log.photo = photo
+        meal_log.nutritionist_approved = None  # Vuelve a pendiente si se reemplaza la foto
+        meal_log.xp_awarded = False
+        meal_log.save(update_fields=["photo", "nutritionist_approved", "xp_awarded", "updated_at"])
+
+        return Response({
+            "detail": "Foto subida. Pendiente de revisión por el nutricionista.",
+            "photo_url": request.build_absolute_uri(meal_log.photo.url),
+            "log_id": str(meal_log.id),
+        })
+
+    @action(detail=False, methods=["get"], url_path="pending-approvals")
+    def pending_approvals(self, request):
+        """Nutricionista ve los logs con foto pendiente de revisión de sus atletas."""
+        user = request.user
+        if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
+            return Response({"detail": "Solo para nutricionistas."}, status=403)
+
+        from gyms.models import NutritionistAssignment
+        athlete_ids = NutritionistAssignment.objects.filter(
+            nutritionist=user, is_active=True
+        ).values_list("athlete_id", flat=True)
+
+        logs = (
+            UserMealLog.objects
+            .filter(
+                user_id__in=athlete_ids,
+                status=UserMealLog.MealLogStatus.COMPLETED,
+                nutritionist_approved__isnull=True,
+            )
+            .exclude(photo="")
+            .exclude(photo__isnull=True)
+            .select_related("user", "meal_template", "meal_template__plan")
+            .order_by("-date")
+        )
+
+        data = [
+            {
+                "id": str(log.id),
+                "athlete_id": str(log.user_id),
+                "athlete_name": log.user.get_full_name() or log.user.email,
+                "meal_name": log.meal_template.name,
+                "meal_type": log.meal_template.meal_type,
+                "plan_name": log.meal_template.plan.name,
+                "date": log.date.isoformat(),
+                "photo_url": request.build_absolute_uri(log.photo.url),
+                "notes": log.notes,
+            }
+            for log in logs
+        ]
+
+        return Response({"count": len(data), "results": data})
+
+    @action(detail=True, methods=["post"], url_path="review")
+    def review(self, request, pk=None):
+        """Nutricionista aprueba o rechaza la evidencia fotográfica de una comida."""
+        from django.utils import timezone
+        from django.db import transaction
+
+        user = request.user
+        if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
+            return Response({"detail": "Solo para nutricionistas."}, status=403)
+
+        meal_log = self.get_object()
+
+        if not meal_log.photo:
+            return Response({"detail": "Este log no tiene foto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        approved = request.data.get("approved")
+        if approved is None:
+            return Response({"detail": "Se requiere 'approved' (true/false)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        nutritionist_notes = request.data.get("notes", "")
+
+        with transaction.atomic():
+            meal_log.nutritionist_approved = bool(approved)
+            meal_log.nutritionist_notes = nutritionist_notes
+            meal_log.reviewed_by = user
+            meal_log.reviewed_at = timezone.now()
+            meal_log.save(update_fields=[
+                "nutritionist_approved", "nutritionist_notes",
+                "reviewed_by", "reviewed_at", "updated_at",
+            ])
+
+            xp_awarded = 0
+            if bool(approved) and not meal_log.xp_awarded:
+                xp_awarded = _award_meal_xp(meal_log)
+
+        return Response({
+            "detail": "Aprobado." if bool(approved) else "Rechazado.",
+            "log_id": str(meal_log.id),
+            "xp_awarded": xp_awarded,
+        })
+
+    @action(detail=False, methods=["post"])
+    def toggle_complete(self, request):
+        """Alias legacy — redirige a update_status."""
+        request.data._mutable = True if hasattr(request.data, "_mutable") else None
+        if "status" not in request.data:
+            request.data["status"] = UserMealLog.MealLogStatus.COMPLETED
+        return self.update_status(request)
 
 
 class NutritionMealViewSet(viewsets.ModelViewSet):
@@ -417,7 +735,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         completed_logs = UserMealLog.objects.filter(
             user=assignment.user,
             meal_template__plan=assignment.plan,
-            completed=True
+            status=UserMealLog.MealLogStatus.COMPLETED
         ).values('meal_template').distinct().count()
         
         completion_percentage = (completed_logs / total_meals * 100)
@@ -455,8 +773,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             )
             points_earned = assignment.plan.points_reward
             
-            # Log para debug
-            print(f"✓ Puntos otorgados: {points_earned} pts a {assignment.user.email}")
+            logger.debug("Puntos otorgados: %s pts a %s", points_earned, assignment.user.email)
         
         return Response({
             "detail": f"¡Felicitaciones! Has completado el plan exitosamente.",
@@ -481,7 +798,9 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
 
         active_plan = UserNutritionPlan.objects.filter(
             user_id=athlete_id, status="active"
-        ).select_related("plan", "plan__gym").first()
+        ).select_related("plan", "plan__gym", "assigned_by").prefetch_related(
+            "plan__meal_templates", "plan__meal_templates__food_items__food"
+        ).first()
 
         completed_plans = UserNutritionPlan.objects.filter(
             user_id=athlete_id, status="completed"
@@ -491,18 +810,18 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         week_meals = UserMealLog.objects.filter(
             user_id=athlete_id,
             date__gte=(today - timedelta(days=7)).isoformat(),
-            completed=True,
+            status=UserMealLog.MealLogStatus.COMPLETED,
         ).select_related("meal_template").order_by("-date")
 
         meal_data = {}
         for log in week_meals:
-            day = log.date
+            day = log.date.isoformat()
             if day not in meal_data:
                 meal_data[day] = []
             meal_data[day].append({
                 "meal_name": log.meal_template.name,
                 "meal_type": log.meal_template.meal_type,
-                "completed": log.completed,
+                "completed": log.status == UserMealLog.MealLogStatus.COMPLETED,
             })
 
         plan_serializer = UserNutritionPlanSerializer(active_plan, context={"request": request}) if active_plan else None
@@ -517,3 +836,97 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             },
             "total_meals_logged_week": len(week_meals),
         })
+
+
+class MealFoodItemViewSet(viewsets.ModelViewSet):
+    serializer_class = MealFoodItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = MealFoodItem.objects.select_related("food", "meal", "meal__plan", "meal__plan__gym")
+        meal_id = self.request.query_params.get("meal")
+        if meal_id:
+            queryset = queryset.filter(meal_id=meal_id)
+        if user.role == User.Role.SUPER_ADMIN:
+            return queryset
+        return queryset.filter(meal__plan__gym=user.gym)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
+            raise PermissionDenied("No tienes permisos para agregar alimentos a comidas.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if user.role == User.Role.SUPER_ADMIN or instance.meal.plan.gym_id == user.gym_id:
+            serializer.save()
+            return
+        raise PermissionDenied("No puedes modificar este alimento.")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if user.role == User.Role.SUPER_ADMIN or instance.meal.plan.gym_id == user.gym_id:
+            instance.delete()
+            return
+        raise PermissionDenied("No puedes eliminar este alimento.")
+
+
+class FoodViewSet(viewsets.ModelViewSet):
+    serializer_class = FoodSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        from django.db.models import Q
+        queryset = Food.objects.select_related("gym", "created_by")
+
+        # Filtro por grupo si se provee
+        group = self.request.query_params.get("group")
+        if group:
+            queryset = queryset.filter(food_group=group)
+
+        # Búsqueda por nombre
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+
+        if user.role == User.Role.SUPER_ADMIN:
+            return queryset
+
+        # Nutricionista y gym_admin ven alimentos de su gym + globales (CENAN)
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
+            return queryset.filter(Q(gym=user.gym) | Q(gym__isnull=True))
+
+        # Atletas solo ven alimentos globales y de su gym
+        return queryset.filter(Q(gym=user.gym) | Q(gym__isnull=True))
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
+            raise PermissionDenied("No tienes permisos para crear alimentos.")
+        gym = None if user.role == User.Role.SUPER_ADMIN else user.gym
+        serializer.save(gym=gym, created_by=user)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if user.role == User.Role.SUPER_ADMIN:
+            serializer.save()
+            return
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.gym_id == user.gym_id:
+            serializer.save()
+            return
+        raise PermissionDenied("No puedes modificar este alimento.")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if user.role == User.Role.SUPER_ADMIN:
+            instance.delete()
+            return
+        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.gym_id == user.gym_id:
+            instance.delete()
+            return
+        raise PermissionDenied("No puedes eliminar este alimento.")

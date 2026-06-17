@@ -33,6 +33,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 
 import { api } from '@/lib/api'
+import { showError } from '@/lib/toast'
 import type { Exercise, PaginatedResponse } from '@/lib/types'
 
 const categoryColors: Record<string, string> = {
@@ -114,7 +115,7 @@ export default function ExercisesPage({ params }: { params: Promise<{ gymId: str
       resetForm()
       fetchExercises()
     } catch (error: any) {
-      alert(error?.message || 'Error al guardar ejercicio')
+      showError(error, 'Error al guardar ejercicio')
     } finally {
       setIsSubmitting(false)
     }
@@ -126,7 +127,7 @@ export default function ExercisesPage({ params }: { params: Promise<{ gymId: str
       await api.delete(`/api/workouts/exercises/${exercise.id}/`)
       fetchExercises()
     } catch (error: any) {
-      alert(error?.message || 'Error al eliminar ejercicio')
+      showError(error, 'Error al eliminar ejercicio')
     }
   }
 
