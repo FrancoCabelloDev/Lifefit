@@ -26,67 +26,6 @@ from .serializers import (
 
 User = get_user_model()
 
-XP_PER_APPROVED_MEAL = 10
-XP_WEEKLY_BONUS_THRESHOLD = 0.7   # 70% de comidas aprobadas = bonus
-XP_WEEKLY_BONUS = 50
-
-
-def _award_meal_xp(meal_log: "UserMealLog") -> int:
-    """
-    Otorga XP base al atleta por una comida aprobada por el nutricionista.
-    Si al aprobar esta comida se supera el umbral semanal, suma un bonus único.
-    Retorna los puntos totales otorgados en esta llamada.
-    """
-    from gamification.models import UserPoints
-    from datetime import timedelta
-
-    user = meal_log.user
-    awarded = XP_PER_APPROVED_MEAL
-
-    meal_log.xp_awarded = True
-    meal_log.save(update_fields=["xp_awarded", "updated_at"])
-
-    UserPoints.objects.create(
-        user=user,
-        points=XP_PER_APPROVED_MEAL,
-        source="meal_photo_approved",
-        description=f"Comida verificada: {meal_log.meal_template.name} ({meal_log.date})",
-        related_nutrition_plan=meal_log.meal_template.plan,
-    )
-
-    # Verificar si corresponde bonus semanal (lunes a domingo de la semana del log)
-    log_date = meal_log.date
-    week_start = log_date - timedelta(days=log_date.weekday())
-    week_end = week_start + timedelta(days=6)
-
-    week_logs = UserMealLog.objects.filter(
-        user=user,
-        date__range=(week_start, week_end),
-        status=UserMealLog.MealLogStatus.COMPLETED,
-    ).exclude(photo="").exclude(photo__isnull=True)
-
-    total = week_logs.count()
-    approved_count = week_logs.filter(nutritionist_approved=True).count()
-
-    if total > 0 and (approved_count / total) >= XP_WEEKLY_BONUS_THRESHOLD:
-        bonus_already_awarded = UserPoints.objects.filter(
-            user=user,
-            source="weekly_nutrition_bonus",
-            description__contains=week_start.isoformat(),
-        ).exists()
-
-        if not bonus_already_awarded:
-            UserPoints.objects.create(
-                user=user,
-                points=XP_WEEKLY_BONUS,
-                source="weekly_nutrition_bonus",
-                description=f"Bonus semanal nutrición ≥70%: semana {week_start.isoformat()}",
-                related_nutrition_plan=meal_log.meal_template.plan,
-            )
-            awarded += XP_WEEKLY_BONUS
-
-    return awarded
-
 
 class NutritionPlanViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -553,14 +492,9 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
                 "reviewed_by", "reviewed_at", "updated_at",
             ])
 
-            xp_awarded = 0
-            if bool(approved) and not meal_log.xp_awarded:
-                xp_awarded = _award_meal_xp(meal_log)
-
         return Response({
             "detail": "Aprobado." if bool(approved) else "Rechazado.",
             "log_id": str(meal_log.id),
-            "xp_awarded": xp_awarded,
         })
 
     @action(detail=False, methods=["post"])
@@ -709,7 +643,12 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         if not assignment:
             return Response({"detail": "No tienes un plan activo."}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(assignment)
-        return Response(serializer.data)
+        completed_weeks = UserNutritionPlan.objects.filter(
+            user=user, status='completed'
+        ).count()
+        data = serializer.data
+        data['completed_weeks'] = completed_weeks
+        return Response(data)
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
@@ -783,6 +722,160 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             "total_meals": total_meals,
         })
 
+    @action(detail=False, methods=["get"], url_path="week-logs")
+    def week_logs(self, request):
+        """
+        Nutricionista ve todos los logs de la semana actual del atleta (para el plan activo),
+        con fotos y estado de aprobación.
+        GET /api/nutrition/assignments/week-logs/?athlete_id=
+        """
+        user = request.user
+        if user.role not in {User.Role.NUTRITIONIST, User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}:
+            return Response({"detail": "No tienes permisos."}, status=403)
+
+        athlete_id = request.query_params.get("athlete_id")
+        if not athlete_id:
+            return Response({"detail": "Se requiere athlete_id."}, status=400)
+
+        active = UserNutritionPlan.objects.filter(
+            user_id=athlete_id, status="active"
+        ).select_related("plan").first()
+
+        if not active:
+            return Response({"detail": "El atleta no tiene plan activo.", "logs": []})
+
+        from datetime import timedelta
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())  # lunes de esta semana
+
+        logs = (
+            UserMealLog.objects
+            .filter(
+                user_id=athlete_id,
+                meal_template__plan=active.plan,
+                date__gte=week_start,
+            )
+            .select_related("meal_template")
+            .order_by("date", "meal_template__order")
+        )
+
+        # Total de comidas esperadas esta semana (días que ya pasaron * comidas por día)
+        days_elapsed = (today - week_start).days + 1
+        days_in_plan = set()
+        for mt in active.plan.meal_templates.all():
+            if mt.weekday:
+                days_in_plan.add(mt.weekday)
+
+        data = [
+            {
+                "id": str(l.id),
+                "date": l.date.isoformat(),
+                "meal_id": str(l.meal_template_id),
+                "meal_name": l.meal_template.name,
+                "meal_type": l.meal_template.meal_type,
+                "status": l.status,
+                "photo_url": request.build_absolute_uri(l.photo.url) if l.photo else None,
+                "nutritionist_approved": l.nutritionist_approved,
+                "nutritionist_notes": l.nutritionist_notes,
+                "notes": l.notes,
+            }
+            for l in logs
+        ]
+
+        completed = sum(1 for l in logs if l.status == UserMealLog.MealLogStatus.COMPLETED)
+        with_photo = sum(1 for l in logs if l.photo)
+        approved = sum(1 for l in logs if l.nutritionist_approved is True)
+
+        return Response({
+            "assignment_id": str(active.id),
+            "plan_name": active.plan.name,
+            "plan_points": active.plan.points_reward,
+            "week_start": week_start.isoformat(),
+            "logs": data,
+            "summary": {
+                "completed": completed,
+                "with_photo": with_photo,
+                "approved": approved,
+                "total_logged": len(data),
+            },
+        })
+
+    @action(detail=True, methods=["post"], url_path="approve-week")
+    def approve_week(self, request, pk=None):
+        """
+        Nutricionista aprueba la semana completa del atleta:
+        - Marca el assignment como completado
+        - Otorga los points_reward del plan al atleta
+        - Aprueba todos los meal logs con foto pendientes de esa semana
+        POST /api/nutrition/assignments/{id}/approve-week/
+        """
+        from django.db import transaction
+        from django.utils import timezone
+        from gamification.models import UserPoints
+
+        user = request.user
+        if user.role not in {User.Role.NUTRITIONIST, User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}:
+            return Response({"detail": "No tienes permisos."}, status=403)
+
+        assignment = self.get_object()
+
+        if assignment.status == "completed":
+            return Response({"detail": "Esta semana ya fue aprobada."}, status=400)
+
+        with transaction.atomic():
+            # Aprobar todos los logs pendientes con foto
+            from datetime import timedelta
+            today = date.today()
+            week_start = today - timedelta(days=today.weekday())
+
+            pending_logs = UserMealLog.objects.filter(
+                user=assignment.user,
+                meal_template__plan=assignment.plan,
+                date__gte=week_start,
+                nutritionist_approved__isnull=True,
+            ).exclude(photo="").exclude(photo__isnull=True)
+
+            pending_logs.update(
+                nutritionist_approved=True,
+                reviewed_by=user,
+                reviewed_at=timezone.now(),
+            )
+
+            # Calcular compliance de la semana
+            total_templates = assignment.plan.meal_templates.count()
+            completed_count = UserMealLog.objects.filter(
+                user=assignment.user,
+                meal_template__plan=assignment.plan,
+                date__gte=week_start,
+                status=UserMealLog.MealLogStatus.COMPLETED,
+            ).count()
+
+            compliance_pct = round((completed_count / total_templates * 100), 1) if total_templates else 0
+
+            # Marcar semana como completada
+            assignment.status = "completed"
+            assignment.compliance_percentage = compliance_pct
+            assignment.end_date = today
+            assignment.save(update_fields=["status", "compliance_percentage", "end_date", "updated_at"])
+
+            # Otorgar puntos
+            points_awarded = 0
+            if assignment.plan.points_reward > 0:
+                UserPoints.objects.create(
+                    user=assignment.user,
+                    points=assignment.plan.points_reward,
+                    source="weekly_plan_approved",
+                    description=f"Semana aprobada: {assignment.plan.name} ({week_start.isoformat()})",
+                    related_nutrition_plan=assignment.plan,
+                )
+                points_awarded = assignment.plan.points_reward
+
+        return Response({
+            "detail": f"Semana aprobada. Se otorgaron {points_awarded} puntos a {assignment.user.get_full_name() or assignment.user.email}.",
+            "points_awarded": points_awarded,
+            "compliance_pct": compliance_pct,
+        })
+
     @action(detail=False, methods=["get"])
     def athlete_nutrition(self, request):
         """Devuelve el estado nutricional de un atleta específico (para nutricionistas)"""
@@ -827,6 +920,10 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         plan_serializer = UserNutritionPlanSerializer(active_plan, context={"request": request}) if active_plan else None
         completed_serializer = UserNutritionPlanSerializer(completed_plans, many=True, context={"request": request})
 
+        completed_weeks = UserNutritionPlan.objects.filter(
+            user_id=athlete_id, status="completed"
+        ).count()
+
         return Response({
             "active_plan": plan_serializer.data if plan_serializer else None,
             "completed_plans": completed_serializer.data,
@@ -835,6 +932,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
                 "meals_by_date": meal_data,
             },
             "total_meals_logged_week": len(week_meals),
+            "completed_weeks": completed_weeks,
         })
 
 

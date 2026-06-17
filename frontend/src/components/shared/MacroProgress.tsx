@@ -29,7 +29,7 @@ export default function MacroProgress({ calories, protein, carbs, fats, title, s
   const values: Record<string, MacroValue> = { calories, protein, carbs, fats }
 
   return (
-    <div className={cn('bg-white rounded-2xl border border-slate-200 p-5 h-fit sticky top-4', className)}>
+    <div className={cn('bg-white rounded-2xl border border-slate-200 p-5 h-fit sm:sticky sm:top-4', className)}>
       {title && (
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">{title}</p>
       )}

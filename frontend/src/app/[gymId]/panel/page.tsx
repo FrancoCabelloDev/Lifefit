@@ -58,6 +58,12 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
     enabled: user.role === 'athlete',
   })
 
+  const rankingQuery = useQuery({
+    queryKey: ['ranking', gymId],
+    queryFn: () => api.get<any>('/api/gamification/ranking/', { params: { gym_slug: gymId } }),
+    enabled: user.role === 'athlete',
+  })
+
   const myTeamQuery = useQuery({
     queryKey: ['my-team', gymId],
     queryFn: async () => {
@@ -183,8 +189,6 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       )
     }
 
-    const xpPercent = ad.next_level_xp > 0 ? Math.min((ad.current_xp / ad.next_level_xp) * 100, 100) : 0
-
     return (
       <div className="space-y-8">
         <OnboardingModal gymId={gymId} />
@@ -200,21 +204,27 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
 
         {!isBasic && (
           <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-emerald-100 text-sm font-medium">NIVEL {ad.level}</p>
-                <p className="text-4xl font-bold mt-1">{ad.total_points} pts</p>
+                <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Tus puntos</p>
+                <p className="text-4xl font-bold mt-1">{ad.total_points ?? 0} pts</p>
+                {rankingQuery.data?.my_rank && (
+                  <p className="text-emerald-200 text-sm mt-1.5">
+                    Posición <span className="font-bold text-white">#{rankingQuery.data.my_rank}</span> en el ranking
+                  </p>
+                )}
               </div>
               <div className="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center">
-                <Zap className="h-8 w-8 text-yellow-300" />
+                <Trophy className="h-8 w-8 text-yellow-300" />
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-emerald-100">
-                <span>XP: {ad.current_xp} / {ad.next_level_xp}</span>
-                <span>{Math.round(xpPercent)}%</span>
-              </div>
-              <Progress value={xpPercent} className="h-2 bg-white/20 [&>div]:bg-yellow-400" />
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <button
+                onClick={() => router.push(`/${gymId}/panel/ranking`)}
+                className="text-xs text-emerald-100 hover:text-white transition-colors font-medium"
+              >
+                Ver ranking completo →
+              </button>
             </div>
           </div>
         )}

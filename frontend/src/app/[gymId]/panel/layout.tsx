@@ -14,7 +14,6 @@ import {
   Headphones,
   Users2,
   ChevronDown,
-  Award,
   CircleDot,
   UserCircle,
   Dumbbell,
@@ -136,12 +135,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
         {
           title: "Mi Perfil",
           items: [
-            { title: "Progreso", url: `/${gymId}/panel/mi-progreso`, icon: TrendingUp },
-            // Logros, Ranking y Retos son exclusivos Premium
-            ...(isPremium ? [
-              { title: "Logros y Racha", url: `/${gymId}/panel/mis-logros`, icon: Award },
-              { title: "Ranking", url: `/${gymId}/panel/mi-ranking`, icon: Medal },
-            ] : []),
+            { title: "Ranking", url: `/${gymId}/panel/ranking`, icon: Medal },
             { title: "Mi Equipo", url: `/${gymId}/panel/directorio`, icon: BookUser },
             { title: "Configuración", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
           ],
@@ -179,7 +173,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           title: "Gamificación",
           items: [
             { title: "Retos", url: `/${gymId}/panel/gamificacion/retos`, icon: Target },
-            { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking`, icon: Trophy },
+            { title: "Ranking", url: `/${gymId}/panel/ranking`, icon: Trophy },
           ],
         },
         {
@@ -213,7 +207,6 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           title: "Acompañamiento",
           items: [
             { title: "Mensajes", url: `/${gymId}/panel/mensajes-nutricionista`, icon: MessageSquare },
-            { title: "Progreso", url: `/${gymId}/panel/progreso`, icon: TrendingUp },
           ],
         },
         {
@@ -221,7 +214,6 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           items: [
             { title: "Planes Nutricionales", url: `/${gymId}/panel/nutricion/planes-nutricionales`, icon: ClipboardList },
             { title: "Alimentos", url: `/${gymId}/panel/nutricion/alimentos`, icon: Apple },
-            { title: "Evidencias Pendientes", url: `/${gymId}/panel/nutricion/evidencias`, icon: CheckCheck },
           ],
         },
         {
@@ -275,7 +267,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
 
   const gamificationItems = [
     isEnabled('retos') && { title: "Retos", url: `/${gymId}/panel/gamificacion/retos` },
-    isEnabled('ranking') && { title: "Ranking", url: `/${gymId}/panel/gamificacion/ranking` },
+    isEnabled('ranking') && { title: "Ranking", url: `/${gymId}/panel/ranking` },
   ].filter(Boolean) as { title: string; url: string }[]
 
   const operacionesItems = ([
@@ -572,7 +564,7 @@ export default function GymPanelLayout({
                             </SidebarMenuItem>
                           </Collapsible>
                         ) : (() => {
-                          const premiumRoutes = ['mis-retos', 'mi-ranking', 'mis-logros']
+                          const premiumRoutes = ['mis-retos']
                           const isPremiumRoute = item.url && premiumRoutes.some(r => item.url!.includes(r))
                           const isLocked = isPremiumRoute && userRole === 'athlete' && subscriptionTier === 'basic'
                           return (
@@ -625,7 +617,7 @@ export default function GymPanelLayout({
 
           <main className="flex-1 flex flex-col min-w-0">
             <GlobalBanner />
-            <header className="h-20 bg-white border-b border-slate-100 flex items-center justify-between px-8 sticky top-0 z-30 shadow-sm shadow-slate-100/50">
+            <header className="h-16 sm:h-20 bg-white border-b border-slate-100 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-30 shadow-sm shadow-slate-100/50">
               <div className="flex items-center gap-4">
                 <SidebarTrigger className="text-slate-500 hover:bg-slate-50" />
                 <Separator orientation="vertical" className="h-6 bg-slate-100" />
@@ -725,7 +717,7 @@ export default function GymPanelLayout({
                 </div>
               </div>
             </header>
-            <div className="p-8 flex-1 overflow-y-auto">
+            <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
               <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-700">
                 {children}
               </div>

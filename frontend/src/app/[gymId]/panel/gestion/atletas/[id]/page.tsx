@@ -8,7 +8,7 @@ import {
   UserCheck, AlertTriangle, Activity, Ruler, Scale,
   Calendar, CheckCircle2, Clock, Star, MessageSquare,
   UtensilsCrossed, Plus, Loader2, ChevronLeft, ChevronRight,
-  Search, Trash2, X, Flame,
+  Search, Trash2, X, Flame, Camera,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -351,43 +351,50 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   athleteId: string; gymId: string; membership_tier: string | null
 }) {
   const queryClient = useQueryClient()
-  const [selectedDay, setSelectedDay] = useState<string | number>(1)
+  const [innerTab, setInnerTab]           = useState<'plan' | 'logs'>('plan')
+  const [selectedDay, setSelectedDay]     = useState<string | number>(1)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
-  const [selectedPlanId, setSelectedPlanId] = useState('')
-  const [addDayOpen, setAddDayOpen] = useState(false)
-  const [addingDay, setAddingDay] = useState(false)
+  const [addDayOpen, setAddDayOpen]       = useState(false)
+  const [addingDay, setAddingDay]         = useState(false)
   const [removeDayConfirm, setRemoveDayConfirm] = useState(false)
-  const [removingDay, setRemovingDay] = useState(false)
+  const [removingDay, setRemovingDay]     = useState(false)
+  const [lightbox, setLightbox]           = useState<string | null>(null)
+  const [approveConfirm, setApproveConfirm] = useState(false)
 
   const nutritionQuery = useQuery({
     queryKey: ['athlete-nutrition', athleteId],
     queryFn: () => api.get<any>(`/api/nutrition/assignments/athlete_nutrition/?athlete_id=${athleteId}`),
   })
 
-  const plansQuery = useQuery({
-    queryKey: ['nutrition-plans-list', gymId],
-    queryFn: async () => {
-      const res = await api.get<any>('/api/nutrition/plans/')
-      return Array.isArray(res) ? res : (res?.results ?? [])
-    },
-    enabled: assignModalOpen,
+  const weekLogsQuery = useQuery({
+    queryKey: ['athlete-week-logs', athleteId],
+    queryFn: () => api.get<any>(`/api/nutrition/assignments/week-logs/?athlete_id=${athleteId}`),
   })
 
-  const assignMutation = useMutation({
-    mutationFn: (planId: string) => api.post('/api/nutrition/assignments/', {
-      user: athleteId, plan: planId,
-      start_date: new Date().toISOString().split('T')[0],
-    }),
-    onSuccess: () => {
-      showSuccess('Plan asignado correctamente')
-      setAssignModalOpen(false)
-      setSelectedPlanId('')
+  const reviewMutation = useMutation({
+    mutationFn: ({ logId, approved, notes }: { logId: string; approved: boolean; notes?: string }) =>
+      api.post(`/api/nutrition/meal-logs/${logId}/review/`, { approved, notes: notes ?? '' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['athlete-week-logs', athleteId] }),
+    onError: (err) => showError(err, 'Error al revisar'),
+  })
+
+  const approveWeekMutation = useMutation({
+    mutationFn: (assignmentId: string) =>
+      api.post<any>(`/api/nutrition/assignments/${assignmentId}/approve-week/`),
+    onSuccess: (data: any) => {
+      showSuccess(data?.detail ?? `Semana aprobada. ${data?.points_awarded ?? 0} puntos otorgados.`)
+      setApproveConfirm(false)
       queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+      queryClient.invalidateQueries({ queryKey: ['athlete-week-logs', athleteId] })
+      setAssignModalOpen(true)
     },
-    onError: (err) => showError(err, 'Error al asignar el plan'),
+    onError: (err) => showError(err, 'Error al aprobar la semana'),
   })
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+    queryClient.invalidateQueries({ queryKey: ['athlete-week-logs', athleteId] })
+  }
 
   if (nutritionQuery.isLoading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
@@ -418,6 +425,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const nutData = nutritionQuery.data
   const activePlan = nutData?.active_plan?.plan_detail ?? null
   const assignment = nutData?.active_plan ?? null
+  const completedWeeks: number = nutData?.completed_weeks ?? 0
 
   if (!activePlan) {
     return (
@@ -436,12 +444,9 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
         </div>
         {assignModalOpen && (
           <AssignPlanModal
-            plans={plansQuery.data || []}
-            loading={plansQuery.isLoading}
-            selectedPlanId={selectedPlanId}
-            onSelectPlan={setSelectedPlanId}
-            onConfirm={() => selectedPlanId && assignMutation.mutate(selectedPlanId)}
-            saving={assignMutation.isPending}
+            athleteId={athleteId}
+            gymId={gymId}
+            onAssigned={refresh}
             onClose={() => setAssignModalOpen(false)}
           />
         )}
@@ -491,8 +496,173 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const totalG   = allItems.reduce((s: number, i: any) => s + parseFloat(i.fats_g || 0), 0)
   const targetCal = activePlan.calories_per_day || 0
 
+  const weekLogs: any[] = weekLogsQuery.data?.logs ?? []
+  const weekSummary     = weekLogsQuery.data?.summary
+  const assignmentId    = weekLogsQuery.data?.assignment_id ?? assignment?.id
+
+  const pendingPhotos = weekLogs.filter(
+    (l: any) => l.photo_url && l.nutritionist_approved === null
+  ).length
+
+  // Agrupar logs por fecha
+  const logsByDate: Record<string, any[]> = {}
+  for (const log of weekLogs) {
+    if (!logsByDate[log.date]) logsByDate[log.date] = []
+    logsByDate[log.date].push(log)
+  }
+
   return (
-    <div className="flex gap-5">
+    <div className="space-y-4">
+
+      {/* Tabs internas: Plan / Evidencias */}
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+          <button onClick={() => setInnerTab('plan')}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              innerTab === 'plan' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Editor del plan
+          </button>
+          <button onClick={() => setInnerTab('logs')}
+            className={`relative px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              innerTab === 'logs' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Evidencias semana
+            {pendingPhotos > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {pendingPhotos}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Semanas completadas */}
+        {completedWeeks > 0 && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+            <Flame className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-xs font-semibold text-emerald-700">
+              Semana {completedWeeks + 1} <span className="font-normal text-emerald-500">de cumplimiento</span>
+            </span>
+          </div>
+        )}
+
+        {/* Botón aprobar semana */}
+        {assignment && (
+          <button
+            onClick={() => setApproveConfirm(true)}
+            className="ml-auto flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all active:scale-95"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            Aprobar semana · +{activePlan.points_reward ?? 0} pts
+          </button>
+        )}
+      </div>
+
+      {/* ── TAB: Evidencias de la semana ── */}
+      {innerTab === 'logs' && (
+        <div className="space-y-4">
+          {weekLogsQuery.isLoading && (
+            <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+          )}
+
+          {!weekLogsQuery.isLoading && weekLogs.length === 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 py-14 text-center">
+              <p className="text-sm text-slate-400">El atleta aún no ha registrado comidas esta semana.</p>
+            </div>
+          )}
+
+          {weekSummary && (
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Registradas', value: weekSummary.completed, color: 'text-slate-700' },
+                { label: 'Con foto', value: weekSummary.with_photo, color: 'text-blue-600' },
+                { label: 'Aprobadas', value: weekSummary.approved, color: 'text-emerald-600' },
+              ].map(s => (
+                <div key={s.label} className="bg-white rounded-xl border border-slate-100 p-3 text-center">
+                  <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {Object.entries(logsByDate).sort(([a], [b]) => a < b ? -1 : 1).map(([date, logs]) => (
+            <div key={date} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                <p className="text-xs font-bold text-slate-600">
+                  {new Date(date + 'T12:00').toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {logs.map((log: any) => (
+                  <div key={log.id} className="flex items-center gap-3 px-4 py-3">
+                    {/* Foto thumbnail */}
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 shrink-0 overflow-hidden">
+                      {log.photo_url ? (
+                        <button onClick={() => setLightbox(log.photo_url)} className="w-full h-full">
+                          <img src={log.photo_url} alt="evidencia" className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
+                        </button>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                          <Camera className="w-5 h-5" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{log.meal_name}</p>
+                      <p className="text-xs text-slate-400">{MEAL_TYPE_LABELS[log.meal_type] ?? log.meal_type}</p>
+                    </div>
+
+                    {/* Estado aprobación */}
+                    {log.photo_url && (
+                      <div className="flex items-center gap-1.5">
+                        {log.nutritionist_approved === true && (
+                          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            Aprobado
+                          </span>
+                        )}
+                        {log.nutritionist_approved === false && (
+                          <span className="text-[11px] font-medium text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                            Rechazado
+                          </span>
+                        )}
+                        {log.nutritionist_approved === null && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => reviewMutation.mutate({ logId: log.id, approved: true })}
+                              disabled={reviewMutation.isPending}
+                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                              title="Aprobar"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => reviewMutation.mutate({ logId: log.id, approved: false })}
+                              disabled={reviewMutation.isPending}
+                              className="p-1.5 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 transition-colors"
+                              title="Rechazar"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── TAB: Editor del plan ── */}
+      {innerTab === 'plan' && (
+      <div className="flex gap-5">
       {/* Panel izquierdo — plan */}
       <div className="flex-1 min-w-0 space-y-4">
 
@@ -640,14 +810,45 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
         </div>
       </div>
 
+      </div>
+      )} {/* end innerTab === 'plan' */}
+
+      {/* Modal confirmar aprobar semana */}
+      <Dialog open={approveConfirm} onOpenChange={setApproveConfirm}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>¿Aprobar semana?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            Se otorgarán <span className="font-bold text-emerald-700">{activePlan.points_reward} puntos</span> al atleta
+            y el plan se marcará como completado. Podrás asignar uno nuevo después.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveConfirm(false)}>Cancelar</Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={approveWeekMutation.isPending}
+              onClick={() => assignmentId && approveWeekMutation.mutate(assignmentId)}
+            >
+              {approveWeekMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Aprobar y otorgar puntos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lightbox fotos */}
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Evidencia" className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain" />
+        </div>
+      )}
+
       {assignModalOpen && (
         <AssignPlanModal
-          plans={plansQuery.data || []}
-          loading={plansQuery.isLoading}
-          selectedPlanId={selectedPlanId}
-          onSelectPlan={setSelectedPlanId}
-          onConfirm={() => selectedPlanId && assignMutation.mutate(selectedPlanId)}
-          saving={assignMutation.isPending}
+          athleteId={athleteId}
+          gymId={gymId}
+          onAssigned={refresh}
           onClose={() => setAssignModalOpen(false)}
         />
       )}
@@ -655,34 +856,140 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   )
 }
 
-function AssignPlanModal({ onClose, plans, loading, selectedPlanId, onSelectPlan, onConfirm, saving }: {
-  onClose: () => void; plans: any[]; loading: boolean
-  selectedPlanId: string; onSelectPlan: (id: string) => void
-  onConfirm: () => void; saving: boolean
+function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
+  onClose: () => void; athleteId: string; gymId: string; onAssigned: () => void
 }) {
+  const [tab, setTab]           = useState<'existing' | 'new'>('existing')
+  const [selectedPlanId, setSel] = useState('')
+  // New plan fields
+  const [newName, setNewName]           = useState('')
+  const [newPoints, setNewPoints]       = useState('100')
+  const [newCal, setNewCal]             = useState('2000')
+  const [newDuration, setNewDuration]   = useState('7')
+
+  const plansQuery = useQuery({
+    queryKey: ['nutrition-plans-list', gymId],
+    queryFn: async () => {
+      const res = await api.get<any>('/api/nutrition/plans/')
+      return Array.isArray(res) ? res : (res?.results ?? [])
+    },
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: (planId: string) => api.post('/api/nutrition/assignments/', {
+      user: athleteId, plan: planId,
+      start_date: new Date().toISOString().split('T')[0],
+    }),
+    onSuccess: () => { showSuccess('Plan asignado'); onAssigned(); onClose() },
+    onError: (err) => showError(err, 'Error al asignar el plan'),
+  })
+
+  const createAndAssignMutation = useMutation({
+    mutationFn: async () => {
+      const plan = await api.post<any>('/api/nutrition/plans/', {
+        name: newName,
+        points_reward: parseInt(newPoints) || 100,
+        calories_per_day: parseInt(newCal) || 2000,
+        duration_days: parseInt(newDuration) || 7,
+        status: 'active',
+      })
+      await api.post('/api/nutrition/assignments/', {
+        user: athleteId, plan: plan.id,
+        start_date: new Date().toISOString().split('T')[0],
+      })
+    },
+    onSuccess: () => { showSuccess('Plan creado y asignado'); onAssigned(); onClose() },
+    onError: (err) => showError(err, 'Error al crear el plan'),
+  })
+
+  const saving = assignMutation.isPending || createAndAssignMutation.isPending
+
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
-      <DialogContent className="sm:max-w-sm bg-white rounded-2xl border-none shadow-2xl">
+      <DialogContent className="sm:max-w-md bg-white rounded-2xl border-none shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-base font-bold text-slate-900">Asignar plan nutricional</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 mt-2">
-          {loading ? (
-            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-emerald-600" /></div>
-          ) : (
-            <Select value={selectedPlanId} onValueChange={onSelectPlan}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar plan..." /></SelectTrigger>
-              <SelectContent>
-                {plans.map((p: any) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name} — {p.calories_per_day} kcal/día</SelectItem>
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mt-1">
+          {(['existing', 'new'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                tab === t ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t === 'existing' ? 'Plan existente' : 'Crear nuevo plan'}
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-4 mt-1">
+          {tab === 'existing' ? (
+            plansQuery.isLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-emerald-600" /></div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {(plansQuery.data ?? []).map((p: any) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSel(p.id)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
+                      selectedPlanId === p.id
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {p.calories_per_day} kcal/día · {p.duration_days} días · <span className="text-amber-600 font-medium">{p.points_reward} pts</span>
+                    </p>
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+            )
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nombre del plan</label>
+                <input
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder="Ej: Plan pérdida de peso semana 2"
+                  className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Puntos</label>
+                  <input type="number" value={newPoints} onChange={e => setNewPoints(e.target.value)}
+                    className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Kcal/día</label>
+                  <input type="number" value={newCal} onChange={e => setNewCal(e.target.value)}
+                    className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Días</label>
+                  <input type="number" value={newDuration} onChange={e => setNewDuration(e.target.value)}
+                    className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">Después de crear el plan podrás agregar los días y comidas desde el editor.</p>
+            </div>
           )}
-          <div className="flex gap-3">
+
+          <div className="flex gap-3 pt-1">
             <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
-            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={!selectedPlanId || saving} onClick={onConfirm}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Asignar'}
+            <Button
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              disabled={saving || (tab === 'existing' && !selectedPlanId) || (tab === 'new' && !newName.trim())}
+              onClick={() => tab === 'existing' ? assignMutation.mutate(selectedPlanId) : createAndAssignMutation.mutate()}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : tab === 'existing' ? 'Asignar' : 'Crear y asignar'}
             </Button>
           </div>
         </div>
@@ -816,23 +1123,23 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
   return (
     <div className="space-y-6">
       {/* Header tipo Nutrium */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-5">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors">
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-5">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <button onClick={() => router.back()} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg flex-shrink-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-base sm:text-lg flex-shrink-0">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-slate-900">{a.first_name} {a.last_name}</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 truncate">{a.first_name} {a.last_name}</h1>
               <TierBadge tier={membership_tier} />
-              <Badge className={`text-[10px] ${a.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
+              <Badge className={`text-[10px] hidden sm:inline-flex ${a.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
                 {a.is_active ? 'Activo' : 'Inactivo'}
               </Badge>
             </div>
-            <p className="text-sm text-slate-400 mt-0.5">{a.email}</p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-0.5 truncate">{a.email}</p>
           </div>
           {isNutritionist && (
             <Button
@@ -842,7 +1149,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
               onClick={() => router.push(`/${gymId}/panel/mensajes?athlete=${id}`)}
             >
               <MessageSquare className="w-4 h-4" />
-              Mensajes
+              <span className="hidden sm:inline">Mensajes</span>
             </Button>
           )}
         </div>
@@ -850,7 +1157,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
 
       {/* Stats rápidos — solo para admin/coach */}
       {!isNutritionist && (
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-2 md:grid-cols-4">
           {[
             { label: 'Sesiones semana', value: s.sessions_week, sub: `${s.sessions_month} este mes`, icon: Dumbbell, color: 'bg-blue-100 text-blue-600' },
             { label: 'Comidas (7d)', value: s.meals_week, sub: `${s.meals_today} hoy`, icon: Apple, color: 'bg-amber-100 text-amber-600' },
@@ -875,17 +1182,18 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
       {isNutritionist ? (
         // Vista nutricionista — tabs dedicados
         <Tabs defaultValue="plan">
-          <TabsList className="bg-slate-100 rounded-xl p-1 h-auto w-full">
-            <TabsTrigger value="info" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Información
+          <TabsList className="bg-slate-100 rounded-xl p-1 h-auto w-full grid grid-cols-4">
+            <TabsTrigger value="info" className="rounded-lg px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Info
             </TabsTrigger>
-            <TabsTrigger value="medidas" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="medidas" className="rounded-lg px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
               Medidas
             </TabsTrigger>
-            <TabsTrigger value="plan" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Plan de Alimentación
+            <TabsTrigger value="plan" className="rounded-lg px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <span className="hidden sm:inline">Plan de Alimentación</span>
+              <span className="sm:hidden">Nutrición</span>
             </TabsTrigger>
-            <TabsTrigger value="citas" className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="citas" className="rounded-lg px-2 sm:px-4 py-2 text-xs sm:text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
               Citas
             </TabsTrigger>
           </TabsList>

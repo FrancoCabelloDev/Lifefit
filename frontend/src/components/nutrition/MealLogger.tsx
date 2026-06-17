@@ -155,7 +155,7 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
 
               {/* ── Macros row ── */}
               {(meal.protein_g > 0 || meal.carbs_g > 0 || meal.fats_g > 0) && (
-                <div className="flex gap-4 mt-2.5 text-sm text-slate-500">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-sm text-slate-500">
                   <span><span className="font-medium text-slate-700">{meal.protein_g}g</span> proteína</span>
                   <span><span className="font-medium text-slate-700">{meal.carbs_g}g</span> carbos</span>
                   <span><span className="font-medium text-slate-700">{meal.fats_g}g</span> grasa</span>
@@ -194,7 +194,7 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
               )}
 
               {/* ── Action buttons ── */}
-              <div className="flex gap-2 mt-4">
+              <div className="flex flex-wrap gap-2 mt-4">
                 {isUpdating ? (
                   <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                 ) : (

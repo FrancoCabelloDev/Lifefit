@@ -79,10 +79,10 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
     return (
       <div className="space-y-6">
         <div className="h-8 w-64 bg-slate-100 animate-pulse rounded-lg" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <StatsCardSkeleton key={i} />)}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
           <div className="lg:col-span-3 h-72 bg-slate-100 animate-pulse rounded-2xl" />
           <div className="lg:col-span-2 h-72 bg-slate-100 animate-pulse rounded-2xl" />
         </div>
@@ -112,7 +112,7 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-100 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="w-8 h-8 bg-violet-100 rounded-xl flex items-center justify-center">
@@ -155,7 +155,7 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
       </div>
 
       {/* Main grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
 
         {/* LEFT: athletes table */}
         <div className="lg:col-span-3 space-y-4">
@@ -288,7 +288,7 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
                 <h2 className="text-sm font-semibold text-slate-700">Ranking mis atletas</h2>
               </div>
               <button
-                onClick={() => router.push(`/${gymId}/panel/gamificacion/ranking`)}
+                onClick={() => router.push(`/${gymId}/panel/ranking`)}
                 className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
               >
                 Ver ranking <ChevronRight className="w-3.5 h-3.5" />

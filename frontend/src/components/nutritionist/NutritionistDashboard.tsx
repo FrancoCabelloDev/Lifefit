@@ -7,7 +7,7 @@ import {
   CalendarDays, Users, MessageSquare, TrendingUp, Apple,
   AlertTriangle, CheckCircle2, Clock, ChevronRight, Plus,
   ArrowUp, ArrowDown, Minus, Send, X, CalendarCheck,
-  UserPlus, RefreshCw, MailOpen,
+  UserPlus, RefreshCw, MailOpen, Camera,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -150,6 +150,12 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
     refetchInterval: 30000,
   })
 
+  const { data: pendingPhotos } = useQuery({
+    queryKey: ['pending-photos', gymId],
+    queryFn: () => api.get<any>('/api/nutrition/meal-logs/pending-approvals/'),
+    refetchInterval: 60000,
+  })
+
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/api/gyms/appointments/${id}/`, { status }),
@@ -208,7 +214,7 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
       </div>
 
       {/* Main layout: left content + right stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
 
         {/* LEFT: appointments */}
         <div className="lg:col-span-3 space-y-4">
@@ -293,7 +299,7 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
               <span className="text-[10px] text-slate-400 font-medium">Últimos 30 días</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
               {/* Nuevos clientes */}
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-2 mb-2">
@@ -451,8 +457,51 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
             </div>
           </section>
 
+          {/* Fotos pendientes de revisión */}
+          {pendingPhotos && pendingPhotos.count > 0 && (
+            <section className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border-b border-amber-100">
+                <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <Camera className="w-3.5 h-3.5 text-amber-600" />
+                </div>
+                <h2 className="text-xs font-bold text-amber-800 flex-1">Fotos pendientes de revisión</h2>
+                <span className="text-xs font-bold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">
+                  {pendingPhotos.count}
+                </span>
+              </div>
+              <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
+                {(() => {
+                  // Agrupar por atleta
+                  const byAthlete: Record<string, { name: string; id: string; count: number }> = {}
+                  for (const item of pendingPhotos.results) {
+                    if (!byAthlete[item.athlete_id]) {
+                      byAthlete[item.athlete_id] = { name: item.athlete_name, id: item.athlete_id, count: 0 }
+                    }
+                    byAthlete[item.athlete_id].count++
+                  }
+                  return Object.values(byAthlete).map(athlete => (
+                    <button
+                      key={athlete.id}
+                      onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${athlete.id}`)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                        {athlete.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <p className="text-xs font-semibold text-slate-800 flex-1 truncate">{athlete.name}</p>
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5 flex-shrink-0">
+                        {athlete.count} foto{athlete.count > 1 ? 's' : ''}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                    </button>
+                  ))
+                })()}
+              </div>
+            </section>
+          )}
+
           {/* Quick access */}
-          <section className="grid grid-cols-2 gap-2">
+          <section className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2">
             <button
               onClick={() => router.push(`/${gymId}/panel/gestion/atletas`)}
               className="flex items-center gap-2.5 p-3 bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 rounded-xl transition-all text-left group"
