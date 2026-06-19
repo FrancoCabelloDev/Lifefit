@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, use } from 'react'
-import { UtensilsCrossed, Loader2, AlertTriangle, Flame, Target } from 'lucide-react'
+import { UtensilsCrossed, Loader2, AlertTriangle, Flame, Target, CalendarClock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 
@@ -137,6 +137,7 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
   }
 
   const completedWeeks: number  = (assignment as any)?.completed_weeks ?? 0
+  const scheduledPlan = (assignment as any)?.scheduled_plan ?? null
   const rejectedCount: number   = logs.filter(l => l.nutritionist_approved === false).length
   const sinceDate = assignment?.start_date
     ? new Date(assignment.start_date).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -198,6 +199,19 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
             </p>
             <p className="text-xs text-rose-600 mt-0.5">
               Revisa las comidas marcadas y vuelve a subir la foto correcta.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Próxima semana programada */}
+      {scheduledPlan && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
+          <CalendarClock className="w-5 h-5 text-blue-500 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Próxima semana lista</p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              <span className="font-medium">{scheduledPlan.plan_name}</span> · comienza el {new Date(scheduledPlan.start_date + 'T12:00').toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
           </div>
         </div>

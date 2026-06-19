@@ -301,6 +301,7 @@ class NutritionItem(BaseModel):
 class UserNutritionPlan(BaseModel):
     class AssignmentStatus(models.TextChoices):
         ACTIVE = "active", "Activo"
+        SCHEDULED = "scheduled", "Programado"
         PAUSED = "paused", "Pausado"
         COMPLETED = "completed", "Completado"
 

@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Dumbbell, Apple, Target, Award, Zap,
   UserCheck, AlertTriangle, Activity, Ruler, Scale,
-  Calendar, CheckCircle2, Clock, Star, MessageSquare,
+  Calendar, CalendarClock, CheckCircle2, Clock, Star, MessageSquare,
   UtensilsCrossed, Plus, Loader2, ChevronLeft, ChevronRight,
   Search, Trash2, X, Flame, Camera,
 } from 'lucide-react'
@@ -426,21 +426,38 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const activePlan = nutData?.active_plan?.plan_detail ?? null
   const assignment = nutData?.active_plan ?? null
   const completedWeeks: number = nutData?.completed_weeks ?? 0
+  const scheduledPlan = nutData?.scheduled_plan ?? null
 
   if (!activePlan) {
     return (
       <>
+        {/* Scheduled plan banner (even when no active plan) */}
+        {scheduledPlan && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 mb-4">
+            <CalendarClock className="w-5 h-5 text-blue-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-blue-800">Próxima semana programada</p>
+              <p className="text-xs text-blue-600 mt-0.5 truncate">
+                <span className="font-medium">{scheduledPlan.plan_name}</span> · inicia el {fmtDate(scheduledPlan.start_date)}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-4 text-center">
           <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
             <UtensilsCrossed className="w-7 h-7 text-slate-300" />
           </div>
           <div>
             <p className="text-sm font-semibold text-slate-700">Sin plan nutricional activo</p>
-            <p className="text-xs text-slate-400 mt-1">Asigna un plan para comenzar a construirlo.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {scheduledPlan ? 'El plan programado se activará automáticamente en su fecha.' : 'Asigna un plan para comenzar a construirlo.'}
+            </p>
           </div>
-          <Button onClick={() => setAssignModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
-            <Plus className="w-4 h-4" /> Asignar plan nutricional
-          </Button>
+          {!scheduledPlan && (
+            <Button onClick={() => setAssignModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+              <Plus className="w-4 h-4" /> Asignar plan nutricional
+            </Button>
+          )}
         </div>
         {assignModalOpen && (
           <AssignPlanModal
@@ -545,6 +562,17 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
             <span className="text-xs font-semibold text-emerald-700">
               Semana {completedWeeks + 1} <span className="font-normal text-emerald-500">de cumplimiento</span>
             </span>
+          </div>
+        )}
+
+        {/* Plan programado badge */}
+        {scheduledPlan && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl">
+            <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
+            <span className="text-xs font-semibold text-blue-700 truncate max-w-[160px]" title={scheduledPlan.plan_name}>
+              {scheduledPlan.plan_name}
+            </span>
+            <span className="text-xs text-blue-500">· {fmtDate(scheduledPlan.start_date)}</span>
           </div>
         )}
 
@@ -856,16 +884,28 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   )
 }
 
+function nextMonday(): string {
+  const d = new Date()
+  const day = d.getDay() // 0=Sun, 1=Mon...
+  const daysUntilMonday = day === 0 ? 1 : 8 - day
+  d.setDate(d.getDate() + daysUntilMonday)
+  return d.toISOString().split('T')[0]
+}
+
 function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
   onClose: () => void; athleteId: string; gymId: string; onAssigned: () => void
 }) {
   const [tab, setTab]           = useState<'existing' | 'new'>('existing')
   const [selectedPlanId, setSel] = useState('')
+  const [startDate, setStartDate] = useState(nextMonday())
   // New plan fields
   const [newName, setNewName]           = useState('')
   const [newPoints, setNewPoints]       = useState('100')
   const [newCal, setNewCal]             = useState('2000')
   const [newDuration, setNewDuration]   = useState('7')
+
+  const today = new Date().toISOString().split('T')[0]
+  const isScheduled = startDate > today
 
   const plansQuery = useQuery({
     queryKey: ['nutrition-plans-list', gymId],
@@ -877,10 +917,12 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
 
   const assignMutation = useMutation({
     mutationFn: (planId: string) => api.post('/api/nutrition/assignments/', {
-      user: athleteId, plan: planId,
-      start_date: new Date().toISOString().split('T')[0],
+      user: athleteId, plan: planId, start_date: startDate,
     }),
-    onSuccess: () => { showSuccess('Plan asignado'); onAssigned(); onClose() },
+    onSuccess: () => {
+      showSuccess(isScheduled ? 'Plan programado para ' + startDate : 'Plan asignado')
+      onAssigned(); onClose()
+    },
     onError: (err) => showError(err, 'Error al asignar el plan'),
   })
 
@@ -894,11 +936,13 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
         status: 'active',
       })
       await api.post('/api/nutrition/assignments/', {
-        user: athleteId, plan: plan.id,
-        start_date: new Date().toISOString().split('T')[0],
+        user: athleteId, plan: plan.id, start_date: startDate,
       })
     },
-    onSuccess: () => { showSuccess('Plan creado y asignado'); onAssigned(); onClose() },
+    onSuccess: () => {
+      showSuccess(isScheduled ? 'Plan creado y programado' : 'Plan creado y asignado')
+      onAssigned(); onClose()
+    },
     onError: (err) => showError(err, 'Error al crear el plan'),
   })
 
@@ -927,11 +971,32 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
         </div>
 
         <div className="space-y-4 mt-1">
+          {/* Date picker */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Fecha de inicio</label>
+            <input
+              type="date"
+              value={startDate}
+              min={today}
+              onChange={e => setStartDate(e.target.value)}
+              className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+            {isScheduled ? (
+              <p className="mt-1 text-xs text-blue-600 font-medium">
+                El plan se activará automáticamente el {startDate}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-emerald-600 font-medium">
+                El plan iniciará hoy
+              </p>
+            )}
+          </div>
+
           {tab === 'existing' ? (
             plansQuery.isLoading ? (
               <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-emerald-600" /></div>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-52 overflow-y-auto">
                 {(plansQuery.data ?? []).map((p: any) => (
                   <button
                     key={p.id}
@@ -985,11 +1050,14 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
           <div className="flex gap-3 pt-1">
             <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
             <Button
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              className={`flex-1 ${isScheduled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
               disabled={saving || (tab === 'existing' && !selectedPlanId) || (tab === 'new' && !newName.trim())}
               onClick={() => tab === 'existing' ? assignMutation.mutate(selectedPlanId) : createAndAssignMutation.mutate()}
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : tab === 'existing' ? 'Asignar' : 'Crear y asignar'}
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : isScheduled
+                ? (tab === 'existing' ? 'Programar' : 'Crear y programar')
+                : (tab === 'existing' ? 'Asignar' : 'Crear y asignar')
+              }
             </Button>
           </div>
         </div>

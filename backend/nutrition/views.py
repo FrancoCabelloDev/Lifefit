@@ -612,13 +612,27 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role == User.Role.SUPER_ADMIN:
-            serializer.save()
-            return
-        if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and user.gym_id:
-            serializer.save(assigned_by=user)
-            return
-        raise PermissionDenied("No puedes asignar planes de nutrición.")
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
+            raise PermissionDenied("No puedes asignar planes de nutrición.")
+
+        start_date = serializer.validated_data.get("start_date", date.today())
+        target_status = (
+            UserNutritionPlan.AssignmentStatus.SCHEDULED
+            if start_date > date.today()
+            else UserNutritionPlan.AssignmentStatus.ACTIVE
+        )
+        target_user = serializer.validated_data.get("user")
+
+        # Evitar duplicados: solo 1 activo y 1 programado por usuario
+        if UserNutritionPlan.objects.filter(user=target_user, status=target_status).exists():
+            from rest_framework.exceptions import ValidationError
+            label = "activo" if target_status == "active" else "programado"
+            raise ValidationError({"detail": f"Este atleta ya tiene un plan {label}."})
+
+        kwargs = {"status": target_status}
+        if user.role != User.Role.SUPER_ADMIN:
+            kwargs["assigned_by"] = user
+        serializer.save(**kwargs)
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -636,18 +650,38 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
     def my_active(self, request):
         user = request.user
+
+        # Auto-activate any scheduled plan whose start_date has arrived
+        UserNutritionPlan.objects.filter(
+            user=user,
+            status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
+            start_date__lte=date.today(),
+        ).update(status=UserNutritionPlan.AssignmentStatus.ACTIVE)
+
         assignment = UserNutritionPlan.objects.filter(
             user=user,
-            status='active'
+            status=UserNutritionPlan.AssignmentStatus.ACTIVE,
         ).select_related('plan', 'plan__gym', 'assigned_by').first()
+
         if not assignment:
             return Response({"detail": "No tienes un plan activo."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = self.get_serializer(assignment)
+
         completed_weeks = UserNutritionPlan.objects.filter(
-            user=user, status='completed'
+            user=user, status=UserNutritionPlan.AssignmentStatus.COMPLETED
         ).count()
-        data = serializer.data
+
+        # Include upcoming scheduled plan if exists
+        scheduled = UserNutritionPlan.objects.filter(
+            user=user,
+            status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
+        ).select_related('plan').first()
+
+        data = self.get_serializer(assignment).data
         data['completed_weeks'] = completed_weeks
+        data['scheduled_plan'] = (
+            {"id": str(scheduled.id), "plan_name": scheduled.plan.name, "start_date": scheduled.start_date.isoformat()}
+            if scheduled else None
+        )
         return Response(data)
 
     @action(detail=True, methods=["post"])
@@ -889,11 +923,22 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
 
         today = date.today()
 
+        # Auto-activate scheduled plans that have started
+        UserNutritionPlan.objects.filter(
+            user_id=athlete_id,
+            status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
+            start_date__lte=today,
+        ).update(status=UserNutritionPlan.AssignmentStatus.ACTIVE)
+
         active_plan = UserNutritionPlan.objects.filter(
             user_id=athlete_id, status="active"
         ).select_related("plan", "plan__gym", "assigned_by").prefetch_related(
             "plan__meal_templates", "plan__meal_templates__food_items__food"
         ).first()
+
+        scheduled_plan = UserNutritionPlan.objects.filter(
+            user_id=athlete_id, status="scheduled"
+        ).select_related("plan").first()
 
         completed_plans = UserNutritionPlan.objects.filter(
             user_id=athlete_id, status="completed"
@@ -924,8 +969,19 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             user_id=athlete_id, status="completed"
         ).count()
 
+        scheduled_data = (
+            {
+                "id": str(scheduled_plan.id),
+                "plan_name": scheduled_plan.plan.name,
+                "start_date": scheduled_plan.start_date.isoformat(),
+                "plan_id": str(scheduled_plan.plan.id),
+            }
+            if scheduled_plan else None
+        )
+
         return Response({
             "active_plan": plan_serializer.data if plan_serializer else None,
+            "scheduled_plan": scheduled_data,
             "completed_plans": completed_serializer.data,
             "week_meal_compliance": {
                 "dates": sorted(meal_data.keys(), reverse=True),
