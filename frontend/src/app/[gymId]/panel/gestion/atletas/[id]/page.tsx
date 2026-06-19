@@ -8,7 +8,7 @@ import {
   UserCheck, AlertTriangle, Activity, Ruler, Scale,
   Calendar, CalendarClock, CheckCircle2, Clock, Star, MessageSquare,
   UtensilsCrossed, Plus, Loader2, ChevronLeft, ChevronRight,
-  Search, Trash2, X, Flame, Camera,
+  Search, Trash2, X, Flame, Camera, Pencil, Check,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -353,6 +353,8 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const queryClient = useQueryClient()
   const [innerTab, setInnerTab]           = useState<'plan' | 'logs'>('plan')
   const [editingScheduled, setEditingScheduled] = useState(false)
+  const [editingScheduledDate, setEditingScheduledDate] = useState(false)
+  const [scheduledDateInput, setScheduledDateInput] = useState('')
   const [selectedDay, setSelectedDay]     = useState<string | number>(1)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [addDayOpen, setAddDayOpen]       = useState(false)
@@ -399,6 +401,17 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
       setAssignModalOpen(true)
     },
     onError: (err) => showError(err, 'Error al aprobar la semana'),
+  })
+
+  const updateScheduledDateMutation = useMutation({
+    mutationFn: ({ assignmentId, start_date }: { assignmentId: string; start_date: string }) =>
+      api.patch(`/api/nutrition/assignments/${assignmentId}/`, { start_date }),
+    onSuccess: () => {
+      showSuccess('Fecha actualizada')
+      setEditingScheduledDate(false)
+      queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+    },
+    onError: (err) => showError(err, 'Error al actualizar la fecha'),
   })
 
   const refresh = () => {
@@ -622,8 +635,43 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
         {/* Banner cuando edita el plan programado */}
         {editingScheduled && scheduledPlan && (
           <div className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
-            <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
-            <span>Editando plan del <strong>{fmtDate(scheduledPlan.start_date)}</strong></span>
+            <CalendarClock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            {editingScheduledDate ? (
+              <>
+                <input
+                  type="date"
+                  defaultValue={scheduledPlan.start_date}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setScheduledDateInput(e.target.value)}
+                  className="text-xs border border-blue-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    if (scheduledDateInput)
+                      updateScheduledDateMutation.mutate({ assignmentId: scheduledPlan.id, start_date: scheduledDateInput })
+                  }}
+                  className="p-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  disabled={updateScheduledDateMutation.isPending || !scheduledDateInput}
+                >
+                  <Check className="w-3 h-3" />
+                </button>
+                <button onClick={() => setEditingScheduledDate(false)} className="p-1 rounded-lg hover:bg-blue-100">
+                  <X className="w-3 h-3" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span>Inicia el <strong>{fmtDate(scheduledPlan.start_date)}</strong></span>
+                <button
+                  onClick={() => { setScheduledDateInput(scheduledPlan.start_date); setEditingScheduledDate(true) }}
+                  className="p-1 rounded-lg hover:bg-blue-100 transition-colors"
+                  title="Cambiar fecha"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
