@@ -352,6 +352,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
 }) {
   const queryClient = useQueryClient()
   const [innerTab, setInnerTab]           = useState<'plan' | 'logs'>('plan')
+  const [editingScheduled, setEditingScheduled] = useState(false)
   const [selectedDay, setSelectedDay]     = useState<string | number>(1)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [addDayOpen, setAddDayOpen]       = useState(false)
@@ -369,6 +370,15 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const weekLogsQuery = useQuery({
     queryKey: ['athlete-week-logs', athleteId],
     queryFn: () => api.get<any>(`/api/nutrition/assignments/week-logs/?athlete_id=${athleteId}`),
+  })
+
+  const nutData2 = nutritionQuery.data
+  const scheduledPlanMeta = nutData2?.scheduled_plan ?? null
+
+  const scheduledPlanQuery = useQuery({
+    queryKey: ['nutrition-plan-detail', scheduledPlanMeta?.plan_id],
+    queryFn: () => api.get<any>(`/api/nutrition/plans/${scheduledPlanMeta!.plan_id}/`),
+    enabled: !!scheduledPlanMeta?.plan_id,
   })
 
   const reviewMutation = useMutation({
@@ -428,6 +438,11 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const completedWeeks: number = nutData?.completed_weeks ?? 0
   const scheduledPlan = nutData?.scheduled_plan ?? null
 
+  // Which plan is currently being edited
+  const editingPlan = editingScheduled
+    ? (scheduledPlanQuery.data ?? null)
+    : activePlan
+
   if (!activePlan) {
     return (
       <>
@@ -471,7 +486,8 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     )
   }
 
-  const mealsByDay: Record<string, any[]> = activePlan.meals_by_day || {}
+  const currentPlan = editingPlan ?? activePlan
+  const mealsByDay: Record<string, any[]> = currentPlan?.meals_by_day || {}
   const addedWeekdays = WEEKDAY_ORDER.filter(d => mealsByDay[d] && mealsByDay[d].length > 0)
   const remainingWeekdays = WEEKDAY_ORDER.filter(d => !addedWeekdays.includes(d))
 
@@ -483,10 +499,11 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const handleAddDay = async (weekday: string) => {
     setAddingDay(true)
     try {
-      await api.post(`/api/nutrition/plans/${activePlan.id}/add_day/`, { weekday })
+      await api.post(`/api/nutrition/plans/${currentPlan.id}/add_day/`, { weekday })
       setSelectedDay(weekday as any)
       setAddDayOpen(false)
-      refresh()
+      if (editingScheduled) scheduledPlanQuery.refetch()
+      else refresh()
       showSuccess(`${WEEKDAY_LABELS[weekday]} agregado`)
     } catch (err) { showError(err, 'Error al agregar día') }
     finally { setAddingDay(false) }
@@ -495,11 +512,12 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const handleRemoveDay = async () => {
     setRemovingDay(true)
     try {
-      await api.post(`/api/nutrition/plans/${activePlan.id}/remove_day/`, { weekday: effectiveKey })
+      await api.post(`/api/nutrition/plans/${currentPlan.id}/remove_day/`, { weekday: effectiveKey })
       const remaining = addedWeekdays.filter(d => d !== effectiveKey)
       setSelectedDay(remaining[0] as any ?? '')
       setRemoveDayConfirm(false)
-      refresh()
+      if (editingScheduled) scheduledPlanQuery.refetch()
+      else refresh()
       showSuccess('Día eliminado')
     } catch (err) { showError(err, 'Error al eliminar día') }
     finally { setRemovingDay(false) }
@@ -511,7 +529,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const totalP   = allItems.reduce((s: number, i: any) => s + parseFloat(i.protein_g || 0), 0)
   const totalC   = allItems.reduce((s: number, i: any) => s + parseFloat(i.carbs_g || 0), 0)
   const totalG   = allItems.reduce((s: number, i: any) => s + parseFloat(i.fats_g || 0), 0)
-  const targetCal = activePlan.calories_per_day || 0
+  const targetCal = currentPlan?.calories_per_day || 0
 
   const weekLogs: any[] = weekLogsQuery.data?.logs ?? []
   const weekSummary     = weekLogsQuery.data?.summary
@@ -532,31 +550,45 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     <div className="space-y-4">
 
       {/* Tabs internas: Plan / Evidencias */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Plan switcher: semana actual vs siguiente */}
         <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          <button onClick={() => setInnerTab('plan')}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              innerTab === 'plan' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+          <button
+            onClick={() => { setEditingScheduled(false); setInnerTab('plan'); setSelectedDay(1) }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              !editingScheduled && innerTab === 'plan' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            Editor del plan
+            Esta semana
           </button>
-          <button onClick={() => setInnerTab('logs')}
-            className={`relative px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              innerTab === 'logs' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Evidencias semana
-            {pendingPhotos > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                {pendingPhotos}
-              </span>
-            )}
-          </button>
+          {scheduledPlan && (
+            <button
+              onClick={() => { setEditingScheduled(true); setInnerTab('plan'); setSelectedDay(1) }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                editingScheduled ? 'bg-blue-600 shadow-sm text-white' : 'text-blue-600 hover:text-blue-700'
+              }`}
+            >
+              Siguiente semana
+            </button>
+          )}
+          {!editingScheduled && (
+            <button onClick={() => setInnerTab('logs')}
+              className={`relative px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                innerTab === 'logs' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Evidencias
+              {pendingPhotos > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                  {pendingPhotos}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Semanas completadas */}
-        {completedWeeks > 0 && (
+        {completedWeeks > 0 && !editingScheduled && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl">
             <Flame className="w-3.5 h-3.5 text-emerald-500" />
             <span className="text-xs font-semibold text-emerald-700">
@@ -565,16 +597,8 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
           </div>
         )}
 
-        {/* Plan programado badge / botón programar */}
-        {scheduledPlan ? (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl">
-            <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-xs font-semibold text-blue-700 truncate max-w-[160px]" title={scheduledPlan.plan_name}>
-              {scheduledPlan.plan_name}
-            </span>
-            <span className="text-xs text-blue-500">· {fmtDate(scheduledPlan.start_date)}</span>
-          </div>
-        ) : (
+        {/* Botón programar siguiente semana (cuando no hay scheduled) */}
+        {!scheduledPlan && !editingScheduled && (
           <button
             onClick={() => setAssignModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors"
@@ -584,8 +608,8 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
           </button>
         )}
 
-        {/* Botón aprobar semana */}
-        {assignment && (
+        {/* Botón aprobar semana (solo cuando edita la semana actual) */}
+        {assignment && !editingScheduled && (
           <button
             onClick={() => setApproveConfirm(true)}
             className="ml-auto flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all active:scale-95"
@@ -593,6 +617,14 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
             <CheckCircle2 className="w-4 h-4" />
             Aprobar semana · +{activePlan.points_reward ?? 0} pts
           </button>
+        )}
+
+        {/* Banner cuando edita el plan programado */}
+        {editingScheduled && scheduledPlan && (
+          <div className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+            <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
+            <span>Editando plan del <strong>{fmtDate(scheduledPlan.start_date)}</strong></span>
+          </div>
         )}
       </div>
 
@@ -770,7 +802,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
         ) : (
           <div className="space-y-3">
             {dayMeals.map((meal: any) => (
-              <MealBlock key={meal.id} meal={meal} gymId={gymId} onRefresh={refresh} />
+              <MealBlock key={meal.id} meal={meal} gymId={gymId} onRefresh={editingScheduled ? () => scheduledPlanQuery.refetch() : refresh} />
             ))}
           </div>
         )}
@@ -820,9 +852,9 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
 
           {/* Macros */}
           {[
-            { label: 'Grasa', value: totalG, target: activePlan.fats_g, color: 'bg-yellow-400', unit: 'g' },
-            { label: 'H. Carbono', value: totalC, target: activePlan.carbs_g, color: 'bg-red-400', unit: 'g' },
-            { label: 'Proteína', value: totalP, target: activePlan.protein_g, color: 'bg-blue-400', unit: 'g' },
+            { label: 'Grasa', value: totalG, target: currentPlan?.fats_g, color: 'bg-yellow-400', unit: 'g' },
+            { label: 'H. Carbono', value: totalC, target: currentPlan?.carbs_g, color: 'bg-red-400', unit: 'g' },
+            { label: 'Proteína', value: totalP, target: currentPlan?.protein_g, color: 'bg-blue-400', unit: 'g' },
           ].map(({ label, value, target, color, unit }) => (
             <div key={label} className="mb-3">
               <div className="flex justify-between items-baseline mb-1">
@@ -841,7 +873,11 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
           ))}
 
           <div className="mt-4 pt-3 border-t border-slate-100">
-            <p className="text-[10px] text-slate-400 text-center">Desde {fmtDate(assignment?.start_date)}</p>
+            <p className="text-[10px] text-slate-400 text-center">
+              {editingScheduled
+                ? `Inicia ${fmtDate(scheduledPlan?.start_date)}`
+                : `Desde ${fmtDate(assignment?.start_date)}`}
+            </p>
           </div>
         </div>
       </div>
@@ -884,6 +920,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
         <AssignPlanModal
           athleteId={athleteId}
           gymId={gymId}
+          hasActivePlan={!!activePlan}
           onAssigned={refresh}
           onClose={() => setAssignModalOpen(false)}
         />
@@ -900,12 +937,12 @@ function nextMonday(): string {
   return d.toISOString().split('T')[0]
 }
 
-function AssignPlanModal({ onClose, athleteId, gymId, onAssigned }: {
-  onClose: () => void; athleteId: string; gymId: string; onAssigned: () => void
+function AssignPlanModal({ onClose, athleteId, gymId, onAssigned, hasActivePlan = false }: {
+  onClose: () => void; athleteId: string; gymId: string; onAssigned: () => void; hasActivePlan?: boolean
 }) {
   const [tab, setTab]           = useState<'existing' | 'new'>('existing')
   const [selectedPlanId, setSel] = useState('')
-  const [startDate, setStartDate] = useState(nextMonday())
+  const [startDate, setStartDate] = useState(hasActivePlan ? nextMonday() : new Date().toISOString().split('T')[0])
   // New plan fields
   const [newName, setNewName]           = useState('')
   const [newPoints, setNewPoints]       = useState('100')
