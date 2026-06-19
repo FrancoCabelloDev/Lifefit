@@ -565,8 +565,8 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
           </div>
         )}
 
-        {/* Plan programado badge */}
-        {scheduledPlan && (
+        {/* Plan programado badge / botón programar */}
+        {scheduledPlan ? (
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl">
             <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
             <span className="text-xs font-semibold text-blue-700 truncate max-w-[160px]" title={scheduledPlan.plan_name}>
@@ -574,6 +574,14 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
             </span>
             <span className="text-xs text-blue-500">· {fmtDate(scheduledPlan.start_date)}</span>
           </div>
+        ) : (
+          <button
+            onClick={() => setAssignModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors"
+          >
+            <CalendarClock className="w-3.5 h-3.5" />
+            Programar siguiente semana
+          </button>
         )}
 
         {/* Botón aprobar semana */}
