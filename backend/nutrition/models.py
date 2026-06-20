@@ -79,6 +79,14 @@ class NutritionPlan(BaseModel):
     duration_days = models.PositiveIntegerField(default=7, help_text="Duración del plan en días (ej: 7, 14, 30)")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     points_reward = models.PositiveIntegerField(default=0, help_text="Puntos al completar el plan")
+    created_for = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="personal_nutrition_plans",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Si está seteado, es un plan personal de ese atleta y no aparece en la biblioteca.",
+    )
 
     class Meta:
         ordering = ["name"]

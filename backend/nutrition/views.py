@@ -46,9 +46,9 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
-            if user.gym_id:
-                return queryset.filter(global_or_user_gym_filter(user))
-            return queryset.filter(gym__isnull=True)
+            base = queryset.filter(global_or_user_gym_filter(user)) if user.gym_id else queryset.filter(gym__isnull=True)
+            # Library only shows template plans (created_for=null); personal plans stay in athlete profiles
+            return base.filter(created_for__isnull=True)
         if user.role == User.Role.ATHLETE:
             return queryset.filter(global_or_user_gym_filter(user), status=NutritionPlan.Status.ACTIVE)
         return queryset.filter(gym__isnull=True, status=NutritionPlan.Status.ACTIVE)
@@ -59,7 +59,16 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             serializer.save()
             return
         if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and user.gym_id:
-            serializer.save(gym=user.gym)
+            # created_for_id may be passed when creating a personal plan from athlete profile
+            created_for_id = self.request.data.get("created_for")
+            extra = {"gym": user.gym}
+            if created_for_id:
+                try:
+                    athlete = User.objects.get(id=created_for_id)
+                    extra["created_for"] = athlete
+                except User.DoesNotExist:
+                    pass
+            serializer.save(**extra)
             return
         raise PermissionDenied("No tienes permisos para crear planes.")
 

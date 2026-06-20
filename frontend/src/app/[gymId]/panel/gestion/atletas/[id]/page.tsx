@@ -1027,6 +1027,7 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned, hasActivePlan 
         calories_per_day: parseInt(newCal) || 2000,
         duration_days: parseInt(newDuration) || 7,
         status: 'active',
+        created_for: athleteId,
       })
       await api.post('/api/nutrition/assignments/', {
         user: athleteId, plan: plan.id, start_date: startDate,
