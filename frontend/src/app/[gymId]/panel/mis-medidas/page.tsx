@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, use } from 'react'
+import { useState, use, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Scale, Ruler, TrendingUp, ChevronDown, ChevronUp,
   Activity, Plus, X, Loader2, Target, CalendarDays, Save,
+  UserCircle, Stethoscope,
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -60,25 +61,29 @@ function RegisterModal({ open, onClose, onSuccess }: {
 }) {
   const [form, setForm] = useState<MeasForm>(EMPTY)
 
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) setForm(EMPTY)
+  }, [open])
+
   const set = (k: keyof MeasForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
 
   const mutation = useMutation({
     mutationFn: () => {
       const body: Record<string, any> = { measured_at: form.measured_at }
-      if (form.weight_kg)      body.weight_kg      = form.weight_kg
-      if (form.body_fat_pct)   body.body_fat_pct   = form.body_fat_pct
-      if (form.muscle_mass_kg) body.muscle_mass_kg = form.muscle_mass_kg
-      if (form.waist_cm)       body.waist_cm       = form.waist_cm
-      if (form.hip_cm)         body.hip_cm         = form.hip_cm
-      if (form.arm_cm)         body.arm_cm         = form.arm_cm
-      if (form.visceral_fat)   body.visceral_fat   = form.visceral_fat
-      if (form.notes)          body.notes          = form.notes
+      if (form.weight_kg)      body.weight_kg      = parseFloat(form.weight_kg)
+      if (form.body_fat_pct)   body.body_fat_pct   = parseFloat(form.body_fat_pct)
+      if (form.muscle_mass_kg) body.muscle_mass_kg = parseFloat(form.muscle_mass_kg)
+      if (form.waist_cm)       body.waist_cm       = parseFloat(form.waist_cm)
+      if (form.hip_cm)         body.hip_cm         = parseFloat(form.hip_cm)
+      if (form.arm_cm)         body.arm_cm         = parseFloat(form.arm_cm)
+      if (form.visceral_fat)   body.visceral_fat   = parseInt(form.visceral_fat)
+      if (form.notes.trim())   body.notes          = form.notes.trim()
       return api.post('/api/gyms/body-measurements/', body)
     },
     onSuccess: () => {
       showSuccess('Medida registrada')
-      setForm(EMPTY)
       onSuccess()
       onClose()
     },
@@ -86,13 +91,13 @@ function RegisterModal({ open, onClose, onSuccess }: {
   })
 
   const fields: { key: keyof MeasForm; label: string; unit: string; placeholder: string }[] = [
-    { key: 'weight_kg',      label: 'Peso',             unit: 'kg',  placeholder: 'ej: 72.5' },
-    { key: 'body_fat_pct',   label: 'Grasa corporal',   unit: '%',   placeholder: 'ej: 18.2' },
-    { key: 'muscle_mass_kg', label: 'Masa muscular',    unit: 'kg',  placeholder: 'ej: 35.0' },
-    { key: 'waist_cm',       label: 'Cintura',          unit: 'cm',  placeholder: 'ej: 80' },
-    { key: 'hip_cm',         label: 'Cadera',           unit: 'cm',  placeholder: 'ej: 95' },
-    { key: 'arm_cm',         label: 'Brazo',            unit: 'cm',  placeholder: 'ej: 32' },
-    { key: 'visceral_fat',   label: 'Grasa visceral',   unit: 'niv', placeholder: 'ej: 8' },
+    { key: 'weight_kg',      label: 'Peso',           unit: 'kg',  placeholder: 'ej: 72.5' },
+    { key: 'body_fat_pct',   label: 'Grasa corporal', unit: '%',   placeholder: 'ej: 18.2' },
+    { key: 'muscle_mass_kg', label: 'Masa muscular',  unit: 'kg',  placeholder: 'ej: 35.0' },
+    { key: 'waist_cm',       label: 'Cintura',        unit: 'cm',  placeholder: 'ej: 80'   },
+    { key: 'hip_cm',         label: 'Cadera',         unit: 'cm',  placeholder: 'ej: 95'   },
+    { key: 'arm_cm',         label: 'Brazo',          unit: 'cm',  placeholder: 'ej: 32'   },
+    { key: 'visceral_fat',   label: 'Grasa visceral', unit: 'niv', placeholder: 'ej: 8'    },
   ]
 
   const hasAnyValue = fields.some(f => form[f.key])
@@ -119,7 +124,7 @@ function RegisterModal({ open, onClose, onSuccess }: {
               value={form.measured_at}
               max={new Date().toISOString().slice(0, 10)}
               onChange={set('measured_at')}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
             />
           </div>
 
@@ -133,10 +138,11 @@ function RegisterModal({ open, onClose, onSuccess }: {
                 <input
                   type="number"
                   step="0.1"
+                  min="0"
                   value={form[f.key]}
                   onChange={set(f.key)}
                   placeholder={f.placeholder}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
                 />
               </div>
             ))}
@@ -152,25 +158,27 @@ function RegisterModal({ open, onClose, onSuccess }: {
               onChange={set('notes')}
               placeholder="Ej: Me medí en ayunas, después del baño..."
               rows={2}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none transition-colors"
             />
           </div>
 
           <p className="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2">
-            💡 Para mayor precisión: mídete en ayunas, en las mañanas, siempre a la misma hora.
+            Para mayor precisión: mídete en ayunas, en las mañanas, siempre a la misma hora.
           </p>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
+            Cancelar
+          </Button>
           <Button
             onClick={() => mutation.mutate()}
             disabled={!hasAnyValue || mutation.isPending}
-            className="bg-emerald-600 hover:bg-emerald-700"
+            className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] transition-transform"
           >
             {mutation.isPending
-              ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" /> Guardando...</>
-              : <><Scale className="w-4 h-4 mr-1.5" /> Guardar medidas</>
+              ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Guardando...</>
+              : <><Scale className="w-4 h-4 mr-1.5" />Guardar medidas</>
             }
           </Button>
         </DialogFooter>
@@ -187,12 +195,13 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
   const queryClient = useQueryClient()
   const [activeChart, setActiveChart] = useState<'weight' | 'fat' | 'waist'>('weight')
   const [registerOpen, setRegisterOpen] = useState(false)
-  const [goalWeight, setGoalWeight]       = useState('')
-  const [goalFat, setGoalFat]             = useState('')
-  const [goalDate, setGoalDate]           = useState('')
-  const [goalNotes, setGoalNotes]         = useState('')
-  const [goalSaved, setGoalSaved]         = useState(false)
+  const [goalWeight, setGoalWeight] = useState('')
+  const [goalFat, setGoalFat]       = useState('')
+  const [goalDate, setGoalDate]     = useState('')
+  const [goalNotes, setGoalNotes]   = useState('')
+  const [goalSaved, setGoalSaved]   = useState(false)
 
+  // my_history devuelve orden ascendente (más antigua primero) → último elemento = más reciente
   const historyQuery = useQuery({
     queryKey: ['my-measurements', gymId],
     queryFn: () => api.get<BodyMeasurement[]>('/api/gyms/body-measurements/my_history/'),
@@ -201,15 +210,17 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
   const goalQuery = useQuery({
     queryKey: ['my-goal', gymId],
     queryFn: () => api.get<any>('/api/gyms/athlete-goals/mine/'),
-    onSuccess: (data: any) => {
-      if (data) {
-        setGoalWeight(data.target_weight_kg ?? '')
-        setGoalFat(data.target_body_fat_pct ?? '')
-        setGoalDate(data.target_date ?? '')
-        setGoalNotes(data.notes ?? '')
-      }
-    },
-  } as any)
+  })
+
+  // Sincronizar goal al cargar (reemplaza el deprecado onSuccess)
+  useEffect(() => {
+    const data = goalQuery.data
+    if (!data) return
+    setGoalWeight(data.target_weight_kg ?? '')
+    setGoalFat(data.target_body_fat_pct ?? '')
+    setGoalDate(data.target_date ?? '')
+    setGoalNotes(data.notes ?? '')
+  }, [goalQuery.data])
 
   const saveGoalMutation = useMutation({
     mutationFn: () => api.patch('/api/gyms/athlete-goals/mine/', {
@@ -229,15 +240,18 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
 
   if (!user || user.role !== 'athlete') return null
 
-  const measurements = historyQuery.data || []
-  const latest = measurements[measurements.length - 1] ?? null
-  const prev   = measurements[measurements.length - 2] ?? null
+  // Ascendente: el último es el más reciente
+  const measurements = historyQuery.data ?? []
+  const latest = measurements.length > 0 ? measurements[measurements.length - 1] : null
+  const prev   = measurements.length > 1 ? measurements[measurements.length - 2] : null
+
+  const toNum = (v: string | null | undefined) => v ? parseFloat(v) : null
 
   const chartData = measurements.map(m => ({
     date:   fmtDate(m.measured_at),
-    weight: m.weight_kg      ? parseFloat(m.weight_kg as unknown as string)      : null,
-    fat:    m.body_fat_pct   ? parseFloat(m.body_fat_pct as unknown as string)   : null,
-    waist:  m.waist_cm       ? parseFloat(m.waist_cm as unknown as string)       : null,
+    weight: toNum(m.weight_kg),
+    fat:    toNum(m.body_fat_pct),
+    waist:  toNum(m.waist_cm),
   }))
 
   const CHART_LINES = {
@@ -248,10 +262,22 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
   const cl = CHART_LINES[activeChart]
 
   const summaryCards = latest ? [
-    { label: 'Peso',    value: latest.weight_kg    ? `${parseFloat(latest.weight_kg    as unknown as string)}` : '—', unit: 'kg', icon: Scale,     prevVal: prev?.weight_kg    ? parseFloat(prev.weight_kg    as unknown as string) : null, currVal: latest.weight_kg    ? parseFloat(latest.weight_kg    as unknown as string) : null },
-    { label: 'IMC',     value: latest.bmi          ? String(latest.bmi)                                              : '—', unit: '',   icon: Activity,  prevVal: prev?.bmi          ?? null,                                                      currVal: latest.bmi          ?? null },
-    { label: 'Grasa',   value: latest.body_fat_pct ? `${parseFloat(latest.body_fat_pct as unknown as string)}` : '—', unit: '%',  icon: TrendingUp, prevVal: prev?.body_fat_pct ? parseFloat(prev.body_fat_pct as unknown as string) : null, currVal: latest.body_fat_pct ? parseFloat(latest.body_fat_pct as unknown as string) : null },
-    { label: 'Cintura', value: latest.waist_cm     ? `${parseFloat(latest.waist_cm     as unknown as string)}` : '—', unit: 'cm', icon: Ruler,      prevVal: prev?.waist_cm     ? parseFloat(prev.waist_cm     as unknown as string) : null, currVal: latest.waist_cm     ? parseFloat(latest.waist_cm     as unknown as string) : null },
+    {
+      label: 'Peso',   value: latest.weight_kg    ? `${toNum(latest.weight_kg)}`    : '—', unit: 'kg', icon: Scale,
+      prevVal: toNum(prev?.weight_kg),    currVal: toNum(latest.weight_kg),
+    },
+    {
+      label: 'IMC',    value: latest.bmi           ? String(latest.bmi)               : '—', unit: '',   icon: Activity,
+      prevVal: prev?.bmi ?? null,          currVal: latest.bmi ?? null,
+    },
+    {
+      label: 'Grasa',  value: latest.body_fat_pct  ? `${toNum(latest.body_fat_pct)}`  : '—', unit: '%',  icon: TrendingUp,
+      prevVal: toNum(prev?.body_fat_pct), currVal: toNum(latest.body_fat_pct),
+    },
+    {
+      label: 'Cintura', value: latest.waist_cm     ? `${toNum(latest.waist_cm)}`      : '—', unit: 'cm', icon: Ruler,
+      prevVal: toNum(prev?.waist_cm),     currVal: toNum(latest.waist_cm),
+    },
   ] : []
 
   return (
@@ -264,12 +290,14 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
             Registra tu peso y medidas para ver tu evolución
           </p>
         </div>
-        <Button
+        <button
           onClick={() => setRegisterOpen(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white text-sm font-semibold transition-all shrink-0 shadow-sm shadow-emerald-200"
+          style={{ transition: 'transform 160ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
         >
-          <Plus className="w-4 h-4 mr-1.5" /> Registrar medidas
-        </Button>
+          <Plus className="w-4 h-4" />
+          Registrar medidas
+        </button>
       </div>
 
       {historyQuery.isLoading ? (
@@ -277,19 +305,25 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
           {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-slate-100 animate-pulse rounded-2xl" />)}
         </div>
       ) : measurements.length === 0 ? (
+        /* Empty state */
         <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 flex flex-col items-center gap-4 text-center px-6">
           <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
             <Ruler className="w-7 h-7 text-slate-300" />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-600">Aún no tienes medidas registradas</p>
+            <p className="text-sm font-semibold text-slate-700">Aún no tienes medidas registradas</p>
             <p className="text-xs text-slate-400 mt-1 max-w-xs">
               Puedes registrar tu peso hoy mismo. Tu nutricionista también puede tomar medidas más completas en consulta.
             </p>
           </div>
-          <Button onClick={() => setRegisterOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
-            <Plus className="w-4 h-4 mr-1.5" /> Registrar mi primer medida
-          </Button>
+          <button
+            onClick={() => setRegisterOpen(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white text-sm font-semibold transition-all"
+            style={{ transition: 'transform 160ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
+          >
+            <Plus className="w-4 h-4" />
+            Registrar mi primera medida
+          </button>
         </div>
       ) : (
         <>
@@ -324,7 +358,9 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
                     <button
                       key={k}
                       onClick={() => setActiveChart(k)}
-                      className={`px-3 h-7 text-[10px] font-medium transition-colors ${activeChart === k ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                      className={`px-3 h-7 text-[10px] font-medium transition-colors ${
+                        activeChart === k ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'
+                      }`}
                     >
                       {k === 'weight' ? 'Peso' : k === 'fat' ? 'Grasa' : 'Cintura'}
                     </button>
@@ -341,15 +377,21 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
                       contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 11 }}
                       formatter={(v: any) => [`${v}${cl.unit}`, cl.label]}
                     />
-                    <Line type="monotone" dataKey={cl.key} stroke={cl.color} strokeWidth={2}
-                      dot={{ r: 4, fill: cl.color, strokeWidth: 0 }} connectNulls />
+                    <Line
+                      type="monotone"
+                      dataKey={cl.key}
+                      stroke={cl.color}
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: cl.color, strokeWidth: 0 }}
+                      connectNulls
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
           )}
 
-          {/* History */}
+          {/* History — más reciente primero */}
           <div className="bg-white rounded-2xl border border-slate-100 p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-4">
               Historial
@@ -357,23 +399,44 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
             </h2>
             <div className="space-y-2">
               {[...measurements].reverse().map((m, i) => (
-                <div key={m.id} className={`rounded-xl border p-3.5 ${i === 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-100 bg-slate-50/30'}`}>
-                  <div className="flex items-center gap-2 mb-2">
+                <div
+                  key={m.id}
+                  className={`rounded-xl border p-3.5 transition-colors ${
+                    i === 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-100 bg-slate-50/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="text-xs font-semibold text-slate-900">{fmtDate(m.measured_at)}</span>
-                    {i === 0 && <Badge className="text-[9px] bg-emerald-100 text-emerald-700 border-0 px-1.5 py-0">Última</Badge>}
-                    {!m.nutritionist && <Badge className="text-[9px] bg-slate-100 text-slate-500 border-0 px-1.5 py-0">Auto-registrado</Badge>}
+                    {i === 0 && (
+                      <Badge className="text-[9px] bg-emerald-100 text-emerald-700 border-0 px-1.5 py-0">
+                        Última
+                      </Badge>
+                    )}
+                    {m.nutritionist ? (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-medium text-sky-600 bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0">
+                        <Stethoscope className="w-2.5 h-2.5" />
+                        {m.recorded_by ?? 'Nutricionista'}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-medium text-slate-500 bg-slate-100 rounded-full px-1.5 py-0">
+                        <UserCircle className="w-2.5 h-2.5" />
+                        Tú
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-x-5 gap-y-1">
-                    {m.weight_kg      && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Peso</span> {parseFloat(m.weight_kg as unknown as string)} kg</span>}
+                    {m.weight_kg      && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Peso</span> {toNum(m.weight_kg)} kg</span>}
                     {m.bmi            && <span className="text-[11px] text-slate-600"><span className="text-slate-400">IMC</span> {m.bmi}</span>}
-                    {m.body_fat_pct   && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Grasa</span> {parseFloat(m.body_fat_pct as unknown as string)}%</span>}
-                    {m.muscle_mass_kg && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Músculo</span> {parseFloat(m.muscle_mass_kg as unknown as string)} kg</span>}
-                    {m.waist_cm       && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Cintura</span> {parseFloat(m.waist_cm as unknown as string)} cm</span>}
-                    {m.hip_cm         && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Cadera</span> {parseFloat(m.hip_cm as unknown as string)} cm</span>}
-                    {m.arm_cm         && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Brazo</span> {parseFloat(m.arm_cm as unknown as string)} cm</span>}
+                    {m.body_fat_pct   && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Grasa</span> {toNum(m.body_fat_pct)}%</span>}
+                    {m.muscle_mass_kg && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Músculo</span> {toNum(m.muscle_mass_kg)} kg</span>}
+                    {m.waist_cm       && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Cintura</span> {toNum(m.waist_cm)} cm</span>}
+                    {m.hip_cm         && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Cadera</span> {toNum(m.hip_cm)} cm</span>}
+                    {m.arm_cm         && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Brazo</span> {toNum(m.arm_cm)} cm</span>}
                     {m.visceral_fat != null && <span className="text-[11px] text-slate-600"><span className="text-slate-400">Visceral</span> {m.visceral_fat}</span>}
                   </div>
-                  {m.notes && <p className="text-[10px] text-slate-400 mt-2 italic">"{m.notes}"</p>}
+                  {m.notes && (
+                    <p className="text-[10px] text-slate-400 mt-2 italic">"{m.notes}"</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -402,7 +465,7 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
               placeholder="ej. 75"
               value={goalWeight}
               onChange={e => setGoalWeight(e.target.value)}
-              className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+              className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
             />
           </div>
           <div>
@@ -417,7 +480,7 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
               placeholder="ej. 18"
               value={goalFat}
               onChange={e => setGoalFat(e.target.value)}
-              className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+              className="w-full h-9 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
             />
           </div>
           <div>
@@ -430,7 +493,7 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
                 type="date"
                 value={goalDate}
                 onChange={e => setGoalDate(e.target.value)}
-                className="w-full h-9 rounded-xl border border-slate-200 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                className="w-full h-9 rounded-xl border border-slate-200 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
               />
             </div>
           </div>
@@ -445,22 +508,26 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
             placeholder="Motivación, contexto de tu meta..."
             value={goalNotes}
             onChange={e => setGoalNotes(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
           />
         </div>
 
         <div className="flex items-center justify-between">
-          <span className={`text-xs transition-all duration-300 text-emerald-500 ${goalSaved ? 'opacity-100' : 'opacity-0'}`}>
+          <span
+            className="text-xs text-emerald-500 transition-opacity duration-300"
+            style={{ opacity: goalSaved ? 1 : 0 }}
+          >
             Meta guardada
           </span>
           <button
             onClick={() => saveGoalMutation.mutate()}
             disabled={saveGoalMutation.isPending}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm font-semibold transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white text-sm font-semibold transition-all disabled:opacity-50"
+            style={{ transition: 'transform 160ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
           >
             {saveGoalMutation.isPending
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...</>
-              : <><Save className="w-3.5 h-3.5" /> Guardar meta</>
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Guardando...</>
+              : <><Save className="w-3.5 h-3.5" />Guardar meta</>
             }
           </button>
         </div>

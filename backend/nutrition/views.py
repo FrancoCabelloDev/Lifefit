@@ -1047,15 +1047,17 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Esta semana ya fue aprobada."}, status=400)
 
         with transaction.atomic():
-            # Aprobar todos los logs pendientes con foto
             from datetime import timedelta
             today = date.today()
             week_start = today - timedelta(days=today.weekday())
+            # Usar el inicio real de la asignación si empezó después del lunes
+            effective_start = max(week_start, assignment.start_date)
 
             pending_logs = UserMealLog.objects.filter(
                 user=assignment.user,
                 meal_template__plan=assignment.plan,
-                date__gte=week_start,
+                date__gte=effective_start,
+                date__lte=today,
                 nutritionist_approved__isnull=True,
             ).exclude(photo="").exclude(photo__isnull=True)
 
@@ -1065,16 +1067,32 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
                 reviewed_at=timezone.now(),
             )
 
-            # Calcular compliance de la semana
-            total_templates = assignment.plan.meal_templates.count()
+            # Calcular compliance solo sobre los días transcurridos
+            _WEEKDAY_MAP = {
+                0: "monday", 1: "tuesday", 2: "wednesday", 3: "thursday",
+                4: "friday", 5: "saturday", 6: "sunday",
+            }
+            elapsed_weekdays = []
+            d = effective_start
+            while d <= today:
+                wd = _WEEKDAY_MAP.get(d.weekday())
+                if wd:
+                    elapsed_weekdays.append(wd)
+                d += timedelta(days=1)
+
+            due_templates = assignment.plan.meal_templates.filter(
+                weekday__in=elapsed_weekdays
+            ).count()
+
             completed_count = UserMealLog.objects.filter(
                 user=assignment.user,
                 meal_template__plan=assignment.plan,
-                date__gte=week_start,
+                date__gte=effective_start,
+                date__lte=today,
                 status=UserMealLog.MealLogStatus.COMPLETED,
             ).count()
 
-            compliance_pct = round((completed_count / total_templates * 100), 1) if total_templates else 0
+            compliance_pct = round((completed_count / due_templates * 100), 1) if due_templates else 0
 
             # Marcar semana como completada
             assignment.status = "completed"
@@ -1400,10 +1418,12 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             if scheduled_plan else None
         )
 
-        # ── Logs de la semana actual para cumplimiento
+        # ── Logs de la semana actual (lunes a hoy) para cumplimiento
+        week_start = today - timedelta(days=today.weekday())
         week_meals = UserMealLog.objects.filter(
             user_id=athlete_id,
-            date__gte=(today - timedelta(days=7)).isoformat(),
+            date__gte=week_start.isoformat(),
+            date__lte=today.isoformat(),
             status=UserMealLog.MealLogStatus.COMPLETED,
         ).select_related("meal_template").order_by("-date")
 

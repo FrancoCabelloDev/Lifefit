@@ -882,10 +882,19 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"])
     def self_assign(self, request):
-        """El atleta se autoasigna a un coach."""
+        """El atleta se autoasigna a un coach. Requiere Plan Premium."""
+        from core.permissions import get_athlete_tier
+
         user = request.user
         if user.role != User.Role.ATHLETE:
             return Response({"detail": "Solo los atletas pueden autoasignarse."}, status=status.HTTP_403_FORBIDDEN)
+
+        tier = get_athlete_tier(user)
+        if tier != "premium":
+            return Response(
+                {"detail": "Necesitas un Plan Premium activo para asignarte a un coach."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         coach_id = request.data.get("coach_id")
         if not coach_id:
@@ -915,6 +924,20 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             assignment.is_active = True
             assignment.gym_id = user.gym_id
             assignment.save(update_fields=["is_active", "gym_id"])
+
+        athlete_name = f"{user.first_name} {user.last_name}".strip() or user.email
+        gym = coach.gym
+
+        # Notificar al coach
+        create_notification(
+            recipient=coach,
+            notification_type=Notification.Type.SYSTEM,
+            title="Nuevo atleta asignado",
+            message=f"{athlete_name} te ha elegido como su coach.",
+            actor=user,
+            gym=gym,
+            link=f"/{gym.slug}/panel/entrenamiento/adherencia" if gym else None,
+        )
 
         pic_url = None
         if coach.profile_picture:
@@ -1825,6 +1848,11 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
             athlete = User.objects.filter(pk=athlete_id, gym_id=user.gym_id, role="athlete").first()
             if not athlete:
                 raise DRFValidationError({"athlete": "Atleta no encontrado o no pertenece a este gimnasio."})
+            # Verificar que el nutricionista tenga una asignación activa con el atleta
+            if not NutritionistAssignment.objects.filter(
+                nutritionist=nutritionist, athlete=athlete, gym=gym, is_active=True
+            ).exists():
+                raise PermissionDenied("No tienes una asignación activa con este atleta.")
         else:
             assignment = NutritionistAssignment.objects.filter(
                 athlete=user, gym_id=user.gym_id, is_active=True
@@ -1978,18 +2006,23 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import ValidationError as DRFValidationError
             raise DRFValidationError({"detail": "Esta cita ya no se puede cancelar."})
 
+        reason = request.data.get("reason", "").strip()
+
         appt.status = NutritionistAppointment.Status.CANCELLED
         appt.cancelled_by = user.role
-        appt.save(update_fields=["status", "cancelled_by", "updated_at"])
+        appt.reschedule_note = reason
+        appt.save(update_fields=["status", "cancelled_by", "reschedule_note", "updated_at"])
         gym = appt.gym
+
+        reason_suffix = f" Motivo: {reason}" if reason else ""
 
         if user.role == "athlete":
             recipient = appt.nutritionist
-            msg = f"{user.first_name} {user.last_name} canceló su cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}."
+            msg = f"{user.first_name} {user.last_name} canceló su cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}.{reason_suffix}"
             link = f"/{gym.id}/panel/agenda"
         else:
             recipient = appt.athlete
-            msg = f"Tu nutricionista {user.first_name} {user.last_name} canceló la cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}."
+            msg = f"Tu nutricionista {user.first_name} {user.last_name} canceló la cita del {appt.scheduled_at.strftime('%d/%m/%Y %H:%M')}.{reason_suffix}"
             link = f"/{gym.id}/panel/mis-citas"
 
         create_notification(
@@ -2204,11 +2237,11 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
 
         new_clients_this_month = NutritionistAssignment.objects.filter(
             nutritionist=user, gym_id=user.gym_id,
-            assigned_at__date__gte=month_ago,
+            is_active=True, assigned_at__date__gte=month_ago,
         ).count()
         new_clients_prev = NutritionistAssignment.objects.filter(
             nutritionist=user, gym_id=user.gym_id,
-            assigned_at__date__gte=prev_month_start,
+            is_active=True, assigned_at__date__gte=prev_month_start,
             assigned_at__date__lt=month_ago,
         ).count()
 
@@ -2273,6 +2306,11 @@ class NutritionistMessageViewSet(viewsets.ModelViewSet):
         except Gym.DoesNotExist:
             raise PermissionDenied("Gimnasio no encontrado.")
         if user.role == "nutritionist":
+            athlete_id = serializer.validated_data.get("athlete")
+            if athlete_id and not NutritionistAssignment.objects.filter(
+                nutritionist=user, athlete_id=athlete_id, gym=gym, is_active=True
+            ).exists():
+                raise PermissionDenied("Este atleta no está asignado a ti.")
             serializer.save(nutritionist=user, gym=gym, sender_is_nutritionist=True)
         elif user.role == "athlete":
             nutri_assign = NutritionistAssignment.objects.filter(
@@ -2295,7 +2333,6 @@ class NutritionistMessageViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Solo para nutricionistas."}, status=403)
 
         from django.db.models import Max, Count, OuterRef, Subquery
-        from django.db.models.functions import Substr
 
         qs = self.get_queryset()
 
@@ -2372,6 +2409,8 @@ class BodyMeasurementViewSet(viewsets.ModelViewSet):
         return BodyMeasurement.objects.none()
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
         user = self.request.user
         if user.role not in {"nutritionist", "gym_admin", "super_admin", "athlete"}:
             raise PermissionDenied("No tienes permiso para registrar medidas.")
@@ -2381,15 +2420,16 @@ class BodyMeasurementViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Gimnasio no encontrado.")
 
         if user.role == "athlete":
-            # El atleta solo puede registrar sus propias medidas, sin nutritionist
             serializer.save(athlete=user, gym=gym)
         else:
-            # Nutricionista registra para un atleta específico
             athlete_id = self.request.data.get("athlete")
             if not athlete_id:
-                from rest_framework.exceptions import ValidationError as DRFValidationError
                 raise DRFValidationError({"athlete": "Se requiere el atleta."})
-            serializer.save(nutritionist=user, gym=gym)
+            try:
+                athlete = User.objects.get(id=athlete_id, gym_id=user.gym_id, role="athlete")
+            except User.DoesNotExist:
+                raise DRFValidationError({"athlete": "Atleta no encontrado en este gimnasio."})
+            serializer.save(nutritionist=user, athlete=athlete, gym=gym)
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -3033,11 +3073,11 @@ class CoachMessageViewSet(viewsets.ModelViewSet):
         Usado en el frontend para mostrar todos los atletas (incluso sin mensajes previos).
         """
         user = request.user
-        if user.role != User.Role.COACH:
-            return Response({"detail": "Solo para coaches."}, status=403)
+        if user.role not in {User.Role.COACH, User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN}:
+            return Response({"detail": "No tienes permisos."}, status=403)
         assignments = (
             CoachAssignment.objects
-            .filter(coach=user, is_active=True)
+            .filter(coach=user, is_active=True, gym_id=user.gym_id)
             .select_related("athlete")
         )
         results = [

@@ -367,6 +367,7 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
       setAllWeekLogs(arr)
     } catch (err) {
       console.error('[mi-nutricion] fetchWeekLogs error:', err)
+      setAllWeekLogs([])
     }
   }
 
@@ -430,10 +431,11 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
     : undefined
 
   // Día X de Y basado en start_date del plan activo
+  const planDuration = (plan?.duration_days ?? 7) || 7
   const dayInWeek = assignment?.start_date
     ? Math.min(
         Math.max(Math.floor((Date.now() - new Date(assignment.start_date).getTime()) / 86400000) + 1, 1),
-        plan?.duration_days ?? 7,
+        planDuration,
       )
     : null
 
@@ -448,7 +450,7 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
     : 0
 
   const missingCount  = dueMealIds.filter(id => !loggedMealIds.has(id)).length
-  const canRequestReview = dueMealIds.length > 0 && missingCount === 0 && !reviewRequestedAt && !isOverdue
+  const canRequestReview = dueMealIds.length > 0 && missingCount === 0 && !reviewRequestedAt
 
   const reviewButtonTooltip = reviewRequestedAt
     ? `Enviado el ${new Date(reviewRequestedAt).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`

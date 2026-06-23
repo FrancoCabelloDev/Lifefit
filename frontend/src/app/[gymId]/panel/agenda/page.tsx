@@ -948,7 +948,6 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status, reason }: { id: string; status: string; reason?: string }) => {
-      if (status === 'accept_reschedule') return
       if (status === 'reject_reschedule') {
         return api.post(`/api/gyms/appointments/${id}/reject-reschedule/`, {})
       }
@@ -992,23 +991,22 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
     onError: (err) => showError(err, 'No se pudo actualizar la cita'),
   })
 
-  const handleRescheduleAccept = async () => {
-    if (!rescheduleAppt || !newScheduledAt) return
-    setRescheduleSubmitting(true)
-    try {
-      await api.post(`/api/gyms/appointments/${rescheduleAppt.id}/accept-reschedule/`, {
-        scheduled_at: newScheduledAt,
-      })
+  const acceptRescheduleMutation = useMutation({
+    mutationFn: ({ id, scheduled_at }: { id: string; scheduled_at: string }) =>
+      api.post(`/api/gyms/appointments/${id}/accept-reschedule/`, { scheduled_at }),
+    onSuccess: () => {
       showSuccess('Cita reprogramada')
       invalidateAppts()
       setRescheduleAppt(null)
       setSelectedAppt(null)
       setNewScheduledAt('')
-    } catch (err) {
-      showError(err, 'No se pudo reprogramar la cita')
-    } finally {
-      setRescheduleSubmitting(false)
-    }
+    },
+    onError: (err) => showError(err, 'No se pudo reprogramar la cita'),
+  })
+
+  const handleRescheduleAccept = () => {
+    if (!rescheduleAppt || !newScheduledAt) return
+    acceptRescheduleMutation.mutate({ id: rescheduleAppt.id, scheduled_at: newScheduledAt })
   }
 
   const daysInMonth  = getDaysInMonth(viewDate.year, viewDate.month)
@@ -1119,10 +1117,10 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
             </Button>
             <Button
               onClick={handleRescheduleAccept}
-              disabled={!newScheduledAt || rescheduleSubmitting}
+              disabled={!newScheduledAt || acceptRescheduleMutation.isPending}
               className="bg-amber-500 hover:bg-amber-600 text-white"
             >
-              {rescheduleSubmitting
+              {acceptRescheduleMutation.isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" /> Guardando...</>
                 : <><CalendarClock className="w-4 h-4 mr-1.5" /> Confirmar nuevo horario</>
               }

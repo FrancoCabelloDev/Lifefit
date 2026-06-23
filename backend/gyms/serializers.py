@@ -375,7 +375,8 @@ class BodyMeasurementSerializer(serializers.ModelSerializer):
             "waist_cm", "hip_cm", "arm_cm", "visceral_fat", "notes",
             "bmi", "recorded_by", "created_at",
         ]
-        read_only_fields = ["id", "nutritionist", "gym", "bmi", "recorded_by", "created_at"]
+        # athlete y nutritionist se asignan en perform_create, nunca desde el cliente
+        read_only_fields = ["id", "athlete", "nutritionist", "gym", "bmi", "recorded_by", "created_at"]
 
     def get_bmi(self, obj):
         return obj.bmi

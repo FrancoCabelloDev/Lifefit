@@ -56,6 +56,7 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
   const threadsQuery = useQuery({
     queryKey: ['coach-message-threads', gymId],
     queryFn: () => api.get<CoachThread[]>('/api/gyms/coach-messages/threads/'),
+    enabled: user?.role === 'coach',
     refetchInterval: 15000,
   })
 
@@ -64,6 +65,7 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
     queryFn: () => api.get<{ results: Array<{ id: string; first_name: string; last_name: string; email: string }> }>(
       '/api/gyms/coach-messages/my_athletes/'
     ),
+    enabled: user?.role === 'coach',
   })
 
   const messagesQuery = useQuery({
@@ -130,6 +132,7 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
   )
 
   const isLoading = threadsQuery.isLoading || assignedAthletesQuery.isLoading
+  const isError = threadsQuery.isError || assignedAthletesQuery.isError
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
@@ -166,6 +169,12 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-14 bg-slate-100 animate-pulse rounded-xl" />
                   ))}
+                </div>
+              ) : isError ? (
+                <div className="flex flex-col items-center justify-center h-full gap-2 p-4 text-center">
+                  <MessageSquare className="w-8 h-8 text-rose-200" />
+                  <p className="text-xs text-rose-400">Error al cargar</p>
+                  <p className="text-[10px] text-slate-400">Intenta recargar la página</p>
                 </div>
               ) : threads.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2 p-4 text-center">
@@ -281,7 +290,7 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
                   />
                   <button
                     type="submit"
-                    disabled={!newMessage.trim() || sendMutation.isPending}
+                    disabled={!newMessage.trim() || !selectedThread || sendMutation.isPending}
                     className="w-9 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white flex items-center justify-center transition-all active:scale-95"
                   >
                     <Send className="w-4 h-4" />
@@ -309,12 +318,11 @@ function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }
   })
 
   const sendMutation = useMutation({
-    mutationFn: (body: string) => api.post('/api/gyms/coach-messages/', { body }),
+    mutationFn: (body: string) => api.post('/api/gyms/coach-messages/', { athlete: user.id, body }),
     onSuccess: () => {
       setNewMessage('')
       queryClient.invalidateQueries({ queryKey: ['athlete-coach-messages', gymId] })
     },
-    onError: () => {},
   })
 
   useEffect(() => {
@@ -384,7 +392,7 @@ function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }
 
         <div className="border-t border-slate-100">
           {sendMutation.isError && (
-            <p className="px-3 pt-2 text-xs text-rose-500">No tienes coach asignado. Ve al Directorio para elegir uno.</p>
+            <p className="px-3 pt-2 text-xs text-rose-500">{(sendMutation.error as any)?.data?.detail ?? 'No tienes coach asignado. Ve al Directorio para elegir uno.'}</p>
           )}
           <form onSubmit={handleSend} className="p-3 flex items-center gap-2">
             <Input

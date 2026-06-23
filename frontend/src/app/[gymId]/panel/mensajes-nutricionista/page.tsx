@@ -297,7 +297,7 @@ export default function MensajesPage({ params }: { params: Promise<{ gymId: stri
                   />
                   <button
                     type="submit"
-                    disabled={!newMessage.trim() || sendMutation.isPending}
+                    disabled={!newMessage.trim() || !selectedContact || sendMutation.isPending}
                     className="w-9 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white flex items-center justify-center transition-all active:scale-95"
                   >
                     <Send className="w-4 h-4" />
@@ -426,7 +426,7 @@ function AthleteMessagesView({ gymId, user }: { gymId: string; user: User }) {
         <div className="border-t border-slate-100">
           {sendMutation.isError && (
             <p className="px-3 pt-2 text-xs text-rose-500">
-              No tienes nutricionista asignado. Contacta a tu gimnasio.
+              {(sendMutation.error as any)?.data?.detail ?? 'No tienes nutricionista asignado. Contacta a tu gimnasio.'}
             </p>
           )}
           <form onSubmit={handleSend} className="p-3 flex items-center gap-2">

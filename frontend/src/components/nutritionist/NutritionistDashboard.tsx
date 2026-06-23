@@ -23,18 +23,24 @@ import type {
   NutritionistMessage,
 } from '@/lib/types'
 
-function formatTime(dateStr: string) {
+function formatTime(dateStr: string | null | undefined) {
+  if (!dateStr) return '--'
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '--'
   return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatDateFull(dateStr: string) {
+function formatDateFull(dateStr: string | null | undefined) {
+  if (!dateStr) return '--'
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '--'
   return d.toLocaleDateString('es', { day: 'numeric', month: 'long' })
 }
 
-function formatRelative(dateStr: string) {
+function formatRelative(dateStr: string | null | undefined) {
+  if (!dateStr) return ''
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
   const now = new Date()
   const diffMs = now.getTime() - d.getTime()
   const diffMins = Math.floor(diffMs / 60000)
@@ -130,36 +136,36 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'cancelled' | 'messages'>('cancelled')
 
-  const { data: nd, isLoading: ndLoading } = useQuery({
+  const { data: nd, isLoading: ndLoading, isError: ndError } = useQuery({
     queryKey: ['nutritionist-dashboard', gymId],
     queryFn: () => api.get<NutritionistDashboard>('/api/gyms/nutritionist-assignments/dashboard/'),
   })
 
-  const { data: appointmentStats, isLoading: statsLoading } = useQuery({
+  const { data: appointmentStats, isLoading: statsLoading, isError: statsError } = useQuery({
     queryKey: ['appointment-stats', gymId],
     queryFn: () => api.get<NutritionistAppointmentStats>('/api/gyms/appointments/dashboard_stats/'),
     staleTime: 60000,
   })
 
-  const { data: nextAppointment } = useQuery({
+  const { data: nextAppointment, isError: nextError } = useQuery({
     queryKey: ['next-appointment', gymId],
     queryFn: () => api.get<NutritionistAppointment | null>('/api/gyms/appointments/next/'),
     refetchInterval: 60000,
   })
 
-  const { data: upcomingAppointments, isLoading: upcomingLoading } = useQuery({
+  const { data: upcomingAppointments, isLoading: upcomingLoading, isError: upcomingError } = useQuery({
     queryKey: ['upcoming-appointments', gymId],
     queryFn: () => api.get<NutritionistAppointment[]>('/api/gyms/appointments/upcoming/'),
     refetchInterval: 60000,
   })
 
-  const { data: recentMessages } = useQuery({
+  const { data: recentMessages, isError: messagesError } = useQuery({
     queryKey: ['recent-messages', gymId],
     queryFn: () => api.get<NutritionistMessage[]>('/api/gyms/messages/recent/'),
     refetchInterval: 30000,
   })
 
-  const { data: pendingPhotos } = useQuery({
+  const { data: pendingPhotos, isError: photosError } = useQuery({
     queryKey: ['pending-photos', gymId],
     queryFn: () => api.get<any>('/api/nutrition/meal-logs/pending-approvals/'),
     refetchInterval: 60000,
@@ -185,6 +191,8 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
   const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
 
   const upcoming = (upcomingAppointments || []).filter(a => a.id !== nextAppointment?.id).slice(0, 5)
+
+  const anyError = ndError || statsError || nextError || upcomingError || messagesError || photosError
 
   if (ndLoading) {
     return (
@@ -225,6 +233,14 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
           Nueva cita
         </button>
       </div>
+
+      {/* Error banner */}
+      {anyError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5 text-xs text-rose-700 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span>Algunas secciones no pudieron cargarse. Intenta recargar la página.</span>
+        </div>
+      )}
 
       {/* Main layout: left content + right stats */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">

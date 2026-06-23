@@ -147,7 +147,7 @@ function CancelModal({
   const handleConfirm = async () => {
     setSaving(true)
     try {
-      await api.post(`/api/gyms/appointments/${appt.id}/cancel/`, {})
+      await api.post(`/api/gyms/appointments/${appt.id}/cancel/`, { reason })
       showSuccess('Cita cancelada')
       onSuccess()
       onClose()
