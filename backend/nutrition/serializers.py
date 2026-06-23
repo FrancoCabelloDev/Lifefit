@@ -233,6 +233,7 @@ class NutritionMealSerializer(serializers.ModelSerializer):
 
 class UserNutritionPlanSerializer(serializers.ModelSerializer):
     plan_detail = NutritionPlanSerializer(source="plan", read_only=True)
+    assigned_by_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = UserNutritionPlan
@@ -242,11 +243,19 @@ class UserNutritionPlanSerializer(serializers.ModelSerializer):
             "plan",
             "plan_detail",
             "assigned_by",
+            "assigned_by_name",
             "start_date",
             "end_date",
             "status",
             "compliance_percentage",
+            "review_requested_at",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "plan_detail"]
+        read_only_fields = ["id", "review_requested_at", "created_at", "updated_at", "plan_detail", "assigned_by_name"]
+
+    def get_assigned_by_name(self, obj):
+        if obj.assigned_by:
+            name = f"{obj.assigned_by.first_name} {obj.assigned_by.last_name}".strip()
+            return name or obj.assigned_by.email
+        return None

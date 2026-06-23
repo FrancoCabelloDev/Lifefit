@@ -1,13 +1,13 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Dumbbell, Apple, Target, Award, Zap,
   UserCheck, AlertTriangle, Activity, Ruler, Scale,
-  Calendar, CalendarClock, CheckCircle2, Clock, Star, MessageSquare,
-  UtensilsCrossed, Plus, Loader2, ChevronLeft, ChevronRight,
+  Calendar, CalendarClock, CheckCircle2, Clock, Star, MessageSquare, Bell,
+  UtensilsCrossed, Plus, Loader2, ChevronLeft, ChevronRight, ChevronDown,
   Search, Trash2, X, Flame, Camera, Pencil, Check,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -33,7 +33,7 @@ function fmt(val: any, unit = '') {
 
 function fmtDate(d: string | null) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(d + 'T12:00').toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function fmtDateTime(d: string | null) {
@@ -351,18 +351,25 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   athleteId: string; gymId: string; membership_tier: string | null
 }) {
   const queryClient = useQueryClient()
-  const [innerTab, setInnerTab]           = useState<'plan' | 'logs'>('plan')
-  const [editingScheduled, setEditingScheduled] = useState(false)
+  const [innerTab, setInnerTab]                 = useState<'plan' | 'logs'>('plan')
+  const [selectedChainWeekId, setSelectedChainWeekId] = useState<string | null>(null)
   const [editingScheduledDate, setEditingScheduledDate] = useState(false)
   const [scheduledDateInput, setScheduledDateInput] = useState('')
-  const [selectedDay, setSelectedDay]     = useState<string | number>(1)
-  const [assignModalOpen, setAssignModalOpen] = useState(false)
-  const [addDayOpen, setAddDayOpen]       = useState(false)
-  const [addingDay, setAddingDay]         = useState(false)
+  const [selectedDay, setSelectedDay]           = useState<string | number>(1)
+  const [assignModalOpen, setAssignModalOpen]   = useState(false)
+  const [addDayOpen, setAddDayOpen]             = useState(false)
+  const [addingDay, setAddingDay]               = useState(false)
   const [removeDayConfirm, setRemoveDayConfirm] = useState(false)
-  const [removingDay, setRemovingDay]     = useState(false)
-  const [lightbox, setLightbox]           = useState<string | null>(null)
-  const [approveConfirm, setApproveConfirm] = useState(false)
+  const [removingDay, setRemovingDay]           = useState(false)
+  const [lightbox, setLightbox]                 = useState<string | null>(null)
+  const [approveConfirm, setApproveConfirm]     = useState(false)
+  const [rejectConfirm, setRejectConfirm]       = useState(false)
+  const [rejectReason, setRejectReason]         = useState('')
+  const [weekEvCache, setWeekEvCache]           = useState<Record<string, any[]>>({})
+  const [weekEvLoading, setWeekEvLoading]       = useState<string | null>(null)
+  const [editingPlanName, setEditingPlanName]   = useState(false)
+  const [planNameInput, setPlanNameInput]       = useState('')
+  const [deleteWeekConfirm, setDeleteWeekConfirm] = useState(false)
 
   const nutritionQuery = useQuery({
     queryKey: ['athlete-nutrition', athleteId],
@@ -396,11 +403,32 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     onSuccess: (data: any) => {
       showSuccess(data?.detail ?? `Semana aprobada. ${data?.points_awarded ?? 0} puntos otorgados.`)
       setApproveConfirm(false)
+      setSelectedChainWeekId(null)
       queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
       queryClient.invalidateQueries({ queryKey: ['athlete-week-logs', athleteId] })
-      setAssignModalOpen(true)
     },
-    onError: (err) => showError(err, 'Error al aprobar la semana'),
+    onError: (err: any) => {
+      const msg = err?.detail ?? err?.response?.data?.detail ?? ''
+      if (msg.includes('ya fue aprobada')) {
+        showSuccess('Esta semana ya estaba aprobada.')
+        setApproveConfirm(false)
+        queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+      } else {
+        showError(err, 'Error al aprobar la semana')
+      }
+    },
+  })
+
+  const rejectWeekMutation = useMutation({
+    mutationFn: ({ assignmentId, reason }: { assignmentId: string; reason: string }) =>
+      api.post<any>(`/api/nutrition/assignments/${assignmentId}/reject-week/`, { reason }),
+    onSuccess: () => {
+      showSuccess('Semana rechazada. El atleta puede volver a enviar su solicitud.')
+      setRejectConfirm(false)
+      setRejectReason('')
+      queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+    },
+    onError: (err) => showError(err, 'Error al rechazar la semana'),
   })
 
   const updateScheduledDateMutation = useMutation({
@@ -414,10 +442,52 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     onError: (err) => showError(err, 'Error al actualizar la fecha'),
   })
 
+  const renamePlanMutation = useMutation({
+    mutationFn: ({ planId, name }: { planId: string; name: string }) =>
+      api.patch(`/api/nutrition/plans/${planId}/`, { name }),
+    onSuccess: () => {
+      showSuccess('Nombre actualizado')
+      setEditingPlanName(false)
+      queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+    },
+    onError: (err) => showError(err, 'Error al renombrar el plan'),
+  })
+
+  const deleteWeekMutation = useMutation({
+    mutationFn: async ({ assignmentId, planId }: { assignmentId: string; planId: string }) => {
+      await api.delete(`/api/nutrition/assignments/${assignmentId}/`)
+      // Also remove the personal plan (best effort — ignore failure)
+      try { await api.delete(`/api/nutrition/plans/${planId}/`) } catch {}
+    },
+    onSuccess: () => {
+      showSuccess('Semana eliminada')
+      setDeleteWeekConfirm(false)
+      setSelectedChainWeekId(null)
+      queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
+    },
+    onError: (err) => showError(err, 'Error al eliminar la semana'),
+  })
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['athlete-nutrition', athleteId] })
     queryClient.invalidateQueries({ queryKey: ['athlete-week-logs', athleteId] })
   }
+
+  const fetchWeekEvidence = useCallback(async (week: any) => {
+    const aid = week.assignment_id
+    if (weekEvCache[aid] !== undefined) return
+    setWeekEvLoading(aid)
+    try {
+      const res = await api.get<any>(
+        `/api/nutrition/assignments/week-logs/?athlete_id=${athleteId}&assignment_id=${aid}`,
+      )
+      setWeekEvCache(prev => ({ ...prev, [aid]: res.logs ?? [] }))
+    } catch {
+      setWeekEvCache(prev => ({ ...prev, [aid]: [] }))
+    } finally {
+      setWeekEvLoading(null)
+    }
+  }, [athleteId, weekEvCache])
 
   if (nutritionQuery.isLoading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
@@ -449,43 +519,39 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const activePlan = nutData?.active_plan?.plan_detail ?? null
   const assignment = nutData?.active_plan ?? null
   const completedWeeks: number = nutData?.completed_weeks ?? 0
+  const weekNumber: number = nutData?.week_number ?? 1
+  const totalWeeks: number = nutData?.total_weeks ?? 0
+  const chain: any[] = nutData?.chain ?? []
   const scheduledPlan = nutData?.scheduled_plan ?? null
+  const reviewRequestedAt: string | null = assignment?.review_requested_at ?? null
+  const isOverdue: boolean = nutData?.overdue?.is_overdue ?? false
+  const daysOverdue: number = nutData?.overdue?.days_overdue ?? 0
+  const weekDeadline: string | null = nutData?.overdue?.week_deadline ?? null
 
-  // Which plan is currently being edited
-  const editingPlan = editingScheduled
-    ? (scheduledPlanQuery.data ?? null)
-    : activePlan
+  // ── Viewing week derivations ─────────────────────────────────────────────
+  const activeChainWeekId  = chain.find((w: any) => w.status === 'active')?.assignment_id ?? null
+  const viewingWeekId      = selectedChainWeekId ?? activeChainWeekId
+  const viewingWeek        = chain.find((w: any) => w.assignment_id === viewingWeekId) ?? chain[0] ?? null
+  const isViewingActive    = viewingWeek?.status === 'active'
+  const isViewingScheduled = viewingWeek?.status === 'scheduled'
+  const isViewingCompleted = viewingWeek?.status === 'completed'
+  const editingScheduled   = isViewingScheduled
 
-  if (!activePlan) {
+  // Mostrar empty state solo cuando no hay ninguna semana (ni completadas)
+  if (!activePlan && chain.length === 0) {
     return (
       <>
-        {/* Scheduled plan banner (even when no active plan) */}
-        {scheduledPlan && (
-          <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 mb-4">
-            <CalendarClock className="w-5 h-5 text-blue-500 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-blue-800">Próxima semana programada</p>
-              <p className="text-xs text-blue-600 mt-0.5 truncate">
-                <span className="font-medium">{scheduledPlan.plan_name}</span> · inicia el {fmtDate(scheduledPlan.start_date)}
-              </p>
-            </div>
-          </div>
-        )}
         <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-4 text-center">
           <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
             <UtensilsCrossed className="w-7 h-7 text-slate-300" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-700">Sin plan nutricional activo</p>
-            <p className="text-xs text-slate-400 mt-1">
-              {scheduledPlan ? 'El plan programado se activará automáticamente en su fecha.' : 'Asigna un plan para comenzar a construirlo.'}
-            </p>
+            <p className="text-sm font-semibold text-slate-700">Sin plan nutricional</p>
+            <p className="text-xs text-slate-400 mt-1">Asigna un plan para comenzar a construirlo.</p>
           </div>
-          {!scheduledPlan && (
-            <Button onClick={() => setAssignModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
-              <Plus className="w-4 h-4" /> Asignar plan nutricional
-            </Button>
-          )}
+          <Button onClick={() => setAssignModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+            <Plus className="w-4 h-4" /> Asignar plan nutricional
+          </Button>
         </div>
         {assignModalOpen && (
           <AssignPlanModal
@@ -499,6 +565,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     )
   }
 
+  const editingPlan = editingScheduled ? (scheduledPlanQuery.data ?? null) : activePlan
   const currentPlan = editingPlan ?? activePlan
   const mealsByDay: Record<string, any[]> = currentPlan?.meals_by_day || {}
   const addedWeekdays = WEEKDAY_ORDER.filter(d => mealsByDay[d] && mealsByDay[d].length > 0)
@@ -559,35 +626,258 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     logsByDate[log.date].push(log)
   }
 
-  return (
-    <div className="space-y-4">
+  // Evidence for completed/active week sidebar selection
+  const viewingLogs: any[] = isViewingActive
+    ? weekLogs
+    : (weekEvCache[viewingWeekId ?? ''] ?? [])
 
-      {/* Tabs internas: Plan / Evidencias */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Plan switcher: semana actual vs siguiente */}
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          <button
-            onClick={() => { setEditingScheduled(false); setInnerTab('plan'); setSelectedDay(1) }}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              !editingScheduled && innerTab === 'plan' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Esta semana
-          </button>
-          {scheduledPlan && (
+  const viewingLogsByDate: Record<string, any[]> = {}
+  for (const log of viewingLogs) {
+    if (!viewingLogsByDate[log.date]) viewingLogsByDate[log.date] = []
+    viewingLogsByDate[log.date].push(log)
+  }
+  const viewingPendingPhotos = viewingLogs.filter(
+    (l: any) => l.photo_url && l.nutritionist_approved === null
+  ).length
+
+  const handleSelectWeek = (week: any) => {
+    setSelectedChainWeekId(week.assignment_id)
+    setSelectedDay(1)
+    // Set default tab: active→plan, completed→logs, scheduled→plan
+    if (week.status === 'completed') {
+      setInnerTab('logs')
+      if (weekEvCache[week.assignment_id] === undefined) fetchWeekEvidence(week)
+    } else {
+      setInnerTab('plan')
+    }
+  }
+
+  return (
+    <>
+    <div className="flex rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm" style={{ minHeight: '560px' }}>
+
+      {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
+      {chain.length > 0 && (
+        <div className="w-[192px] shrink-0 flex flex-col bg-slate-50" style={{ borderRight: '1.5px solid #e2e8f0' }}>
+
+          {/* Sidebar header */}
+          <div className="px-4 py-3 border-b border-slate-200 bg-white">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em]">
+              Programa · {totalWeeks} sem.
+            </p>
+          </div>
+
+          {/* Week rows */}
+          <div className="flex-1 overflow-y-auto py-2 space-y-px">
+            {chain.map((week: any) => {
+              const wActive    = week.status === 'active'
+              const wCompleted = week.status === 'completed'
+              const wScheduled = week.status === 'scheduled'
+              const isSelected = week.assignment_id === viewingWeekId
+
+              return (
+                <button
+                  key={week.assignment_id}
+                  onClick={() => handleSelectWeek(week)}
+                  className={[
+                    'w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-all duration-150 relative',
+                    isSelected
+                      ? 'bg-white shadow-sm'
+                      : 'hover:bg-white/80',
+                  ].join(' ')}
+                >
+                  {/* Active selection bar */}
+                  {isSelected && (
+                    <div className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full bg-emerald-500" />
+                  )}
+
+                  {/* Status dot */}
+                  <div className="shrink-0">
+                    {wCompleted ? (
+                      <div className="w-[18px] h-[18px] rounded-full bg-emerald-500 flex items-center justify-center">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-white" />
+                      </div>
+                    ) : wActive ? (
+                      <div className="w-[18px] h-[18px] rounded-full border-2 border-emerald-500 bg-emerald-50 flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      </div>
+                    ) : (
+                      <div className="w-[18px] h-[18px] rounded-full border-2 border-slate-200 bg-white" />
+                    )}
+                  </div>
+
+                  {/* Week info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className={`text-[11px] font-semibold leading-tight truncate ${
+                        wActive ? 'text-emerald-700' : isSelected ? 'text-slate-900' : 'text-slate-600'
+                      }`}>
+                        Semana {week.week_number}
+                      </span>
+                      {wActive && week.review_requested_at && (
+                        <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />
+                      )}
+                    </div>
+                    <p className={`text-[10px] mt-0.5 truncate ${wActive ? 'text-emerald-500 font-medium' : 'text-slate-400'}`}>
+                      {wActive ? 'En curso' : wCompleted ? `${week.compliance ?? 0}% cumplido` : new Date(week.start_date + 'T12:00').toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Sidebar footer */}
+          <div className="p-2.5 border-t border-slate-200 bg-white">
             <button
-              onClick={() => { setEditingScheduled(true); setInnerTab('plan'); setSelectedDay(1) }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                editingScheduled ? 'bg-blue-600 shadow-sm text-white' : 'text-blue-600 hover:text-blue-700'
+              onClick={() => setAssignModalOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-all border border-dashed border-slate-200 hover:border-emerald-300"
+            >
+              <Plus className="w-3 h-3" /> Programar semana
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── RIGHT PANEL ──────────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 flex flex-col bg-white">
+
+        {/* Panel header */}
+        <div className="px-5 py-3.5 border-b border-slate-200 flex items-start gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            {/* Week label row */}
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-xs font-semibold text-slate-500">
+                Semana {viewingWeek?.week_number ?? weekNumber}{totalWeeks > 0 ? ` de ${totalWeeks}` : ''}
+              </span>
+              {isViewingActive && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">En curso</span>}
+              {isViewingActive && isOverdue && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Vencida {daysOverdue}d</span>}
+              {isViewingScheduled && <span className="text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded">Programada</span>}
+              {isViewingCompleted && <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Completada</span>}
+            </div>
+
+            {/* Plan name — editable */}
+            {editingPlanName && currentPlan ? (
+              <form
+                className="flex items-center gap-1.5 mt-0.5"
+                onSubmit={e => {
+                  e.preventDefault()
+                  if (planNameInput.trim()) renamePlanMutation.mutate({ planId: currentPlan.id, name: planNameInput.trim() })
+                }}
+              >
+                <input
+                  autoFocus
+                  value={planNameInput}
+                  onChange={e => setPlanNameInput(e.target.value)}
+                  className="text-sm font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 min-w-0 flex-1"
+                />
+                <button type="submit" disabled={renamePlanMutation.isPending || !planNameInput.trim()} className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
+                  <Check className="w-3 h-3" />
+                </button>
+                <button type="button" onClick={() => setEditingPlanName(false)} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100">
+                  <X className="w-3 h-3" />
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-1.5 group mt-0.5">
+                <p className="text-sm font-bold text-slate-900 truncate">{currentPlan?.name ?? '—'}</p>
+                {(isViewingScheduled || isViewingActive) && currentPlan && (
+                  <button
+                    onClick={() => { setPlanNameInput(currentPlan.name); setEditingPlanName(true) }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                    title="Renombrar plan"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right actions area */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Review actions (active week with review request) */}
+            {isViewingActive && reviewRequestedAt && (
+              <>
+                <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg">
+                  <Bell className="w-3.5 h-3.5 shrink-0" />
+                  Revisión solicitada · {fmtDateTime(reviewRequestedAt)}
+                </div>
+                <button onClick={() => setRejectConfirm(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors">
+                  <X className="w-3.5 h-3.5" /> Rechazar
+                </button>
+                <button onClick={() => setApproveConfirm(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar · +{activePlan.points_reward ?? 0} pts
+                </button>
+              </>
+            )}
+
+            {/* Scheduled plan controls: date + delete */}
+            {isViewingScheduled && viewingWeek && (
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                  <CalendarClock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  {editingScheduledDate ? (
+                    <>
+                      <input
+                        type="date"
+                        defaultValue={viewingWeek.start_date}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={e => setScheduledDateInput(e.target.value)}
+                        className="text-xs border border-slate-300 rounded-md px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => { if (scheduledDateInput) updateScheduledDateMutation.mutate({ assignmentId: viewingWeek.assignment_id, start_date: scheduledDateInput }) }}
+                        className="p-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                        disabled={updateScheduledDateMutation.isPending || !scheduledDateInput}
+                      >
+                        <Check className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => setEditingScheduledDate(false)} className="p-0.5 rounded text-slate-400 hover:bg-slate-200">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium">{fmtDate(viewingWeek.start_date)}</span>
+                      <button
+                        onClick={() => { setScheduledDateInput(viewingWeek.start_date); setEditingScheduledDate(true) }}
+                        className="p-0.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                        title="Cambiar fecha"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => setDeleteWeekConfirm(true)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-500 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors"
+                  title="Eliminar semana"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tab switcher — active week only */}
+        {isViewingActive && (
+          <div className="px-5 pt-3 pb-0 flex items-center gap-1 border-b border-slate-100">
+            <button
+              onClick={() => setInnerTab('plan')}
+              className={`px-3 py-2 text-xs font-semibold border-b-2 transition-all -mb-px ${
+                innerTab === 'plan' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-700'
               }`}
             >
-              Siguiente semana
+              Plan
             </button>
-          )}
-          {!editingScheduled && (
-            <button onClick={() => setInnerTab('logs')}
-              className={`relative px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                innerTab === 'logs' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+            <button
+              onClick={() => setInnerTab('logs')}
+              className={`relative px-3 py-2 text-xs font-semibold border-b-2 transition-all -mb-px ${
+                innerTab === 'logs' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-700'
               }`}
             >
               Evidencias
@@ -597,99 +887,29 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
                 </span>
               )}
             </button>
-          )}
-        </div>
-
-        {/* Semanas completadas */}
-        {completedWeeks > 0 && !editingScheduled && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl">
-            <Flame className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-xs font-semibold text-emerald-700">
-              Semana {completedWeeks + 1} <span className="font-normal text-emerald-500">de cumplimiento</span>
-            </span>
           </div>
         )}
 
-        {/* Botón programar siguiente semana (cuando no hay scheduled) */}
-        {!scheduledPlan && !editingScheduled && (
-          <button
-            onClick={() => setAssignModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors"
-          >
-            <CalendarClock className="w-3.5 h-3.5" />
-            Programar siguiente semana
-          </button>
-        )}
+        {/* ── CONTENT AREA ─────────────────────────────────────────────── */}
+        <div className="flex-1 p-5 overflow-y-auto">
 
-        {/* Botón aprobar semana (solo cuando edita la semana actual) */}
-        {assignment && !editingScheduled && (
-          <button
-            onClick={() => setApproveConfirm(true)}
-            className="ml-auto flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all active:scale-95"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            Aprobar semana · +{activePlan.points_reward ?? 0} pts
-          </button>
-        )}
 
-        {/* Banner cuando edita el plan programado */}
-        {editingScheduled && scheduledPlan && (
-          <div className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
-            <CalendarClock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-            {editingScheduledDate ? (
-              <>
-                <input
-                  type="date"
-                  defaultValue={scheduledPlan.start_date}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={e => setScheduledDateInput(e.target.value)}
-                  className="text-xs border border-blue-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  autoFocus
-                />
-                <button
-                  onClick={() => {
-                    if (scheduledDateInput)
-                      updateScheduledDateMutation.mutate({ assignmentId: scheduledPlan.id, start_date: scheduledDateInput })
-                  }}
-                  className="p-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                  disabled={updateScheduledDateMutation.isPending || !scheduledDateInput}
-                >
-                  <Check className="w-3 h-3" />
-                </button>
-                <button onClick={() => setEditingScheduledDate(false)} className="p-1 rounded-lg hover:bg-blue-100">
-                  <X className="w-3 h-3" />
-                </button>
-              </>
-            ) : (
-              <>
-                <span>Inicia el <strong>{fmtDate(scheduledPlan.start_date)}</strong></span>
-                <button
-                  onClick={() => { setScheduledDateInput(scheduledPlan.start_date); setEditingScheduledDate(true) }}
-                  className="p-1 rounded-lg hover:bg-blue-100 transition-colors"
-                  title="Cambiar fecha"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── TAB: Evidencias de la semana ── */}
-      {innerTab === 'logs' && (
+      {/* ── TAB: Evidencias ── */}
+      {(innerTab === 'logs' || isViewingCompleted) && (
         <div className="space-y-4">
-          {weekLogsQuery.isLoading && (
+          {(isViewingActive ? weekLogsQuery.isLoading : weekEvLoading === viewingWeekId) && (
             <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
           )}
 
-          {!weekLogsQuery.isLoading && weekLogs.length === 0 && (
-            <div className="bg-white rounded-2xl border border-slate-100 py-14 text-center">
-              <p className="text-sm text-slate-400">El atleta aún no ha registrado comidas esta semana.</p>
+          {!(isViewingActive ? weekLogsQuery.isLoading : weekEvLoading === viewingWeekId) && viewingLogs.length === 0 && (
+            <div className="rounded-2xl border border-slate-100 py-14 text-center">
+              <p className="text-sm text-slate-400">
+                {isViewingCompleted ? 'No hay evidencias registradas para esta semana.' : 'El atleta aún no ha registrado comidas esta semana.'}
+              </p>
             </div>
           )}
 
-          {weekSummary && (
+          {isViewingActive && weekSummary && (
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: 'Registradas', value: weekSummary.completed, color: 'text-slate-700' },
@@ -704,7 +924,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
             </div>
           )}
 
-          {Object.entries(logsByDate).sort(([a], [b]) => a < b ? -1 : 1).map(([date, logs]) => (
+          {Object.entries(viewingLogsByDate).sort(([a], [b]) => a < b ? -1 : 1).map(([date, logs]) => (
             <div key={date} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
               <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
                 <p className="text-xs font-bold text-slate-600">
@@ -777,7 +997,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
       )}
 
       {/* ── TAB: Editor del plan ── */}
-      {innerTab === 'plan' && (
+      {innerTab === 'plan' && !isViewingCompleted && (
       <div className="flex gap-5">
       {/* Panel izquierdo — plan */}
       <div className="flex-1 min-w-0 space-y-4">
@@ -933,6 +1153,31 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
       </div>
       )} {/* end innerTab === 'plan' */}
 
+        </div>{/* flex-1 p-5 overflow-y-auto */}
+      </div>{/* right panel */}
+    </div>{/* two-col container */}
+
+      {/* Modal eliminar semana */}
+      <Dialog open={deleteWeekConfirm} onOpenChange={setDeleteWeekConfirm}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>¿Eliminar semana programada?</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-500">
+            Se eliminará la semana <strong>{viewingWeek?.plan_name}</strong> del programa del atleta. Esta acción no se puede deshacer.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteWeekConfirm(false)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteWeekMutation.isPending}
+              onClick={() => viewingWeek && deleteWeekMutation.mutate({ assignmentId: viewingWeek.assignment_id, planId: viewingWeek.plan_id })}
+            >
+              {deleteWeekMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Eliminar semana
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal confirmar aprobar semana */}
       <Dialog open={approveConfirm} onOpenChange={setApproveConfirm}>
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
@@ -957,6 +1202,36 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
         </DialogContent>
       </Dialog>
 
+      {/* Modal rechazar semana */}
+      <Dialog open={rejectConfirm} onOpenChange={open => { setRejectConfirm(open); if (!open) setRejectReason('') }}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Rechazar solicitud de revisión</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            El atleta recibirá una notificación y podrá corregir sus registros para volver a enviar la semana.
+          </p>
+          <textarea
+            value={rejectReason}
+            onChange={e => setRejectReason(e.target.value)}
+            placeholder="Motivo (opcional) — ej: faltan fotos de evidencia del martes"
+            className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-rose-300 placeholder:text-slate-400"
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectConfirm(false); setRejectReason('') }}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={rejectWeekMutation.isPending}
+              onClick={() => assignmentId && rejectWeekMutation.mutate({ assignmentId, reason: rejectReason })}
+            >
+              {rejectWeekMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Rechazar semana
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Lightbox fotos */}
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
@@ -973,7 +1248,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
           onClose={() => setAssignModalOpen(false)}
         />
       )}
-    </div>
+    </>
   )
 }
 
@@ -985,45 +1260,22 @@ function nextMonday(): string {
   return d.toISOString().split('T')[0]
 }
 
-function AssignPlanModal({ onClose, athleteId, gymId, onAssigned, hasActivePlan = false }: {
+function AssignPlanModal({ onClose, athleteId, gymId: _gymId, onAssigned, hasActivePlan = false }: {
   onClose: () => void; athleteId: string; gymId: string; onAssigned: () => void; hasActivePlan?: boolean
 }) {
-  const [tab, setTab]           = useState<'existing' | 'new'>('existing')
-  const [selectedPlanId, setSel] = useState('')
   const [startDate, setStartDate] = useState(hasActivePlan ? nextMonday() : new Date().toISOString().split('T')[0])
-  // New plan fields
-  const [newName, setNewName]           = useState('')
-  const [newPoints, setNewPoints]       = useState('100')
-  const [newCal, setNewCal]             = useState('2000')
-  const [newDuration, setNewDuration]   = useState('7')
+  const [newName, setNewName]     = useState('')
+  const [newCal, setNewCal]       = useState('2000')
+  const [newDuration, setNewDuration] = useState('7')
 
   const today = new Date().toISOString().split('T')[0]
   const isScheduled = startDate > today
-
-  const plansQuery = useQuery({
-    queryKey: ['nutrition-plans-list', gymId],
-    queryFn: async () => {
-      const res = await api.get<any>('/api/nutrition/plans/')
-      return Array.isArray(res) ? res : (res?.results ?? [])
-    },
-  })
-
-  const assignMutation = useMutation({
-    mutationFn: (planId: string) => api.post('/api/nutrition/assignments/', {
-      user: athleteId, plan: planId, start_date: startDate,
-    }),
-    onSuccess: () => {
-      showSuccess(isScheduled ? 'Plan programado para ' + startDate : 'Plan asignado')
-      onAssigned(); onClose()
-    },
-    onError: (err) => showError(err, 'Error al asignar el plan'),
-  })
 
   const createAndAssignMutation = useMutation({
     mutationFn: async () => {
       const plan = await api.post<any>('/api/nutrition/plans/', {
         name: newName,
-        points_reward: parseInt(newPoints) || 100,
+        points_reward: 0,
         calories_per_day: parseInt(newCal) || 2000,
         duration_days: parseInt(newDuration) || 7,
         status: 'active',
@@ -1040,29 +1292,14 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned, hasActivePlan 
     onError: (err) => showError(err, 'Error al crear el plan'),
   })
 
-  const saving = assignMutation.isPending || createAndAssignMutation.isPending
-
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose() }}>
-      <DialogContent className="sm:max-w-md bg-white rounded-2xl border-none shadow-2xl">
+      <DialogContent className="sm:max-w-md bg-white rounded-2xl border-none shadow-2xl" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle className="text-base font-bold text-slate-900">Asignar plan nutricional</DialogTitle>
+          <DialogTitle className="text-base font-bold text-slate-900">
+            {isScheduled ? 'Programar próxima semana' : 'Crear plan nutricional'}
+          </DialogTitle>
         </DialogHeader>
-
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mt-1">
-          {(['existing', 'new'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                tab === t ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {t === 'existing' ? 'Plan existente' : 'Crear nuevo plan'}
-            </button>
-          ))}
-        </div>
 
         <div className="space-y-4 mt-1">
           {/* Date picker */}
@@ -1075,83 +1312,49 @@ function AssignPlanModal({ onClose, athleteId, gymId, onAssigned, hasActivePlan 
               onChange={e => setStartDate(e.target.value)}
               className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
-            {isScheduled ? (
-              <p className="mt-1 text-xs text-blue-600 font-medium">
-                El plan se activará automáticamente el {startDate}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-emerald-600 font-medium">
-                El plan iniciará hoy
-              </p>
-            )}
+            <p className={`mt-1 text-xs font-medium ${isScheduled ? 'text-blue-600' : 'text-emerald-600'}`}>
+              {isScheduled ? `Se activará automáticamente el ${new Date(startDate + 'T12:00').toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}` : 'El plan iniciará hoy'}
+            </p>
           </div>
 
-          {tab === 'existing' ? (
-            plansQuery.isLoading ? (
-              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-emerald-600" /></div>
-            ) : (
-              <div className="space-y-2 max-h-52 overflow-y-auto">
-                {(plansQuery.data ?? []).map((p: any) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setSel(p.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
-                      selectedPlanId === p.id
-                        ? 'border-emerald-500 bg-emerald-50'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {p.calories_per_day} kcal/día · {p.duration_days} días · <span className="text-amber-600 font-medium">{p.points_reward} pts</span>
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nombre del plan</label>
-                <input
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder="Ej: Plan pérdida de peso semana 2"
-                  className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Puntos</label>
-                  <input type="number" value={newPoints} onChange={e => setNewPoints(e.target.value)}
-                    className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Kcal/día</label>
-                  <input type="number" value={newCal} onChange={e => setNewCal(e.target.value)}
-                    className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Días</label>
-                  <input type="number" value={newDuration} onChange={e => setNewDuration(e.target.value)}
-                    className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-                </div>
-              </div>
-              <p className="text-xs text-slate-400">Después de crear el plan podrás agregar los días y comidas desde el editor.</p>
+          {/* Plan name */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nombre del plan</label>
+            <input
+              autoFocus
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Ej: Plan pérdida de peso — semana 2"
+              className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+
+          {/* Kcal / Días */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Kcal/día</label>
+              <input type="number" value={newCal} onChange={e => setNewCal(e.target.value)}
+                className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
             </div>
-          )}
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Días</label>
+              <input type="number" value={newDuration} onChange={e => setNewDuration(e.target.value)}
+                className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">Después de crear el plan podrás agregar días y comidas desde el editor.</p>
 
           <div className="flex gap-3 pt-1">
             <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
             <Button
               className={`flex-1 ${isScheduled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
-              disabled={saving || (tab === 'existing' && !selectedPlanId) || (tab === 'new' && !newName.trim())}
-              onClick={() => tab === 'existing' ? assignMutation.mutate(selectedPlanId) : createAndAssignMutation.mutate()}
+              disabled={createAndAssignMutation.isPending || !newName.trim()}
+              onClick={() => createAndAssignMutation.mutate()}
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : isScheduled
-                ? (tab === 'existing' ? 'Programar' : 'Crear y programar')
-                : (tab === 'existing' ? 'Asignar' : 'Crear y asignar')
-              }
+              {createAndAssignMutation.isPending
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : isScheduled ? 'Crear y programar' : 'Crear y asignar'}
             </Button>
           </div>
         </div>

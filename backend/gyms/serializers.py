@@ -487,7 +487,7 @@ class CoachMessageSerializer(serializers.ModelSerializer):
             "id", "coach", "athlete", "athlete_name", "sender_name",
             "gym", "sender_is_coach", "body", "is_read", "created_at",
         ]
-        read_only_fields = ["id", "coach", "gym", "created_at"]
+        read_only_fields = ["id", "coach", "gym", "sender_is_coach", "created_at"]
 
     def get_sender_name(self, obj):
         if obj.sender_is_coach:

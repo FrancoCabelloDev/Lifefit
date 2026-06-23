@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState, use } from 'react'
-import { Loader2, Plus, Trash2, CalendarDays, Target, User, Dumbbell } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Loader2, Plus, Trash2, CalendarDays, Target, Dumbbell,
+  Clock, Zap, ChevronDown,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -12,7 +13,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
+import { cn } from '@/lib/utils'
+import { levelColors, levelLabels } from '@/lib/constants'
 import type { User as UserType, WorkoutRoutine, PaginatedResponse } from '@/lib/types'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface WeeklySlot {
   id: string
@@ -24,65 +29,214 @@ interface WeeklySlot {
   notes: string
 }
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const DAYS = [
-  { value: 0, label: 'Lunes' },
-  { value: 1, label: 'Martes' },
-  { value: 2, label: 'Miércoles' },
-  { value: 3, label: 'Jueves' },
-  { value: 4, label: 'Viernes' },
-  { value: 5, label: 'Sábado' },
-  { value: 6, label: 'Domingo' },
+  { value: 0, label: 'Lunes',     short: 'Lun' },
+  { value: 1, label: 'Martes',    short: 'Mar' },
+  { value: 2, label: 'Miércoles', short: 'Mié' },
+  { value: 3, label: 'Jueves',    short: 'Jue' },
+  { value: 4, label: 'Viernes',   short: 'Vie' },
+  { value: 5, label: 'Sábado',    short: 'Sáb' },
+  { value: 6, label: 'Domingo',   short: 'Dom' },
 ]
 
 const GOAL_LABELS: Record<string, string> = {
-  weight_loss: '🔥 Pérdida de peso',
-  muscle_gain: '💪 Ganancia muscular',
-  endurance: '🏃 Resistencia',
-  flexibility: '🧘 Flexibilidad',
-  sport_perf: '🏅 Rendimiento deportivo',
-  general_fitness: '⭐ Fitness general',
+  weight_loss:     'Pérdida de peso',
+  muscle_gain:     'Ganancia muscular',
+  endurance:       'Resistencia',
+  flexibility:     'Flexibilidad',
+  sport_perf:      'Rendimiento deportivo',
+  general_fitness: 'Fitness general',
 }
+
+const GOAL_ICONS: Record<string, string> = {
+  weight_loss: '🔥', muscle_gain: '💪', endurance: '🏃',
+  flexibility: '🧘', sport_perf: '🏅', general_fitness: '⭐',
+}
+
+const todayDow = (() => {
+  const d = new Date().getDay()
+  return d === 0 ? 6 : d - 1
+})()
+
+// ── Slot card ─────────────────────────────────────────────────────────────────
+
+function SlotCard({
+  slot,
+  onDelete,
+}: {
+  slot: WeeklySlot
+  onDelete: (id: string) => void
+}) {
+  const r        = slot.routine_detail
+  const exCount  = r?.routine_exercises?.length ?? 0
+  const time     = slot.suggested_time?.slice(0, 5)
+
+  return (
+    <div className="group relative bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
+      {/* Accent strip */}
+      <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-2xl bg-emerald-500" />
+
+      <div className="flex items-start justify-between gap-1 mt-0.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+            <Dumbbell className="w-3 h-3 text-emerald-600" />
+          </div>
+          <p className="text-xs font-bold text-slate-800 leading-tight truncate">
+            {r?.name ?? 'Rutina'}
+          </p>
+        </div>
+        <button
+          onClick={() => onDelete(slot.id)}
+          className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all active:scale-90 shrink-0 p-0.5 rounded-lg hover:bg-rose-50"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Meta chips */}
+      <div className="mt-2 flex flex-wrap gap-1">
+        {r?.duration_minutes && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-full">
+            <Clock className="w-2.5 h-2.5" /> {r.duration_minutes}m
+          </span>
+        )}
+        {exCount > 0 && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-full">
+            <Dumbbell className="w-2.5 h-2.5" /> {exCount} ej.
+          </span>
+        )}
+        {r?.points_reward > 0 && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
+            <Zap className="w-2.5 h-2.5" /> {r.points_reward}
+          </span>
+        )}
+      </div>
+
+      {/* Time + notes */}
+      {(time || slot.notes) && (
+        <div className="mt-2 space-y-0.5 pt-2 border-t border-slate-100">
+          {time && (
+            <p className="text-[10px] font-semibold text-emerald-600">{time}</p>
+          )}
+          {slot.notes && (
+            <p className="text-[10px] text-slate-400 italic leading-relaxed line-clamp-2">
+              {slot.notes}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Day column ────────────────────────────────────────────────────────────────
+
+function DayColumn({
+  day,
+  slots,
+  isToday,
+  onAddClick,
+  onDelete,
+}: {
+  day: { value: number; label: string; short: string }
+  slots: WeeklySlot[]
+  isToday: boolean
+  onAddClick: (dayValue: number) => void
+  onDelete: (id: string) => void
+}) {
+  const hasSlots    = slots.length > 0
+  const totalMins   = slots.reduce((s, sl) => s + (sl.routine_detail?.duration_minutes ?? 0), 0)
+
+  return (
+    <div className="flex flex-col gap-2 min-w-0">
+      {/* Day header */}
+      <div className={cn(
+        'rounded-xl px-2 py-2.5 text-center transition-colors',
+        isToday
+          ? 'bg-emerald-600 text-white'
+          : hasSlots
+          ? 'bg-slate-800 text-white'
+          : 'bg-slate-100 text-slate-400',
+      )}>
+        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">{day.short}</p>
+        {hasSlots && (
+          <p className="text-[9px] mt-0.5 opacity-60">
+            {totalMins > 0 ? `${totalMins}m` : `${slots.length} rutina${slots.length > 1 ? 's' : ''}`}
+          </p>
+        )}
+      </div>
+
+      {/* Slots */}
+      <div className="flex flex-col gap-2 flex-1">
+        {slots.map(slot => (
+          <SlotCard key={slot.id} slot={slot} onDelete={onDelete} />
+        ))}
+
+        {/* Add / rest zone */}
+        <button
+          onClick={() => onAddClick(day.value)}
+          className={cn(
+            'group flex items-center justify-center rounded-2xl border-2 border-dashed py-5 transition-all duration-150',
+            hasSlots
+              ? 'border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/40 active:scale-[0.98]'
+              : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40 active:scale-[0.98]',
+          )}
+        >
+          <span className={cn(
+            'flex flex-col items-center gap-1 transition-colors',
+            hasSlots ? 'text-slate-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-emerald-500',
+          )}>
+            <Plus className="w-3.5 h-3.5" />
+            {!hasSlots && (
+              <span className="text-[9px] font-semibold uppercase tracking-wide">Descanso</span>
+            )}
+          </span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
 
-  const [athletes, setAthletes] = useState<UserType[]>([])
+  const [athletes, setAthletes]               = useState<UserType[]>([])
   const [selectedAthleteId, setSelectedAthleteId] = useState('')
-  const [selectedAthlete, setSelectedAthlete] = useState<UserType | null>(null)
-  const [slots, setSlots] = useState<WeeklySlot[]>([])
-  const [routines, setRoutines] = useState<WorkoutRoutine[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [selectedAthlete, setSelectedAthlete]     = useState<UserType | null>(null)
+  const [slots, setSlots]                     = useState<WeeklySlot[]>([])
+  const [routines, setRoutines]               = useState<WorkoutRoutine[]>([])
+  const [isLoading, setIsLoading]             = useState(false)
+  const [dialogOpen, setDialogOpen]           = useState(false)
 
-  // Form estado
-  const [formDay, setFormDay] = useState('')
+  const [formDay, setFormDay]       = useState('')
   const [formRoutine, setFormRoutine] = useState('')
-  const [formTime, setFormTime] = useState('')
-  const [formNotes, setFormNotes] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [formTime, setFormTime]     = useState('')
+  const [formNotes, setFormNotes]   = useState('')
+  const [saving, setSaving]         = useState(false)
 
   useEffect(() => {
-    const fetchAthletes = async () => {
-      try {
-        const data = await api.get<PaginatedResponse<UserType>>('/api/auth/gym-members/', { params: { role: 'athlete' } })
-        setAthletes(Array.isArray(data) ? data : data.results || [])
-      } catch { }
-    }
-    const fetchRoutines = async () => {
-      try {
-        const data = await api.get<PaginatedResponse<WorkoutRoutine>>('/api/workouts/routines/')
-        setRoutines(Array.isArray(data) ? data : data.results || [])
-      } catch { }
-    }
-    fetchAthletes()
-    fetchRoutines()
+    Promise.all([
+      api.get<PaginatedResponse<UserType>>('/api/auth/gym-members/', { params: { role: 'athlete' } })
+        .then(d => Array.isArray(d) ? d : d.results || [])
+        .catch(() => [] as UserType[]),
+      api.get<PaginatedResponse<WorkoutRoutine>>('/api/workouts/routines/')
+        .then(d => Array.isArray(d) ? d : d.results || [])
+        .catch(() => [] as WorkoutRoutine[]),
+    ]).then(([aths, ruts]) => {
+      setAthletes(aths)
+      setRoutines(ruts)
+    })
   }, [gymId])
 
   const fetchPlan = async (athleteId: string) => {
     setIsLoading(true)
     try {
       const data = await api.get<{ results: WeeklySlot[] } | WeeklySlot[]>(
-        `/api/workouts/weekly-plan/`, { params: { athlete: athleteId } }
+        '/api/workouts/weekly-plan/', { params: { athlete: athleteId } }
       )
       setSlots(Array.isArray(data) ? data : data.results || [])
     } catch {
@@ -94,9 +248,13 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
 
   const handleSelectAthlete = (id: string) => {
     setSelectedAthleteId(id)
-    const athlete = athletes.find(a => a.id === id) || null
-    setSelectedAthlete(athlete)
+    setSelectedAthlete(athletes.find(a => a.id === id) || null)
     fetchPlan(id)
+  }
+
+  const openDialog = (dayValue?: number) => {
+    if (dayValue !== undefined) setFormDay(String(dayValue))
+    setDialogOpen(true)
   }
 
   const handleAddSlot = async () => {
@@ -104,11 +262,11 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
     setSaving(true)
     try {
       await api.post('/api/workouts/weekly-plan/', {
-        athlete: selectedAthleteId,
-        routine: formRoutine,
-        day_of_week: parseInt(formDay),
+        athlete:      selectedAthleteId,
+        routine:      formRoutine,
+        day_of_week:  parseInt(formDay),
         suggested_time: formTime || null,
-        notes: formNotes,
+        notes:        formNotes,
       })
       showSuccess('Rutina agregada al plan')
       setDialogOpen(false)
@@ -131,206 +289,264 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
     }
   }
 
+  const goal      = (selectedAthlete as any)?.fitness_goal
+  const goalNotes = (selectedAthlete as any)?.goal_notes
+  const activeDays = new Set(slots.map(s => s.day_of_week)).size
+  const totalMins  = slots.reduce((s, sl) => s + (sl.routine_detail?.duration_minutes ?? 0), 0)
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Plan Semanal</h1>
-        <p className="text-slate-500 mt-2 text-lg">Diseña la semana de entrenamiento de tus atletas</p>
-      </div>
+    <div className="space-y-5">
 
-      {/* Selector de atleta */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardContent className="p-6">
-          <Label className="mb-2 block">Selecciona un atleta</Label>
-          <Select value={selectedAthleteId} onValueChange={handleSelectAthlete}>
-            <SelectTrigger className="max-w-sm">
-              <SelectValue placeholder="Elige un atleta..." />
-            </SelectTrigger>
-            <SelectContent>
-              {athletes.map(a => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.first_name} {a.last_name} — {a.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Plan Semanal</h1>
+          <p className="text-slate-500 mt-0.5 text-sm">Diseña la semana de entrenamiento de tus atletas</p>
+        </div>
 
-      {/* Info del atleta seleccionado */}
-      {selectedAthlete && (
-        <Card className="border-emerald-200 bg-emerald-50/30 shadow-sm">
-          <CardContent className="p-5 flex items-start gap-4">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center shrink-0">
-              {selectedAthlete.first_name?.[0]?.toUpperCase()}
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-slate-800">{selectedAthlete.first_name} {selectedAthlete.last_name}</p>
-              <p className="text-xs text-slate-500">{selectedAthlete.email}</p>
-              {(selectedAthlete as any).fitness_goal ? (
-                <div className="flex items-center gap-2 mt-2">
-                  <Target className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-xs font-medium text-emerald-700">
-                    {GOAL_LABELS[(selectedAthlete as any).fitness_goal] || (selectedAthlete as any).fitness_goal}
-                  </span>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Athlete selector — inline, no card wrapper */}
+          <div className="relative">
+            <Select value={selectedAthleteId} onValueChange={handleSelectAthlete}>
+              <SelectTrigger className="w-64 h-9 text-sm border-slate-200 rounded-xl pl-3 pr-2 bg-white shadow-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  {selectedAthlete ? (
+                    <>
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-black shrink-0">
+                        {selectedAthlete.first_name?.[0]?.toUpperCase()}
+                      </div>
+                      <span className="truncate text-slate-800 font-medium">
+                        {selectedAthlete.first_name} {selectedAthlete.last_name}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">Selecciona un atleta…</span>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-slate-400 mt-1">Sin objetivo definido aún</p>
-              )}
-              {(selectedAthlete as any).goal_notes && (
-                <p className="text-xs text-slate-500 mt-1 italic">"{(selectedAthlete as any).goal_notes}"</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Plan semanal */}
-      {selectedAthleteId && (
-        <>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Semana de entrenamiento</h2>
-            <Button
-              onClick={() => setDialogOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700"
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-1" /> Agregar rutina
-            </Button>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {athletes.map(a => (
+                  <SelectItem key={a.id} value={a.id} className="rounded-lg">
+                    <span className="font-medium">{a.first_name} {a.last_name}</span>
+                    <span className="text-slate-400 ml-1.5 text-xs">{a.email}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {isLoading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
-            </div>
-          ) : slots.length === 0 ? (
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-10 text-center">
-                <CalendarDays className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                <p className="text-slate-500 text-sm">Aún no hay rutinas en el plan. Presiona "Agregar rutina" para empezar.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="overflow-x-auto pb-2">
-              <div className="flex gap-3 min-w-max">
-                {DAYS.map(day => {
-                  const daySlots = slots.filter(s => s.day_of_week === day.value)
-                  return (
-                    <div key={day.value} className="w-52 flex-shrink-0 flex flex-col gap-2">
-                      {/* Day header */}
-                      <div className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide text-center ${
-                        daySlots.length > 0
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {day.label}
-                        {daySlots.length > 0 && (
-                          <span className="ml-1.5 bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">
-                            {daySlots.length}
-                          </span>
-                        )}
-                      </div>
+          {selectedAthleteId && (
+            <Button
+              onClick={() => openDialog()}
+              className="bg-emerald-600 hover:bg-emerald-700 h-9 rounded-xl text-sm active:scale-[0.97] shadow-sm shadow-emerald-600/20"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> Agregar rutina
+            </Button>
+          )}
+        </div>
+      </div>
 
-                      {/* Slots */}
-                      {daySlots.length === 0 ? (
-                        <div className="flex-1 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center py-8">
-                          <p className="text-xs text-slate-300">Descanso</p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          {daySlots.map(slot => (
-                            <div key={slot.id} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm group">
-                              <div className="flex items-start justify-between gap-1">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Dumbbell className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                                  <p className="text-xs font-semibold text-slate-800 leading-snug">
-                                    {slot.routine_detail?.name || 'Rutina'}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() => handleDelete(slot.id)}
-                                  className="text-slate-300 hover:text-rose-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              <div className="mt-1.5 space-y-0.5">
-                                {slot.suggested_time && (
-                                  <p className="text-[10px] text-slate-400">{slot.suggested_time.slice(0, 5)}</p>
-                                )}
-                                {slot.routine_detail && (
-                                  <p className="text-[10px] text-slate-400">
-                                    {slot.routine_detail.duration_minutes} min · {slot.routine_detail.routine_exercises?.length || 0} ejercicios · {slot.routine_detail.points_reward} pts
-                                  </p>
-                                )}
-                                {slot.notes && (
-                                  <p className="text-[10px] text-slate-400 italic">{slot.notes}</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+      {/* ── Athlete info bar ── */}
+      {selectedAthlete && (
+        <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 flex-wrap">
+          {/* Avatar */}
+          <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 font-black text-sm flex items-center justify-center shrink-0">
+            {selectedAthlete.first_name?.[0]?.toUpperCase()}
+          </div>
+
+          {/* Name / email */}
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900 text-sm leading-tight">
+              {selectedAthlete.first_name} {selectedAthlete.last_name}
+            </p>
+            <p className="text-xs text-slate-400">{selectedAthlete.email}</p>
+          </div>
+
+          {/* Goal */}
+          {goal ? (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+              <span>{GOAL_ICONS[goal] ?? <Target className="w-3 h-3" />}</span>
+              {GOAL_LABELS[goal] ?? goal}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400">Sin objetivo definido</span>
+          )}
+          {goalNotes && (
+            <p className="text-xs text-slate-500 italic flex-1 truncate">"{goalNotes}"</p>
+          )}
+
+          {/* Stats */}
+          {slots.length > 0 && (
+            <div className="ml-auto flex items-center gap-4 shrink-0">
+              <div className="text-center">
+                <p className="text-base font-black text-slate-900">{activeDays}</p>
+                <p className="text-[10px] text-slate-400">días/sem</p>
+              </div>
+              <div className="text-center">
+                <p className="text-base font-black text-slate-900">{totalMins}</p>
+                <p className="text-[10px] text-slate-400">min/sem</p>
+              </div>
+              <div className="text-center">
+                <p className="text-base font-black text-slate-900">{slots.length}</p>
+                <p className="text-[10px] text-slate-400">sesiones</p>
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* Dialog agregar rutina */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+      {/* ── Weekly grid ── */}
+      {!selectedAthleteId ? (
+        /* Empty state */
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+            <CalendarDays className="w-8 h-8 text-slate-300" />
+          </div>
+          <div className="text-center">
+            <p className="text-base font-semibold text-slate-600">Selecciona un atleta</p>
+            <p className="text-sm text-slate-400 mt-1">Elige un atleta arriba para diseñar su semana</p>
+          </div>
+        </div>
+      ) : isLoading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 gap-2">
+          {DAYS.map(day => (
+            <DayColumn
+              key={day.value}
+              day={day}
+              slots={slots.filter(s => s.day_of_week === day.value)}
+              isToday={day.value === todayDow}
+              onAddClick={openDialog}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Dialog ── */}
+      <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false) } }}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Agregar rutina al plan</DialogTitle>
+            <DialogTitle className="text-base">Agregar rutina al plan</DialogTitle>
+            {selectedAthlete && (
+              <p className="text-sm text-slate-500 mt-0.5">
+                {selectedAthlete.first_name} {selectedAthlete.last_name}
+              </p>
+            )}
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Día de la semana</Label>
-              <Select value={formDay} onValueChange={setFormDay}>
-                <SelectTrigger><SelectValue placeholder="Selecciona el día..." /></SelectTrigger>
-                <SelectContent>
-                  {DAYS.map(d => <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+
+          <div className="space-y-4 py-1">
+            {/* Día + hora en misma fila */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Día</Label>
+                <Select value={formDay} onValueChange={setFormDay}>
+                  <SelectTrigger className="h-9 rounded-xl text-sm">
+                    <SelectValue placeholder="Día…" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {DAYS.map(d => (
+                      <SelectItem key={d.value} value={String(d.value)} className="rounded-lg">
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Hora <span className="font-normal text-slate-400">(opcional)</span>
+                </Label>
+                <Input
+                  type="time"
+                  value={formTime}
+                  onChange={e => setFormTime(e.target.value)}
+                  className="h-9 rounded-xl text-sm"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Rutina</Label>
+
+            {/* Rutina */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Rutina</Label>
               <Select value={formRoutine} onValueChange={setFormRoutine}>
-                <SelectTrigger><SelectValue placeholder="Selecciona la rutina..." /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className="h-9 rounded-xl text-sm">
+                  <SelectValue placeholder="Selecciona la rutina…" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
                   {routines.map(r => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name} — {r.duration_minutes} min · {r.points_reward} pts
+                    <SelectItem key={r.id} value={r.id} className="rounded-lg">
+                      <span className="font-medium">{r.name}</span>
+                      <span className="text-slate-400 ml-1.5 text-xs">
+                        {r.duration_minutes}m · {r.routine_exercises?.length ?? 0} ej.
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Hora sugerida <span className="text-slate-400 font-normal">(opcional)</span></Label>
-              <Input type="time" value={formTime} onChange={e => setFormTime(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Notas <span className="text-slate-400 font-normal">(opcional)</span></Label>
+
+            {/* Rutina preview cuando está seleccionada */}
+            {formRoutine && (() => {
+              const r = routines.find(r => r.id === formRoutine)
+              if (!r) return null
+              return (
+                <div className="bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                    <Dumbbell className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800">{r.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', levelColors[r.level])}>
+                        {levelLabels[r.level]}
+                      </span>
+                      <span className="text-xs text-slate-400">{r.duration_minutes} min</span>
+                      {r.points_reward > 0 && (
+                        <span className="text-xs text-amber-600">+{r.points_reward} pts</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Notas */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">
+                Nota para el atleta <span className="font-normal text-slate-400">(opcional)</span>
+              </Label>
               <Textarea
                 value={formNotes}
                 onChange={e => setFormNotes(e.target.value)}
-                placeholder="Ej: Enfocarse en la técnica, descansar 90 seg entre series..."
+                placeholder="Ej: Enfocarse en la técnica, descansar 90 seg entre series…"
                 rows={2}
+                className="rounded-xl text-sm resize-none"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              className="rounded-xl h-9 text-sm"
+            >
+              Cancelar
+            </Button>
             <Button
               onClick={handleAddSlot}
               disabled={saving || !formDay || !formRoutine}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl h-9 text-sm active:scale-[0.97] shadow-sm shadow-emerald-600/20"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+              {saving
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                : <Plus    className="w-3.5 h-3.5 mr-1.5" />
+              }
               Agregar
             </Button>
           </DialogFooter>

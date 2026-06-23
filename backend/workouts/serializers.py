@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from gyms.models import Gym
-from .models import Exercise, RoutineExercise, UserRoutineAssignment, WorkoutRoutine, WorkoutSession
+from .models import Exercise, RoutineExercise, SessionExerciseLog, UserRoutineAssignment, WorkoutRoutine, WorkoutSession
 
 User = get_user_model()
 
@@ -105,8 +105,16 @@ class WorkoutRoutineSerializer(serializers.ModelSerializer):
         ).exists()
 
 
+class SessionExerciseLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionExerciseLog
+        fields = ["id", "routine_exercise", "sets_completed", "completed"]
+        read_only_fields = ["id"]
+
+
 class WorkoutSessionSerializer(serializers.ModelSerializer):
-    user_detail = serializers.SerializerMethodField()
+    user_detail    = serializers.SerializerMethodField()
+    exercise_logs  = SessionExerciseLogSerializer(many=True, required=False)
 
     class Meta:
         model = WorkoutSession
@@ -123,6 +131,7 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
             "notes",
             "status",
             "points_awarded",
+            "exercise_logs",
             "created_at",
             "updated_at",
         ]
@@ -133,7 +142,12 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
         }
 
     def get_user_detail(self, obj):
-        return {"id": obj.user_id, "email": obj.user.email, "first_name": obj.user.first_name, "last_name": obj.user.last_name}
+        return {
+            "id": obj.user_id,
+            "email": obj.user.email,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+        }
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -153,13 +167,60 @@ class WorkoutSessionSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        logs_data = validated_data.pop("exercise_logs", [])
         request = self.context.get("request")
+
         if request and request.user.role == User.Role.ATHLETE:
             validated_data.setdefault("user", request.user)
             if not validated_data.get("gym"):
                 routine = validated_data.get("routine")
                 validated_data["gym"] = request.user.gym or (routine.gym if routine else None)
-        return super().create(validated_data)
+
+        # Auto-calculate completion_percentage from logs when provided
+        if logs_data:
+            total = len(logs_data)
+            done  = sum(1 for l in logs_data if l.get("completed"))
+            validated_data["completion_percentage"] = round((done / total) * 100, 2) if total else 0
+
+        session = super().create(validated_data)
+
+        if logs_data:
+            SessionExerciseLog.objects.bulk_create([
+                SessionExerciseLog(
+                    session=session,
+                    routine_exercise_id=l["routine_exercise"].id,
+                    sets_completed=l.get("sets_completed", 0),
+                    completed=l.get("completed", False),
+                )
+                for l in logs_data
+            ], ignore_conflicts=True)
+
+        return session
+
+    def update(self, instance, validated_data):
+        logs_data = validated_data.pop("exercise_logs", None)
+
+        if logs_data is not None:
+            total = len(logs_data)
+            done  = sum(1 for l in logs_data if l.get("completed"))
+            validated_data["completion_percentage"] = round((done / total) * 100, 2) if total else 0
+
+        session = super().update(instance, validated_data)
+
+        if logs_data is not None:
+            # Upsert: delete existing logs and recreate
+            session.exercise_logs.all().delete()
+            SessionExerciseLog.objects.bulk_create([
+                SessionExerciseLog(
+                    session=session,
+                    routine_exercise_id=l["routine_exercise"].id,
+                    sets_completed=l.get("sets_completed", 0),
+                    completed=l.get("completed", False),
+                )
+                for l in logs_data
+            ], ignore_conflicts=True)
+
+        return session
 
 
 class UserRoutineAssignmentSerializer(serializers.ModelSerializer):

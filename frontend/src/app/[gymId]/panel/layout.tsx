@@ -34,6 +34,8 @@ import {
   BookUser,
   Ruler,
   CalendarRange,
+  Gift,
+  Star,
 } from 'lucide-react'
 import { useSubscriptionTier } from '@/lib/hooks'
 import {
@@ -130,6 +132,12 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
             ] : [
               { title: "Retos 🔒 Premium", url: `/${gymId}/panel/mis-retos`, icon: Target },
             ]),
+          ],
+        },
+        {
+          title: "Recompensas",
+          items: [
+            { title: "Canjear Recompensas", url: `/${gymId}/panel/recompensas`, icon: Gift },
           ],
         },
         {
@@ -298,8 +306,12 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
     gamificationItems.length > 0 && {
       title: "Gamificación",
       icon: Target,
-      isActive: pathname.includes('/gamificacion/'),
-      items: gamificationItems,
+      isActive: pathname.includes('/gamificacion/') || pathname.includes('/puntos/'),
+      items: [
+        ...gamificationItems,
+        { title: "Puntos & Recompensas", url: `/${gymId}/panel/puntos/recompensas` },
+        { title: "Configurar Puntos", url: `/${gymId}/panel/puntos/configuracion` },
+      ],
     },
     {
       title: "Finanzas",
@@ -366,6 +378,7 @@ export default function GymPanelLayout({
       return (data?.results || []) as Notification[]
     },
     refetchInterval: 30000,
+    staleTime: 0,
   })
   const notifications = notifQuery.data || []
 
@@ -645,7 +658,7 @@ export default function GymPanelLayout({
 
                 <div className="relative">
                   <button
-                    onClick={() => setShowNotif(prev => !prev)}
+                    onClick={() => { setShowNotif(prev => !prev); notifQuery.refetch() }}
                     className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 shadow-sm transition-all hover:bg-slate-100 hover:scale-105 relative"
                   >
                     <Bell className="w-5 h-5" />

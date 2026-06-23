@@ -316,6 +316,7 @@ export default function MensajesPage({ params }: { params: Promise<{ gymId: stri
 function AthleteMessagesView({ gymId, user }: { gymId: string; user: User }) {
   const queryClient = useQueryClient()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [newMessage, setNewMessage] = useState('')
 
   const messagesQuery = useQuery({
@@ -336,6 +337,13 @@ function AthleteMessagesView({ gymId, user }: { gymId: string; user: User }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messagesQuery.data])
+
+  // Auto-focus input when messages load (arrives from CTA or direct nav)
+  useEffect(() => {
+    if (!messagesQuery.isLoading) {
+      inputRef.current?.focus()
+    }
+  }, [messagesQuery.isLoading])
 
   const rawMessages = Array.isArray(messagesQuery.data)
     ? messagesQuery.data
@@ -423,6 +431,7 @@ function AthleteMessagesView({ gymId, user }: { gymId: string; user: User }) {
           )}
           <form onSubmit={handleSend} className="p-3 flex items-center gap-2">
             <Input
+              ref={inputRef}
               placeholder="Escribe un mensaje..."
               value={newMessage}
               onChange={e => setNewMessage(e.target.value)}

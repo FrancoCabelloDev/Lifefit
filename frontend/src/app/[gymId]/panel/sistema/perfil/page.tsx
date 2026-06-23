@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   User, Shield, Calendar, Award, Key, Save, Loader2,
   CheckCircle2, AlertTriangle, Medal, Camera, Briefcase,
-  Star, Users, Target, Trash2,
+  Star, Users, Target, Trash2, Zap, Clock,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogDescription,
@@ -20,6 +20,7 @@ import { Progress } from '@/components/ui/progress'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
+import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { getStoredUser, clearAuth } from '@/lib/auth'
 import { showError, showSuccess } from '@/lib/toast'
@@ -38,6 +39,13 @@ export default function PerfilPage() {
   const [user, setUser] = useState<UserType | null>(null)
   const [badges, setBadges] = useState<UserBadge[]>([])
   const [progress, setProgress] = useState<UserProgress | null>(null)
+  const [totalPoints, setTotalPoints]     = useState<number>(0)
+  const [pendingPoints, setPendingPoints] = useState<number>(0)
+  const [recentPoints, setRecentPoints]   = useState<{
+    id: string; points: number; pending_points: number; status: string
+    source: string; description: string; reviewed_by: string | null
+    reviewed_at: string | null; created_at: string
+  }[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Info personal
@@ -99,9 +107,10 @@ export default function PerfilPage() {
         requests.push(
           api.get<any>('/api/challenges/user-badges/'),
           api.get<any>('/api/challenges/progress/my_dashboard/'),
+          api.get<any>('/api/gamification/my-stats/'),
         )
       }
-      const [userRes, badgesRes, progressRes] = await Promise.all(requests)
+      const [userRes, badgesRes, progressRes, statsRes] = await Promise.all(requests)
       setUser(userRes)
       setFirstName(userRes.first_name || '')
       setLastName(userRes.last_name || '')
@@ -118,6 +127,9 @@ export default function PerfilPage() {
       if (isAthlete) {
         setBadges(Array.isArray(badgesRes) ? badgesRes : badgesRes?.results || [])
         setProgress(progressRes)
+        setTotalPoints(statsRes?.total_points ?? 0)
+        setPendingPoints(statsRes?.pending_points ?? 0)
+        setRecentPoints(statsRes?.recent_points ?? [])
       }
     } catch (err) {
       showError(err, 'Error al cargar perfil')
@@ -226,9 +238,6 @@ export default function PerfilPage() {
   const memberSince = user.date_joined
     ? new Date(user.date_joined).toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' })
     : '—'
-  const xpPercent = progress
-    ? (progress.next_level_xp > 0 ? Math.min((progress.current_xp / progress.next_level_xp) * 100, 100) : 0)
-    : 0
   const isGoogle = user.is_google_account
   const avatarSrc = picPreview || user.profile_picture || null
 
@@ -286,26 +295,98 @@ export default function PerfilPage() {
             </CardContent>
           </Card>
 
-          {/* Nivel (solo atletas) */}
-          {isAthlete && progress && (
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Nivel {progress.level}</p>
-                    <p className="text-2xl font-bold text-slate-900">{progress.total_points} pts</p>
+          {/* Puntos (solo atletas) */}
+          {isAthlete && (
+            <Card className="border-slate-200 shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+
+                {/* Confirmed + pending counters */}
+                <div className="grid grid-cols-2 divide-x divide-slate-100">
+                  <div className="p-5">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Medal className="w-3.5 h-3.5 text-amber-500" />
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Confirmados</p>
+                    </div>
+                    <p className="text-2xl font-black text-slate-900">
+                      {totalPoints.toLocaleString('es-PE')}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">pts</p>
                   </div>
-                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                    <Medal className="w-6 h-6 text-amber-600" />
+                  <div className={cn('p-5', pendingPoints > 0 ? 'bg-amber-50/60' : '')}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Pendientes</p>
+                    </div>
+                    <p className={cn(
+                      'text-2xl font-black',
+                      pendingPoints > 0 ? 'text-amber-600' : 'text-slate-300',
+                    )}>
+                      {pendingPoints.toLocaleString('es-PE')}
+                    </p>
+                    <p className={cn(
+                      'text-[11px] mt-0.5',
+                      pendingPoints > 0 ? 'text-amber-500' : 'text-slate-300',
+                    )}>
+                      {pendingPoints > 0 ? 'esperando aprobación' : 'al día'}
+                    </p>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>XP: {progress.current_xp} / {progress.next_level_xp}</span>
-                    <span>{Math.round(xpPercent)}%</span>
+
+                {/* Recent history */}
+                {recentPoints.length > 0 && (
+                  <div className="border-t border-slate-100">
+                    <div className="px-5 py-2.5 flex items-center gap-1.5">
+                      <Zap className="w-3 h-3 text-slate-300" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Historial reciente</p>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                      {recentPoints.slice(0, 5).map(entry => {
+                        const isPending  = entry.status === 'pending'
+                        const isApproved = entry.status === 'approved'
+                        return (
+                          <div key={entry.id} className="flex items-center gap-3 px-5 py-2.5">
+                            {/* Status icon */}
+                            <div className={cn(
+                              'w-6 h-6 rounded-full flex items-center justify-center shrink-0',
+                              isApproved ? 'bg-emerald-100' : 'bg-amber-100',
+                            )}>
+                              {isApproved
+                                ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                : <Clock        className="w-3.5 h-3.5 text-amber-500" />
+                              }
+                            </div>
+
+                            {/* Description */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-slate-700 truncate leading-tight">
+                                {entry.description || entry.source}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {isPending
+                                  ? 'Esperando aprobación del coach'
+                                  : entry.reviewed_by
+                                  ? `Aprobado por ${entry.reviewed_by}`
+                                  : 'Aprobado'
+                                }
+                              </p>
+                            </div>
+
+                            {/* Points */}
+                            <span className={cn(
+                              'text-xs font-black shrink-0',
+                              isApproved ? 'text-emerald-600' : 'text-amber-500',
+                            )}>
+                              {isPending
+                                ? `+${entry.pending_points}`
+                                : `+${entry.points}`
+                              }
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                  <Progress value={xpPercent} className="h-2 [&>div]:bg-amber-400" />
-                </div>
+                )}
               </CardContent>
             </Card>
           )}

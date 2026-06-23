@@ -43,7 +43,7 @@ function RevenueChart({ data }: { data: RevenuePoint[] }) {
       </CardHeader>
       <CardContent>
         <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={288}>
             <LineChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200" />
               <XAxis

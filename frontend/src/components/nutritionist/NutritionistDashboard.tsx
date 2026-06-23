@@ -7,8 +7,9 @@ import {
   CalendarDays, Users, MessageSquare, TrendingUp, Apple,
   AlertTriangle, CheckCircle2, Clock, ChevronRight, Plus,
   ArrowUp, ArrowDown, Minus, Send, X, CalendarCheck,
-  UserPlus, RefreshCw, MailOpen, Camera,
+  UserPlus, RefreshCw, MailOpen, Camera, Loader2,
 } from 'lucide-react'
+import { showSuccess, showError } from '@/lib/toast'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { StatsCardSkeleton } from '@/components/ui/skeletons'
@@ -55,12 +56,16 @@ interface AppointmentCardProps {
   isNext?: boolean
   gymId: string
   onStatusChange: (id: string, status: string) => void
+  completing?: boolean
 }
 
-function AppointmentCard({ appointment, isNext, gymId, onStatusChange }: AppointmentCardProps) {
+function AppointmentCard({ appointment, isNext, gymId, onStatusChange, completing }: AppointmentCardProps) {
   const router = useRouter()
   const d = new Date(appointment.scheduled_at)
-  const isToday = new Date().toDateString() === d.toDateString()
+  const now = new Date()
+  const isToday = now.toDateString() === d.toDateString()
+  const isPast = d < now
+  const canStart = isToday || isPast
   const initials = appointment.athlete_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 
   return (
@@ -97,11 +102,15 @@ function AppointmentCard({ appointment, isNext, gymId, onStatusChange }: Appoint
         {isNext && (
           <div className="mt-4 flex gap-2">
             <button
-              onClick={() => onStatusChange(appointment.id, 'completed')}
-              className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              onClick={() => canStart && onStatusChange(appointment.id, 'completed')}
+              disabled={!canStart || completing}
+              title={!canStart ? `Disponible el ${d.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}` : undefined}
+              className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-1.5"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              Iniciar consulta
+              {completing
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Registrando...</>
+                : <><CheckCircle2 className="w-4 h-4" /> {canStart ? 'Marcar como realizada' : 'Consulta programada'}</>
+              }
             </button>
             <button
               onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${appointment.athlete}`)}
@@ -160,11 +169,15 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/api/gyms/appointments/${id}/`, { status }),
     onSuccess: () => {
+      showSuccess('Consulta registrada como realizada.')
       queryClient.invalidateQueries({ queryKey: ['next-appointment', gymId] })
       queryClient.invalidateQueries({ queryKey: ['upcoming-appointments', gymId] })
       queryClient.invalidateQueries({ queryKey: ['appointment-stats', gymId] })
     },
+    onError: (err) => showError(err, 'No se pudo actualizar la consulta'),
   })
+
+  const reviewsPending = nd?.reviews_pending ?? []
 
   const adminName = user.first_name || 'Nutricionista'
 
@@ -223,7 +236,7 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-slate-700">Próxima consulta</h2>
-              {nextAppointment && (
+              {nextAppointment && new Date(nextAppointment.scheduled_at) < new Date() && (
                 <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-bold">
                   Retrasada
                 </Badge>
@@ -235,6 +248,7 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
                 appointment={nextAppointment}
                 isNext
                 gymId={gymId}
+                completing={statusMutation.isPending}
                 onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
               />
             ) : (
@@ -251,6 +265,52 @@ export default function NutritionistDashboard({ gymId, user }: { gymId: string; 
               </div>
             )}
           </section>
+
+          {/* Revisiones de semana pendientes */}
+          {reviewsPending.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-slate-700">
+                  Revisiones pendientes
+                  <span className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                    {reviewsPending.length}
+                  </span>
+                </h2>
+              </div>
+              <div className="space-y-2">
+                {reviewsPending.map(r => {
+                  const since = (() => {
+                    const d = new Date(r.requested_at)
+                    const diffMs = Date.now() - d.getTime()
+                    const diffH = Math.floor(diffMs / 3600000)
+                    if (diffH < 1) return 'Hace unos minutos'
+                    if (diffH < 24) return `Hace ${diffH}h`
+                    return `Hace ${Math.floor(diffH / 24)}d`
+                  })()
+                  const initials = r.athlete_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                  return (
+                    <div
+                      key={r.assignment_id}
+                      className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 cursor-pointer hover:border-amber-200 transition-colors"
+                      onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${r.athlete_id}?tab=nutrition`)}
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{r.athlete_name}</p>
+                        <p className="text-xs text-slate-500 truncate">{r.plan_name}</p>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-[11px] text-amber-600 font-medium">{since}</p>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 ml-auto mt-0.5" />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
 
           {/* Próximas consultas */}
           <section>

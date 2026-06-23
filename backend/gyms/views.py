@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 import logging
 import pytz
 from datetime import date, datetime, time as dt_time, timedelta
@@ -612,6 +612,10 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         coach = serializer.validated_data.get("coach")
         athlete = serializer.validated_data.get("athlete")
 
+        if user.role == User.Role.SUPER_ADMIN:
+            serializer.save(gym_id=coach.gym_id)
+            return
+
         if coach.gym_id != user.gym_id or athlete.gym_id != user.gym_id:
             raise PermissionDenied("Coach y atleta deben pertenecer al mismo gimnasio.")
 
@@ -631,8 +635,14 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         if user.role not in {User.Role.COACH, User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN}:
             return Response({"detail": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
 
-        page = int(request.query_params.get("page", 1))
-        page_size = int(request.query_params.get("page_size", 20))
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
+        except (ValueError, TypeError):
+            page_size = 20
         search_q = request.query_params.get("search", "").strip().lower()
 
         assignments = self.get_queryset().filter(is_active=True)
@@ -824,28 +834,48 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         athlete_ids = list(assignments.values_list("athlete_id", flat=True))
         athletes = User.objects.filter(id__in=athlete_ids).order_by("first_name", "last_name")
 
-        from workouts.models import UserRoutineAssignment, WorkoutSession, UserRoutineAssignment as Routines
-        from nutrition.models import UserNutritionPlan, UserMealLog
+        from workouts.models import UserRoutineAssignment, WorkoutSession
+        from nutrition.models import UserNutritionPlan
+
+        athlete_id_list = [a.id for a in athletes]
+        cutoff = date.today() - timedelta(days=7)
+        routines_map = {
+            r.user_id: r
+            for r in UserRoutineAssignment.objects.filter(
+                user_id__in=athlete_id_list, status="active"
+            ).select_related("routine")
+        }
+        plans_map = {
+            p.user_id: p
+            for p in UserNutritionPlan.objects.filter(
+                user_id__in=athlete_id_list, status="active"
+            ).select_related("plan")
+        }
+        from django.db.models import Count as _Count
+        sessions_map = dict(
+            WorkoutSession.objects.filter(
+                user_id__in=athlete_id_list,
+                performed_at__date__gte=cutoff,
+                status="completed",
+            ).values("user_id").annotate(c=_Count("id")).values_list("user_id", "c")
+        )
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="atletas_{date.today().isoformat()}.csv"'
-        response.write("\ufeff")
+        response.write("﻿")
 
         writer = csv.writer(response)
         writer.writerow(["Nombre", "Email", "Nivel", "Puntos", "Rutina Activa", "Plan Nutricional", "Sesiones (7d)", "Activo"])
 
         for a in athletes:
-            routine = UserRoutineAssignment.objects.filter(user=a, status="active").first()
-            plan = UserNutritionPlan.objects.filter(user=a, status="active").first()
-            sessions = WorkoutSession.objects.filter(
-                user=a, performed_at__date__gte=date.today() - timedelta(days=7), status="completed"
-            ).count()
+            routine = routines_map.get(a.id)
+            plan = plans_map.get(a.id)
             writer.writerow([
                 f"{a.first_name} {a.last_name}", a.email, a.nivel, a.puntos,
                 routine.routine.name if routine else "",
                 plan.plan.name if plan else "",
-                sessions,
-                "Sí" if a.is_active else "No",
+                sessions_map.get(a.id, 0),
+                "Si" if a.is_active else "No",
             ])
 
         return response
@@ -991,8 +1021,14 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         if user.role not in {User.Role.NUTRITIONIST, User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN}:
             return Response({"detail": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
 
-        page = int(request.query_params.get("page", 1))
-        page_size = int(request.query_params.get("page_size", 20))
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
+        except (ValueError, TypeError):
+            page_size = 20
         search_q = request.query_params.get("search", "").strip().lower()
 
         assignments = self.get_queryset().filter(is_active=True)
@@ -1109,6 +1145,23 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
             user_id__in=athlete_ids, status="active", compliance_percentage__lt=50
         ).count()
 
+        from nutrition.models import UserNutritionPlan as _UNP
+        reviews_pending_qs = _UNP.objects.filter(
+            user_id__in=athlete_ids,
+            status="active",
+            review_requested_at__isnull=False,
+        ).select_related("user", "plan").order_by("review_requested_at")
+        reviews_pending = [
+            {
+                "assignment_id": str(r.id),
+                "athlete_id": str(r.user_id),
+                "athlete_name": r.user.get_full_name() or r.user.email,
+                "plan_name": r.plan.name,
+                "requested_at": r.review_requested_at.isoformat(),
+            }
+            for r in reviews_pending_qs
+        ]
+
         return Response({
             "total_athletes": total_athletes,
             "with_active_plan": with_plan,
@@ -1116,6 +1169,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
             "avg_compliance_percentage": round(avg_compliance, 1),
             "meals_logged_week": meals_week,
             "low_compliance_athletes": low_compliance,
+            "reviews_pending": reviews_pending,
         })
 
     @action(detail=False, methods=["get"])
@@ -1133,24 +1187,40 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         athletes = User.objects.filter(id__in=athlete_ids).order_by("first_name", "last_name")
 
         from nutrition.models import UserNutritionPlan, UserMealLog
-        from datetime import date
+        from datetime import date as _date
+
+        athlete_id_list = [a.id for a in athletes]
+        today_str = _date.today().isoformat()
+        plans_map = {
+            p.user_id: p
+            for p in UserNutritionPlan.objects.filter(
+                user_id__in=athlete_id_list, status="active"
+            ).select_related("plan")
+        }
+        from django.db.models import Count as _Count
+        meals_map = dict(
+            UserMealLog.objects.filter(
+                user_id__in=athlete_id_list,
+                date=today_str,
+                status="completed",
+            ).values("user_id").annotate(c=_Count("id")).values_list("user_id", "c")
+        )
 
         response = HttpResponse(content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="atletas_nutricion_{date.today().isoformat()}.csv"'
-        response.write("\ufeff")
+        response["Content-Disposition"] = f'attachment; filename="atletas_nutricion_{_date.today().isoformat()}.csv"'
+        response.write("﻿")
 
         writer = csv.writer(response)
         writer.writerow(["Nombre", "Email", "Nivel", "Puntos", "Plan Activo", "Cumplimiento %", "Comidas Hoy", "Completadas / Total"])
 
         for a in athletes:
-            plan = UserNutritionPlan.objects.filter(user=a, status="active").first()
+            plan = plans_map.get(a.id)
             compliance = plan.compliance_percentage if plan else 0
-            today_meals = UserMealLog.objects.filter(user=a, date=date.today().isoformat(), status="completed").count()
             writer.writerow([
                 f"{a.first_name} {a.last_name}", a.email, a.nivel, a.puntos,
                 plan.plan.name if plan else "",
                 compliance,
-                today_meals,
+                meals_map.get(a.id, 0),
             ])
 
         return response
@@ -1162,7 +1232,10 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         if user.role not in {User.Role.NUTRITIONIST, User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN}:
             return Response({"detail": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
 
-        days = int(request.query_params.get("days", 7))
+        try:
+            days = min(365, max(1, int(request.query_params.get("days", 7))))
+        except (ValueError, TypeError):
+            days = 7
         assignments = self.get_queryset().filter(is_active=True)
         if user.role == User.Role.NUTRITIONIST:
             assignments = assignments.filter(nutritionist=user)
@@ -1234,12 +1307,23 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({"detail": "Nutricionista no encontrado en tu gimnasio."}, status=status.HTTP_404_NOT_FOUND)
 
-        current_clients = NutritionistAssignment.objects.filter(nutritionist=nutritionist, is_active=True).count()
-        if current_clients >= nutritionist.max_clients:
-            return Response(
-                {"detail": f"{nutritionist.first_name} ha alcanzado su límite de {nutritionist.max_clients} clientes."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # No puede cambiar de nutricionista si tiene una revisión pendiente
+        from nutrition.models import UserNutritionPlan as UNP
+        existing_assignment = NutritionistAssignment.objects.filter(athlete=user, is_active=True).first()
+        if existing_assignment and existing_assignment.nutritionist != nutritionist:
+            has_pending_review = UNP.objects.filter(
+                user=user,
+                status="active",
+                review_requested_at__isnull=False,
+            ).exists()
+            if has_pending_review:
+                return Response(
+                    {"detail": "No puedes cambiar de nutricionista mientras tienes una solicitud de revisión pendiente."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Notificar al nutricionista anterior si es un cambio
+        prev_nutritionist = existing_assignment.nutritionist if existing_assignment and existing_assignment.nutritionist != nutritionist else None
 
         # Desactivar asignación anterior del atleta
         NutritionistAssignment.objects.filter(athlete=user, is_active=True).update(is_active=False)
@@ -1253,6 +1337,31 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
             assignment.is_active = True
             assignment.gym_id = user.gym_id
             assignment.save(update_fields=["is_active", "gym_id"])
+
+        athlete_name = f"{user.first_name} {user.last_name}".strip() or user.email
+        gym = nutritionist.gym
+
+        # Notificar al nutricionista nuevo
+        create_notification(
+            recipient=nutritionist,
+            notification_type=Notification.Type.SYSTEM,
+            title="Nuevo atleta asignado",
+            message=f"{athlete_name} te ha elegido como su nutricionista.",
+            actor=user,
+            gym=gym,
+            link=f"/{gym.slug}/panel/gestion/atletas/{user.id}" if gym else None,
+        )
+
+        # Notificar al nutricionista anterior si hubo cambio
+        if prev_nutritionist:
+            create_notification(
+                recipient=prev_nutritionist,
+                notification_type=Notification.Type.SYSTEM,
+                title="Atleta cambió de nutricionista",
+                message=f"{athlete_name} ha cambiado de nutricionista.",
+                actor=user,
+                gym=gym,
+            )
 
         pic_url = None
         if nutritionist.profile_picture:
@@ -1475,7 +1584,7 @@ class GymPaymentViewSet(viewsets.ModelViewSet):
         ])
 
 
-AVAILABILITY_MANAGERS = {"gym_admin", "super_admin"}
+AVAILABILITY_MANAGERS = {User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}
 
 
 class NutritionistAvailabilityViewSet(viewsets.ModelViewSet):
@@ -1497,7 +1606,7 @@ class NutritionistAvailabilityViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(nutritionist_id=nutritionist_id)
             return qs
 
-        if user.role == "nutritionist":
+        if user.role == User.Role.NUTRITIONIST:
             # Nutricionista ve solo sus propios bloques (read-only enforced below)
             return NutritionistAvailability.objects.filter(
                 nutritionist=user, gym_id=user.gym_id
@@ -1557,7 +1666,7 @@ class NutritionistAvailabilityViewSet(viewsets.ModelViewSet):
             return Response({"error": "Se requiere nutritionist_id."}, status=400)
 
         today = date.today()
-        max_date = today + timedelta(days=21)
+        max_date = today + timedelta(days=60)
 
         # Fetch blocked overrides in range
         blocked = set(
@@ -1580,7 +1689,7 @@ class NutritionistAvailabilityViewSet(viewsets.ModelViewSet):
         # For simplicity, we return any day that has a block and isn't overridden;
         # slot-level conflict is checked per-day when the user selects the date.
         available_dates = []
-        current = today + timedelta(days=1)  # start from tomorrow
+        current = today  # include today
         while current <= max_date:
             if current.weekday() in available_weekdays and current not in blocked:
                 available_dates.append(current.isoformat())
@@ -1678,15 +1787,15 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.gym_id:
             return NutritionistAppointment.objects.none()
-        if user.role == "nutritionist":
+        if user.role == User.Role.NUTRITIONIST:
             return NutritionistAppointment.objects.filter(
                 nutritionist=user, gym_id=user.gym_id
             ).select_related("athlete", "nutritionist")
-        if user.role in {"gym_admin", "super_admin"}:
+        if user.role in {User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}:
             return NutritionistAppointment.objects.filter(
                 gym_id=user.gym_id
             ).select_related("athlete", "nutritionist")
-        if user.role == "athlete":
+        if user.role == User.Role.ATHLETE:
             return NutritionistAppointment.objects.filter(
                 athlete=user, gym_id=user.gym_id
             ).select_related("athlete", "nutritionist")
@@ -1729,7 +1838,7 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
         duration = serializer.validated_data.get("duration_minutes", 30)
 
         # Paso 4 — Rechazar fechas pasadas y más allá del límite de antelación
-        MAX_ADVANCE_DAYS = 21
+        MAX_ADVANCE_DAYS = 60
         if scheduled_at and scheduled_at < timezone.now():
             raise DRFValidationError({"scheduled_at": "No puedes agendar una cita en el pasado."})
         if scheduled_at and scheduled_at > timezone.now() + timedelta(days=MAX_ADVANCE_DAYS):
@@ -1742,9 +1851,12 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
             target_date = scheduled_at.date()
 
             # Paso 1 — Detección de conflictos por duración (solapamiento real)
+            # Solo traemos citas del mismo día ±1 para evitar full-scan histórico
             existing = NutritionistAppointment.objects.filter(
                 nutritionist=nutritionist,
                 gym=gym,
+                scheduled_at__date__gte=target_date - timedelta(days=1),
+                scheduled_at__date__lte=target_date + timedelta(days=1),
             ).exclude(status=NutritionistAppointment.Status.CANCELLED).values_list(
                 "scheduled_at", "duration_minutes"
             )
@@ -1944,6 +2056,69 @@ class NutritionistAppointmentViewSet(viewsets.ModelViewSet):
         except Exception:
             from rest_framework.exceptions import ValidationError as DRFValidationError
             raise DRFValidationError({"scheduled_at": "Formato de fecha inválido."})
+
+        # Validar que el nuevo horario no esté en el pasado ni más allá del horizonte
+        MAX_ADVANCE_DAYS = 21
+        if new_dt < timezone.now():
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"scheduled_at": "No puedes reprogramar a una fecha pasada."})
+        if new_dt > timezone.now() + timedelta(days=MAX_ADVANCE_DAYS):
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({
+                "scheduled_at": f"No puedes reprogramar con más de {MAX_ADVANCE_DAYS} días de antelación."
+            })
+
+        duration = appt.duration_minutes
+        new_dt_end = new_dt + timedelta(minutes=duration)
+        target_date = new_dt.date()
+
+        # Verificar conflictos con otras citas (excluir la cita actual)
+        existing = NutritionistAppointment.objects.filter(
+            nutritionist=appt.nutritionist,
+            gym=appt.gym,
+        ).exclude(
+            pk=appt.pk
+        ).exclude(
+            status=NutritionistAppointment.Status.CANCELLED
+        ).filter(
+            scheduled_at__date__gte=target_date - timedelta(days=1),
+            scheduled_at__date__lte=target_date + timedelta(days=1),
+        ).values_list("scheduled_at", "duration_minutes")
+        for existing_start, existing_dur in existing:
+            existing_end = existing_start + timedelta(minutes=existing_dur)
+            if new_dt < existing_end and new_dt_end > existing_start:
+                from rest_framework.exceptions import ValidationError as DRFValidationError
+                raise DRFValidationError({"scheduled_at": "El nuevo horario se solapa con una cita existente."})
+
+        # Verificar que la fecha no esté bloqueada
+        if AvailabilityOverride.objects.filter(
+            nutritionist=appt.nutritionist,
+            gym=appt.gym,
+            date=target_date,
+        ).exists():
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({"scheduled_at": "El nutricionista no está disponible ese día."})
+
+        # Verificar que el horario caiga dentro de un bloque de disponibilidad
+        day_of_week = target_date.weekday()
+        blocks = NutritionistAvailability.objects.filter(
+            nutritionist=appt.nutritionist,
+            gym=appt.gym,
+            day_of_week=day_of_week,
+            is_active=True,
+        )
+        local_new_dt = timezone.localtime(new_dt)
+        slot_time = local_new_dt.time().replace(second=0, microsecond=0)
+        slot_end_time = (local_new_dt + timedelta(minutes=duration)).time().replace(second=0, microsecond=0)
+        within_block = any(
+            b.start_time <= slot_time and slot_end_time <= b.end_time
+            for b in blocks
+        )
+        if not within_block:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError({
+                "scheduled_at": "El nuevo horario no está dentro de la disponibilidad del nutricionista."
+            })
 
         appt.scheduled_at = new_dt
         appt.status = NutritionistAppointment.Status.SCHEDULED
@@ -2717,11 +2892,11 @@ class CoachMessageViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.gym_id:
             return CoachMessage.objects.none()
-        if user.role == "coach":
+        if user.role == User.Role.COACH:
             return CoachMessage.objects.filter(
                 coach=user, gym_id=user.gym_id
             ).select_related("athlete", "coach")
-        if user.role == "athlete":
+        if user.role == User.Role.ATHLETE:
             return CoachMessage.objects.filter(
                 athlete=user, gym_id=user.gym_id
             ).select_related("athlete", "coach")
@@ -2735,21 +2910,56 @@ class CoachMessageViewSet(viewsets.ModelViewSet):
             gym = Gym.objects.get(id=user.gym_id)
         except Gym.DoesNotExist:
             raise PermissionDenied("Gimnasio no encontrado.")
-        if user.role == "coach":
+
+        if user.role == User.Role.COACH:
             athlete_id = self.request.data.get("athlete")
             if not athlete_id:
                 from rest_framework.exceptions import ValidationError
                 raise ValidationError({"athlete": "Este campo es requerido."})
-            serializer.save(coach=user, gym=gym, sender_is_coach=True)
-        elif user.role == "athlete":
+            # Verify this athlete is actually assigned to this coach
+            assignment = CoachAssignment.objects.filter(
+                coach=user, athlete_id=athlete_id, gym=gym, is_active=True
+            ).first()
+            if not assignment:
+                raise PermissionDenied("Este atleta no está asignado a ti.")
+            message = serializer.save(coach=user, gym=gym, sender_is_coach=True)
+            self._notify_new_message(message, recipient=message.athlete)
+
+        elif user.role == User.Role.ATHLETE:
             coach_assign = CoachAssignment.objects.filter(
                 athlete=user, gym=gym, is_active=True
-            ).first()
+            ).select_related("coach").first()
             if not coach_assign:
                 raise PermissionDenied("No tienes coach asignado.")
-            serializer.save(coach=coach_assign.coach, athlete=user, gym=gym, sender_is_coach=False)
+            message = serializer.save(
+                coach=coach_assign.coach, athlete=user, gym=gym, sender_is_coach=False
+            )
+            self._notify_new_message(message, recipient=coach_assign.coach)
+
         else:
             raise PermissionDenied("Sin permisos para enviar mensajes.")
+
+    def _notify_new_message(self, message: CoachMessage, recipient) -> None:
+        try:
+            from gyms.models import Notification
+            gym  = message.gym
+            sender_name = (
+                message.coach.get_full_name() or message.coach.email
+                if message.sender_is_coach
+                else message.athlete.get_full_name() or message.athlete.email
+            )
+            preview = message.body[:60] + ("…" if len(message.body) > 60 else "")
+            create_notification(
+                recipient=recipient,
+                notification_type=Notification.Type.SYSTEM,
+                title=f"Nuevo mensaje de {sender_name}",
+                message=preview,
+                actor=message.coach if message.sender_is_coach else message.athlete,
+                gym=gym,
+                link=f"/{gym.slug}/panel/mensajes-coach" if gym else None,
+            )
+        except Exception:
+            logger.warning("_notify_new_message: notificación fallida", exc_info=True)
 
     @action(detail=False, methods=["get"])
     def threads(self, request):
@@ -2815,3 +3025,28 @@ class CoachMessageViewSet(viewsets.ModelViewSet):
         qs = self.get_queryset().order_by("created_at")
         qs.filter(sender_is_coach=True, is_read=False).update(is_read=True)
         return Response(CoachMessageSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def my_athletes(self, request):
+        """
+        Devuelve los atletas asignados al coach.
+        Usado en el frontend para mostrar todos los atletas (incluso sin mensajes previos).
+        """
+        user = request.user
+        if user.role != User.Role.COACH:
+            return Response({"detail": "Solo para coaches."}, status=403)
+        assignments = (
+            CoachAssignment.objects
+            .filter(coach=user, is_active=True)
+            .select_related("athlete")
+        )
+        results = [
+            {
+                "id":         str(a.athlete.id),
+                "first_name": a.athlete.first_name,
+                "last_name":  a.athlete.last_name,
+                "email":      a.athlete.email,
+            }
+            for a in assignments
+        ]
+        return Response({"results": results})

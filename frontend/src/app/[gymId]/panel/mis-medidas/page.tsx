@@ -332,7 +332,7 @@ export default function MisMedidasPage({ params }: { params: Promise<{ gymId: st
                 </div>
               </div>
               <div className="h-52">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={208}>
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />

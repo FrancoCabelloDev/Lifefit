@@ -164,6 +164,30 @@ class UserRoutineAssignment(BaseModel):
         return f"{self.user.email} - {self.routine.name}"
 
 
+class SessionExerciseLog(BaseModel):
+    """Registro de series completadas por ejercicio dentro de una sesión."""
+
+    session = models.ForeignKey(
+        WorkoutSession,
+        on_delete=models.CASCADE,
+        related_name="exercise_logs",
+    )
+    routine_exercise = models.ForeignKey(
+        RoutineExercise,
+        on_delete=models.CASCADE,
+        related_name="session_logs",
+    )
+    sets_completed = models.PositiveIntegerField(default=0)
+    completed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["routine_exercise__order"]
+        unique_together = ("session", "routine_exercise")
+
+    def __str__(self) -> str:
+        return f"{self.session} — {self.routine_exercise.exercise.name} ({self.sets_completed} series)"
+
+
 class WeeklyRoutinePlan(BaseModel):
     class DayOfWeek(models.IntegerChoices):
         MONDAY    = 0, "Lunes"

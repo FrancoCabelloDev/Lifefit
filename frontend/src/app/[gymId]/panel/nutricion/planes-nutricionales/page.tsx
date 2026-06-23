@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { UtensilsCrossed, Plus, Search, Loader2, Edit, Trash, Check, X, Apple, Beef, Wheat, Droplets, UserPlus, ChefHat } from 'lucide-react'
+import { UtensilsCrossed, Plus, Search, Loader2, Edit, Trash, Check, X, Apple, Beef, Wheat, Droplets, Copy, ChefHat, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -64,40 +64,42 @@ export default function NutritionPlansPage({ params }: { params: Promise<{ gymId
 
   const [dayMeals, setDayMeals] = useState<DayMeals[]>([])
 
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false)
-  const [assignPlan, setAssignPlan] = useState<NutritionPlan | null>(null)
-  const [athletes, setAthletes] = useState<User[]>([])
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false)
+  const [clonePlan, setClonePlan]             = useState<NutritionPlan | null>(null)
+  const [athletes, setAthletes]               = useState<User[]>([])
   const [selectedAthleteId, setSelectedAthleteId] = useState('')
-  const [isAssigning, setIsAssigning] = useState(false)
+  const [isCloning, setIsCloning]             = useState(false)
 
-  const openAssignDialog = async (plan: NutritionPlan) => {
-    setAssignPlan(plan)
+  const openCloneDialog = async (plan: NutritionPlan) => {
+    setClonePlan(plan)
     setSelectedAthleteId('')
-    setAssignDialogOpen(true)
+    setCloneDialogOpen(true)
     try {
-      const data = await api.get<PaginatedResponse<User>>("/api/auth/gym-members/", {
-        params: { role: 'athlete' }
+      const data = await api.get<PaginatedResponse<User>>('/api/auth/gym-members/', {
+        params: { role: 'athlete' },
       })
       setAthletes(Array.isArray(data) ? data : data.results || [])
-    } catch (error) {
-      console.error('Error fetching athletes:', error)
+    } catch (err) {
+      console.error('Error fetching athletes:', err)
     }
   }
 
-  const handleAssignPlan = async () => {
-    if (!assignPlan || !selectedAthleteId) return
+  const handleClonePlan = async () => {
+    if (!clonePlan || !selectedAthleteId) return
+    setIsCloning(true)
     try {
-      setIsAssigning(true)
-      await api.post(`/api/nutrition/plans/${assignPlan.id}/assign_to_user/`, {
-        user_id: selectedAthleteId,
+      const result = await api.post<any>(`/api/nutrition/plans/${clonePlan.id}/clone/`, {
+        athlete_id: selectedAthleteId,
       })
-      setAssignDialogOpen(false)
-      setAssignPlan(null)
+      setCloneDialogOpen(false)
+      setClonePlan(null)
       setSelectedAthleteId('')
-    } catch (error: any) {
-      showError(error, 'Error al asignar plan')
+      // Redirect to the cloned plan's editor
+      router.push(`/${gymId}/panel/nutricion/planes-nutricionales/${result.id}`)
+    } catch (err: any) {
+      showError(err, 'Error al clonar el plan')
     } finally {
-      setIsAssigning(false)
+      setIsCloning(false)
     }
   }
 
@@ -306,65 +308,87 @@ export default function NutritionPlansPage({ params }: { params: Promise<{ gymId
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPlans.map((plan) => {
             const statusInfo = STATUES[plan.status] || STATUES.draft
+            // Library plan = created_for is null
+            const isLibrary = !(plan as any).created_for
             return (
-              <Card key={plan.id} className="border-slate-200 overflow-hidden rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+              <Card key={plan.id} className="border-slate-200 overflow-hidden rounded-3xl shadow-sm hover:shadow-md transition-shadow flex flex-col">
                 <CardHeader className="border-b border-slate-100 pb-4">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg font-bold text-slate-900">{plan.name}</CardTitle>
-                      <Badge className={`${statusInfo.color} border-none font-medium`}>{statusInfo.label}</Badge>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="space-y-1.5 min-w-0">
+                      <CardTitle className="text-base font-bold text-slate-900 leading-tight">{plan.name}</CardTitle>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge className={`${statusInfo.color} border-none font-medium text-xs`}>{statusInfo.label}</Badge>
+                        {isLibrary && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded-full">
+                            <BookOpen className="w-2.5 h-2.5" /> Plantilla
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssignDialog(plan)}>
-                        <UserPlus className="h-4 w-4 text-emerald-500" />
-                      </Button>
+                    <div className="flex gap-1 shrink-0">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(plan)}>
-                        <Edit className="h-4 w-4 text-slate-500" />
+                        <Edit className="h-4 w-4 text-slate-400" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(plan.id)}>
-                        <Trash className="h-4 w-4 text-red-500" />
+                        <Trash className="h-4 w-4 text-red-400" />
                       </Button>
                     </div>
                   </div>
-                  {plan.description && (
-                    <CardDescription className="text-sm text-slate-600 mt-2 line-clamp-2">{plan.description}</CardDescription>
+                  {isLibrary ? (
+                    <p className="text-xs text-violet-500 mt-2">Plantilla · úsala como base para crear un plan personalizado</p>
+                  ) : (
+                    plan.description && (
+                      <CardDescription className="text-sm text-slate-600 mt-2 line-clamp-2">{plan.description}</CardDescription>
+                    )
                   )}
                 </CardHeader>
-                <CardContent className="pt-4 space-y-4">
+                <CardContent className="pt-4 space-y-4 flex-1 flex flex-col justify-between">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Apple className="h-4 w-4 text-emerald-500" />
+                      <Apple className="h-4 w-4 text-emerald-500 shrink-0" />
                       <span className="font-medium text-slate-900">{plan.calories_per_day}</span> kcal
                     </div>
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Beef className="h-4 w-4 text-rose-500" />
-                      <span className="font-medium text-slate-900">{plan.protein_g}g</span> proteínas
+                      <Beef className="h-4 w-4 text-rose-500 shrink-0" />
+                      <span className="font-medium text-slate-900">{plan.protein_g}g</span> prot
                     </div>
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Wheat className="h-4 w-4 text-amber-500" />
-                      <span className="font-medium text-slate-900">{plan.carbs_g}g</span> carbohidratos
+                      <Wheat className="h-4 w-4 text-amber-500 shrink-0" />
+                      <span className="font-medium text-slate-900">{plan.carbs_g}g</span> carbs
                     </div>
                     <div className="flex items-center gap-2 text-slate-600">
-                      <Droplets className="h-4 w-4 text-blue-500" />
+                      <Droplets className="h-4 w-4 text-blue-500 shrink-0" />
                       <span className="font-medium text-slate-900">{plan.fats_g}g</span> grasas
                     </div>
                   </div>
-                  <div className="flex justify-between pt-3 border-t border-slate-100 text-sm text-slate-600">
-                    <span className="flex items-center gap-1">
-                      <UtensilsCrossed className="h-3.5 w-3.5 text-slate-400" />
-                      {plan.total_meals ?? 0} comidas
-                    </span>
-                    <span>{plan.duration_days} días</span>
+                  <div className="space-y-2 pt-3 border-t border-slate-100">
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <UtensilsCrossed className="h-3 w-3 text-slate-400" />
+                        {plan.total_meals ?? 0} comidas
+                      </span>
+                      <span>{plan.duration_days} días</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-slate-200 text-slate-600 hover:bg-slate-50 text-xs"
+                      onClick={() => router.push(`/${gymId}/panel/nutricion/planes-nutricionales/${plan.id}`)}
+                    >
+                      <ChefHat className="h-3.5 w-3.5 mr-1.5" />
+                      Gestionar comidas
+                    </Button>
+                    {isLibrary && (
+                      <Button
+                        size="sm"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                        onClick={() => openCloneDialog(plan)}
+                      >
+                        <Copy className="h-3.5 w-3.5 mr-1.5" />
+                        Usar como base →
+                      </Button>
+                    )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                    onClick={() => router.push(`/${gymId}/panel/nutricion/planes-nutricionales/${plan.id}`)}
-                  >
-                    <ChefHat className="h-3.5 w-3.5 mr-1.5" />
-                    Gestionar comidas
-                  </Button>
                 </CardContent>
               </Card>
             )
@@ -585,46 +609,58 @@ export default function NutritionPlansPage({ params }: { params: Promise<{ gymId
         </DialogContent>
       </Dialog>
 
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl">
+      {/* Modal: Usar como base → seleccionar atleta → clonar */}
+      <Dialog open={cloneDialogOpen} onOpenChange={(open) => { if (!open) { setCloneDialogOpen(false); setClonePlan(null); setSelectedAthleteId('') } }}>
+        <DialogContent className="sm:max-w-[440px] rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-slate-900">Asignar Plan Nutricional</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-slate-900">Usar como base</DialogTitle>
             <DialogDescription>
-              Asigna &quot;{assignPlan?.name}&quot; a un atleta.
+              Se creará una copia de <strong>&quot;{clonePlan?.name}&quot;</strong> como plan personal del atleta.
+              Podrás editarla sin afectar la plantilla original.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label className="text-slate-700 font-bold text-xs uppercase tracking-wider">Atleta</Label>
+              <Label className="text-slate-700 font-bold text-xs uppercase tracking-wider">¿Para qué atleta?</Label>
               <Select value={selectedAthleteId} onValueChange={setSelectedAthleteId}>
                 <SelectTrigger className="rounded-xl border-slate-200 h-11">
                   <SelectValue placeholder="Seleccionar atleta..." />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl border-none shadow-xl bg-white p-2">
                   {athletes.length === 0 ? (
-                    <div className="py-4 text-center text-sm text-slate-500">No hay atletas disponibles</div>
+                    <div className="py-4 text-center text-sm text-slate-500">
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2 text-slate-400" />
+                      Cargando atletas...
+                    </div>
                   ) : (
                     athletes.map((a) => (
-                      <SelectItem key={a.id} value={a.id} className="rounded-xl py-3 cursor-pointer">
-                        {a.first_name} {a.last_name} ({a.email})
+                      <SelectItem key={a.id} value={a.id} className="rounded-xl py-2.5 cursor-pointer">
+                        {a.first_name} {a.last_name}
+                        <span className="text-slate-400 text-xs ml-1">({a.email})</span>
                       </SelectItem>
                     ))
                   )}
                 </SelectContent>
               </Select>
             </div>
+            {selectedAthleteId && (
+              <div className="flex items-start gap-2.5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
+                <Copy className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                Se clonará &quot;{clonePlan?.name}&quot; con todas sus comidas. Serás redirigido al editor del plan personalizado.
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)} className="rounded-xl">
+            <Button variant="outline" onClick={() => setCloneDialogOpen(false)} className="rounded-xl">
               Cancelar
             </Button>
             <Button
-              onClick={handleAssignPlan}
-              disabled={!selectedAthleteId || isAssigning}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+              onClick={handleClonePlan}
+              disabled={!selectedAthleteId || isCloning}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2"
             >
-              {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-              Asignar
+              {isCloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+              Crear plan personalizado →
             </Button>
           </DialogFooter>
         </DialogContent>

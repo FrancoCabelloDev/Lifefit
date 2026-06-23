@@ -83,9 +83,9 @@ function ScheduleDrawer({ member, open, onClose }: { member: StaffMember | null;
   const [duration, setDuration] = useState(30)
 
   const { data: blocks, isLoading } = useQuery({
-    queryKey: ['nutri-availability', member?.id],
+    queryKey: ['nutri-availability', String(member?.id ?? '')],
     queryFn: async () => {
-      const res = await api.get<any>('/api/gyms/availability/', { params: { nutritionist_id: member!.id } })
+      const res = await api.get<any>('/api/gyms/availability/', { params: { nutritionist_id: String(member!.id) } })
       return (res?.results ?? res ?? []) as AvailabilityBlock[]
     },
     enabled: !!member?.id && open,

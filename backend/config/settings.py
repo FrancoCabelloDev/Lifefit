@@ -11,10 +11,19 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import warnings
 from datetime import timedelta
 from pathlib import Path
 
 import environ
+
+# Suppress naive-datetime warnings from legacy DB records
+warnings.filterwarnings(
+    "ignore",
+    message=".*received a naive datetime.*",
+    category=RuntimeWarning,
+    module="django.db.models.fields",
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

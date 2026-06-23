@@ -127,12 +127,21 @@ function AppointmentContextPanel({
   appointment: NutritionistAppointment
   gymId: string
   onClose: () => void
-  onStatusChange: (id: string, status: string) => void
+  onStatusChange: (id: string, status: string, reason?: string) => void
 }) {
   const router = useRouter()
 
   const [clinicalNotes, setClinicalNotes] = useState(appointment.clinical_notes ?? '')
   const [notesSaved, setNotesSaved] = useState(false)
+  const [actionModal, setActionModal] = useState<'cancel' | 'no_show' | null>(null)
+  const [actionReason, setActionReason] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
+
+  const apptDate = new Date(appointment.scheduled_at)
+  const now = new Date()
+  const isToday = apptDate.toDateString() === now.toDateString()
+  const isPast = apptDate < now
+  const canComplete = isToday || isPast
 
   const saveNotesMutation = useMutation({
     mutationFn: (notes: string) =>
@@ -443,26 +452,95 @@ function AppointmentContextPanel({
         {/* Footer — actions */}
         {(appointment.status === 'scheduled' || appointment.status === 'confirmed') && (
           <div className="p-4 border-t border-slate-100 shrink-0 space-y-2">
+            {!canComplete && (
+              <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 text-center">
+                Las acciones estarán disponibles el día de la consulta
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
+                disabled={!canComplete}
                 onClick={() => { onStatusChange(appointment.id, 'completed'); onClose() }}
-                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm font-semibold transition-all"
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" /> Completar
               </button>
               <button
-                onClick={() => { onStatusChange(appointment.id, 'no_show'); onClose() }}
-                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-600 text-sm font-semibold transition-all"
+                disabled={!canComplete}
+                onClick={() => { setActionReason(''); setActionModal('no_show') }}
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm font-semibold transition-all"
               >
                 <AlertCircle className="w-4 h-4" /> No asistió
               </button>
             </div>
             <button
-              onClick={() => { onStatusChange(appointment.id, 'cancelled'); onClose() }}
+              onClick={() => { setActionReason(''); setActionModal('cancel') }}
               className="w-full py-2 rounded-xl border border-dashed border-rose-200 text-rose-500 hover:bg-rose-50 text-xs font-medium transition-all"
             >
               Cancelar cita
             </button>
+          </div>
+        )}
+
+        {/* Modal motivo */}
+        {actionModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setActionModal(null)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-4">
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">
+                  {actionModal === 'cancel' ? 'Cancelar cita' : 'Registrar inasistencia'}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {actionModal === 'cancel'
+                    ? 'Se notificará al atleta con el motivo de cancelación.'
+                    : 'Se notificará al atleta que no se registró su asistencia.'}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+                  Motivo {actionModal === 'no_show' && <span className="font-normal normal-case">(opcional)</span>}
+                </label>
+                <textarea
+                  value={actionReason}
+                  onChange={e => setActionReason(e.target.value)}
+                  rows={3}
+                  placeholder={actionModal === 'cancel'
+                    ? 'Ej: Tengo una emergencia, reprogramamos para la próxima semana...'
+                    : 'Ej: El atleta no se presentó ni avisó con anticipación...'}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setActionModal(null)}
+                  className="flex-1 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all"
+                >
+                  Volver
+                </button>
+                <button
+                  disabled={actionModal === 'cancel' && !actionReason.trim()}
+                  onClick={async () => {
+                    setActionLoading(true)
+                    try {
+                      onStatusChange(appointment.id, actionModal === 'cancel' ? 'cancelled' : 'no_show', actionReason.trim() || undefined)
+                      setActionModal(null)
+                      onClose()
+                    } finally {
+                      setActionLoading(false)
+                    }
+                  }}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 ${
+                    actionModal === 'cancel' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-slate-700 hover:bg-slate-800'
+                  }`}
+                >
+                  {actionLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : actionModal === 'cancel' ? 'Confirmar cancelación' : 'Confirmar inasistencia'
+                  }
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -505,7 +583,20 @@ function AppointmentContextPanel({
 // ── NewAppointmentForm ────────────────────────────────────────────────────────
 
 const TODAY = startOfDay(new Date())
-const MAX_DATE = addDays(TODAY, 21)
+const MAX_DATE = addDays(TODAY, 60)
+
+const DURATIONS = [
+  { value: '15', label: '15 min' },
+  { value: '30', label: '30 min' },
+  { value: '45', label: '45 min' },
+  { value: '60', label: '1 h' },
+  { value: '90', label: '1.5 h' },
+]
+
+const APPT_TYPES = [
+  { value: 'first', label: 'Primera consulta' },
+  { value: 'followup', label: 'Seguimiento' },
+]
 
 interface NewAppointmentFormProps {
   gymId: string
@@ -519,13 +610,14 @@ function NewAppointmentForm({ gymId, nutritionistId, onClose, onSuccess }: NewAp
   const [selectedAthlete, setSelectedAthlete] = useState<{ id: string; name: string } | null>(null)
   const [selectedDate, setSelectedDate]       = useState<Date | undefined>(undefined)
   const [selectedSlot, setSelectedSlot]       = useState<string | null>(null)
-  const [duration, setDuration]               = useState('30')
   const [type, setType]                       = useState('followup')
   const [notes, setNotes]                     = useState('')
+  const [mounted, setMounted]                 = useState(false)
+
+  useEffect(() => { requestAnimationFrame(() => setMounted(true)) }, [])
 
   const dateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''
 
-  // Reset slot when date changes
   useEffect(() => { setSelectedSlot(null) }, [dateStr])
 
   const availableDaysQuery = useQuery({
@@ -579,7 +671,7 @@ function NewAppointmentForm({ gymId, nutritionistId, onClose, onSuccess }: NewAp
     mutation.mutate({
       athlete: selectedAthlete.id,
       scheduled_at: selectedSlot,
-      duration_minutes: parseInt(duration),
+      duration_minutes: type === 'first' ? 60 : 30,
       appointment_type: type,
       notes,
     })
@@ -590,170 +682,229 @@ function NewAppointmentForm({ gymId, nutritionistId, onClose, onSuccess }: NewAp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
-          <h2 className="font-semibold text-slate-900">Nueva cita</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 transition-colors">
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-[3px] transition-opacity duration-200"
+        style={{ opacity: mounted ? 1 : 0 }}
+        onClick={onClose}
+      />
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 max-h-[90vh] flex flex-col transition-all duration-200"
+        style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1) translateY(0)' : 'scale(0.96) translateY(8px)',
+          transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
+          <div>
+            <h2 className="font-semibold text-slate-900 text-base">Nueva cita</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Completa los detalles de la consulta</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all active:scale-95"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
-          {/* Athlete selector */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1.5">Cliente</label>
-            {selectedAthlete ? (
-              <div className="flex items-center gap-2 p-2.5 rounded-xl border border-emerald-200 bg-emerald-50">
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
-                  {getInitials(selectedAthlete.name)}
-                </div>
-                <span className="text-sm font-medium text-slate-800 flex-1">{selectedAthlete.name}</span>
-                <button type="button" onClick={() => setSelectedAthlete(null)} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Buscar cliente..."
-                  className="pl-9 h-9 rounded-xl text-sm border-slate-200"
-                  value={athleteSearch}
-                  onChange={e => setAthleteSearch(e.target.value)}
-                />
-                {athletesQuery.data && athletesQuery.data.length > 0 && (
-                  <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
-                    {athletesQuery.data.map(a => (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => { setSelectedAthlete({ id: a.id, name: `${a.first_name} ${a.last_name}` }); setAthleteSearch('') }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 text-left transition-colors"
-                      >
-                        <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs">
-                          {a.first_name[0]}{a.last_name[0]}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">{a.first_name} {a.last_name}</p>
-                          <p className="text-[10px] text-slate-400">{a.email}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden flex-1">
+          <div className="p-5 space-y-5 overflow-y-auto flex-1">
 
-          {/* Calendar date picker */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1.5">Fecha</label>
-            {availableDaysQuery.isLoading ? (
-              <div className="flex items-center gap-2 text-xs text-slate-400 py-3">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando disponibilidad...
-              </div>
-            ) : availableDaysQuery.data?.length === 0 ? (
-              <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-3 text-xs text-amber-700 font-medium">
-                No tienes horarios configurados. Contacta al administrador.
-              </div>
-            ) : (
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={isDisabledDay}
-                  locale={es}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Slot picker */}
-          {selectedDate && (
+            {/* Athlete selector */}
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                Horario — {format(selectedDate, "d 'de' MMMM", { locale: es })}
-              </label>
-              {slotsQuery.isLoading ? (
-                <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando horarios...
-                </div>
-              ) : !hasSlots ? (
-                <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 py-4 text-center">
-                  <p className="text-xs text-slate-400">Sin disponibilidad para este día</p>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-2">Cliente</label>
+              {selectedAthlete ? (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-200 bg-emerald-50/60">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0">
+                    {getInitials(selectedAthlete.name)}
+                  </div>
+                  <span className="text-sm font-medium text-slate-800 flex-1">{selectedAthlete.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAthlete(null)}
+                    className="w-6 h-6 rounded-lg bg-emerald-100 hover:bg-emerald-200 flex items-center justify-center text-emerald-600 transition-all active:scale-90"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {slotsQuery.data!.map(slot => {
-                    const label = new Date(slot).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
-                    const isSelected = selectedSlot === slot
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => setSelectedSlot(slot)}
-                        className={cn(
-                          'px-3 py-1.5 rounded-xl border text-sm font-semibold transition-all',
-                          isSelected
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50',
-                        )}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <Input
+                    placeholder="Buscar cliente..."
+                    className="pl-9 h-10 rounded-xl text-sm border-slate-200 focus:border-emerald-400 focus:ring-emerald-500/20"
+                    value={athleteSearch}
+                    onChange={e => setAthleteSearch(e.target.value)}
+                  />
+                  {athletesQuery.data && athletesQuery.data.length > 0 && (
+                    <div className="absolute top-full mt-1.5 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-10 overflow-hidden">
+                      {athletesQuery.data.map((a, i) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => { setSelectedAthlete({ id: a.id, name: `${a.first_name} ${a.last_name}` }); setAthleteSearch('') }}
+                          className={cn(
+                            'w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-emerald-50 text-left transition-colors',
+                            i > 0 && 'border-t border-slate-50',
+                          )}
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
+                            {a.first_name[0]}{a.last_name[0]}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-800">{a.first_name} {a.last_name}</p>
+                            <p className="text-[10px] text-slate-400">{a.email}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
 
-          {/* Duration + Type */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Duración</label>
-              <select value={duration} onChange={e => setDuration(e.target.value)}
-                className="w-full h-9 rounded-xl text-sm border border-slate-200 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400">
-                <option value="15">15 min</option>
-                <option value="30">30 min</option>
-                <option value="45">45 min</option>
-                <option value="60">1 hora</option>
-                <option value="90">1.5 horas</option>
-              </select>
+            {/* Calendar + Slots side by side when date selected */}
+            <div className={cn('grid gap-4', selectedDate ? 'grid-cols-[1fr_auto]' : 'grid-cols-1')}>
+              {/* Calendar */}
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-2">Fecha</label>
+                {availableDaysQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-400 py-4">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando disponibilidad...
+                  </div>
+                ) : availableDaysQuery.data?.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-3 text-xs text-amber-700 font-medium">
+                    No tienes horarios configurados.
+                  </div>
+                ) : (
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    disabled={isDisabledDay}
+                    locale={es}
+                    showOutsideDays
+                    className="border border-slate-200 rounded-xl"
+                  />
+                )}
+              </div>
+
+              {/* Slot picker — right column when date chosen */}
+              {selectedDate && (
+                <div
+                  className="w-[110px]"
+                  style={{ animation: 'slideInRight 180ms cubic-bezier(0.23, 1, 0.32, 1) both' }}
+                >
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-2">
+                    {format(selectedDate, "d MMM", { locale: es })}
+                  </label>
+                  {slotsQuery.isLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                    </div>
+                  ) : !hasSlots ? (
+                    <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 py-5 text-center">
+                      <p className="text-[10px] text-slate-400 leading-relaxed">Sin<br/>horarios</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5 max-h-[260px] overflow-y-auto pr-0.5">
+                      {slotsQuery.data!.map(slot => {
+                        const label = new Date(slot).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+                        const isSelected = selectedSlot === slot
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => setSelectedSlot(slot)}
+                            className={cn(
+                              'w-full px-2.5 py-2 rounded-xl border text-xs font-semibold transition-all active:scale-[0.96]',
+                              isSelected
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-500/25'
+                                : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-300 hover:bg-emerald-50',
+                            )}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Type pills */}
             <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Tipo</label>
-              <select value={type} onChange={e => setType(e.target.value)}
-                className="w-full h-9 rounded-xl text-sm border border-slate-200 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400">
-                <option value="first">Primera consulta</option>
-                <option value="followup">Seguimiento</option>
-              </select>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-2">Tipo</label>
+              <div className="flex gap-1.5">
+                {APPT_TYPES.map(t => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setType(t.value)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-[0.96]',
+                      type === t.value
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-2">Notas <span className="font-normal normal-case text-slate-400">(opcional)</span></label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Objetivos, recordatorios..."
+                className="w-full rounded-xl text-sm border border-slate-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none text-slate-700 placeholder:text-slate-300"
+              />
+            </div>
+
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1.5">Notas (opcional)</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder="Objetivos, recordatorios..."
-              className="w-full rounded-xl text-sm border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none" />
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 h-9 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-              Cancelar
-            </button>
-            <button type="submit" disabled={!canSubmit}
-              className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold transition-all active:scale-95">
-              {mutation.isPending ? 'Guardando...' : 'Crear cita'}
-            </button>
+          {/* Footer — sticky */}
+          <div className="px-5 pb-5 pt-3 border-t border-slate-100 shrink-0 space-y-2">
+            {canSubmit && selectedDate && selectedSlot && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <p className="text-xs text-emerald-700 font-medium">
+                  {selectedAthlete?.name} · {format(selectedDate, "d 'de' MMMM", { locale: es })} · {new Date(selectedSlot).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })} · {type === 'first' ? '60 min' : '30 min'}
+                </p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all active:scale-[0.98]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="flex-1 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+              >
+                {mutation.isPending
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
+                  : 'Crear cita'
+                }
+              </button>
+            </div>
           </div>
 
           {mutation.isError && (
-            <p className="text-xs text-rose-600 text-center">
+            <p className="text-xs text-rose-600 text-center px-5 pb-3">
               {(mutation.error as any)?.data?.scheduled_at?.[0] ?? (mutation.error as any)?.message ?? 'Error al crear la cita'}
             </p>
           )}
@@ -788,6 +939,7 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
       return (data?.results || data || []) as NutritionistAppointment[]
     },
     refetchInterval: 60000,
+    retry: 2,
   })
 
   const allAppointments = appointmentsQuery.data || []
@@ -795,20 +947,48 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
   const invalidateAppts = () => queryClient.invalidateQueries({ queryKey: ['appointments', gymId] })
 
   const statusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      if (status === 'accept_reschedule') {
-        // Opens modal — handled separately
-        return
-      }
+    mutationFn: async ({ id, status, reason }: { id: string; status: string; reason?: string }) => {
+      if (status === 'accept_reschedule') return
       if (status === 'reject_reschedule') {
         return api.post(`/api/gyms/appointments/${id}/reject-reschedule/`, {})
       }
       if (status === 'cancelled') {
-        return api.post(`/api/gyms/appointments/${id}/cancel/`, {})
+        const result = await api.post(`/api/gyms/appointments/${id}/cancel/`, {})
+        if (reason) {
+          const appt = allAppointments.find(a => a.id === id)
+          if (appt) {
+            await api.post('/api/gyms/messages/', {
+              athlete: appt.athlete,
+              body: `Tu cita del ${new Date(appt.scheduled_at).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${new Date(appt.scheduled_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} ha sido cancelada.\n\nMotivo: ${reason}`,
+            }).catch(() => {})
+          }
+        }
+        return result
+      }
+      if (status === 'no_show') {
+        const result = await api.patch(`/api/gyms/appointments/${id}/`, { status })
+        if (reason) {
+          const appt = allAppointments.find(a => a.id === id)
+          if (appt) {
+            await api.post('/api/gyms/messages/', {
+              athlete: appt.athlete,
+              body: `No registramos tu asistencia a la cita del ${new Date(appt.scheduled_at).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}.\n\nNota: ${reason}`,
+            }).catch(() => {})
+          }
+        }
+        return result
       }
       return api.patch(`/api/gyms/appointments/${id}/`, { status })
     },
-    onSuccess: () => invalidateAppts(),
+    onSuccess: (_, { status }) => {
+      const msgs: Record<string, string> = {
+        completed: 'Consulta marcada como realizada.',
+        no_show: 'Inasistencia registrada.',
+        cancelled: 'Cita cancelada.',
+      }
+      showSuccess(msgs[status] ?? 'Actualizado.')
+      invalidateAppts()
+    },
     onError: (err) => showError(err, 'No se pudo actualizar la cita'),
   })
 
@@ -863,7 +1043,12 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
     year:  v.month === 11 ? v.year + 1 : v.year,
   }))
 
-  if (!user || user.role !== 'nutritionist') return null
+  if (!user) return null
+  if (user.role !== 'nutritionist') return (
+    <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-center">
+      <p className="text-muted-foreground text-sm">Esta sección es solo para nutricionistas.</p>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -888,12 +1073,12 @@ export default function AgendaPage({ params }: { params: Promise<{ gymId: string
           appointment={selectedAppt}
           gymId={gymId}
           onClose={() => setSelectedAppt(null)}
-          onStatusChange={(id, status) => {
+          onStatusChange={(id, status, reason) => {
             if (status === 'accept_reschedule') {
               setRescheduleAppt(selectedAppt)
               return
             }
-            statusMutation.mutate({ id, status })
+            statusMutation.mutate({ id, status, reason })
           }}
         />
       )}

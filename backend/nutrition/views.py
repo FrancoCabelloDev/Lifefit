@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 
 logger = logging.getLogger(__name__)
 from django.core.exceptions import PermissionDenied
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -47,7 +47,9 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             base = queryset.filter(global_or_user_gym_filter(user)) if user.gym_id else queryset.filter(gym__isnull=True)
-            # Library only shows template plans (created_for=null); personal plans stay in athlete profiles
+            # Library actions show only template plans; write actions (update/destroy) also see personal plans
+            if self.action in ('update', 'partial_update', 'destroy', 'retrieve'):
+                return base
             return base.filter(created_for__isnull=True)
         if user.role == User.Role.ATHLETE:
             return queryset.filter(global_or_user_gym_filter(user), status=NutritionPlan.Status.ACTIVE)
@@ -82,10 +84,82 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if user.role == User.Role.SUPER_ADMIN or (user.role == User.Role.GYM_ADMIN and instance.gym_id == user.gym_id):
+        can = (
+            user.role == User.Role.SUPER_ADMIN
+            or (user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and instance.gym_id == user.gym_id)
+        )
+        if can:
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar este plan.")
+
+    @action(detail=True, methods=["post"])
+    def clone(self, request, pk=None):
+        """
+        Clona un plan de biblioteca como plan personal para un atleta específico.
+        POST /api/nutrition/plans/{id}/clone/   body: { "athlete_id": "..." }
+        """
+        user = request.user
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
+            raise PermissionDenied("No tienes permisos para clonar planes.")
+
+        source_plan = self.get_object()
+        athlete_id = request.data.get("athlete_id")
+        if not athlete_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"athlete_id": "Se requiere el athlete_id."})
+
+        try:
+            athlete = User.objects.get(id=athlete_id)
+        except User.DoesNotExist:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"athlete_id": "Atleta no encontrado."})
+
+        # Clonar el plan
+        cloned = NutritionPlan.objects.create(
+            gym=source_plan.gym,
+            name=f"{source_plan.name} — {athlete.first_name or athlete.email}",
+            description=source_plan.description,
+            calories_per_day=source_plan.calories_per_day,
+            protein_g=source_plan.protein_g,
+            carbs_g=source_plan.carbs_g,
+            fats_g=source_plan.fats_g,
+            duration_days=source_plan.duration_days,
+            status=NutritionPlan.Status.ACTIVE,
+            points_reward=source_plan.points_reward,
+            created_for=athlete,
+        )
+
+        # Clonar MealTemplates y sus MealFoodItems
+        for template in source_plan.meal_templates.prefetch_related("food_items").all():
+            new_template = MealTemplate.objects.create(
+                plan=cloned,
+                day_number=template.day_number,
+                weekday=template.weekday,
+                meal_type=template.meal_type,
+                name=template.name,
+                description=template.description,
+                calories=template.calories,
+                protein_g=template.protein_g,
+                carbs_g=template.carbs_g,
+                fats_g=template.fats_g,
+                ingredients=template.ingredients,
+                instructions=template.instructions,
+                order=template.order,
+            )
+            for item in template.food_items.all():
+                MealFoodItem.objects.create(
+                    meal=new_template,
+                    food=item.food,
+                    quantity_g=item.quantity_g,
+                    order=item.order,
+                )
+
+        from .serializers import NutritionPlanDetailSerializer
+        return Response(
+            NutritionPlanDetailSerializer(cloned, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["post"])
     def add_day(self, request, pk=None):
@@ -164,7 +238,11 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def assign_to_user(self, request, pk=None):
-        """Asigna este plan a un usuario (solo para admins)"""
+        """Asigna este plan a un usuario (solo para admins/nutricionistas)"""
+        if request.user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("No tienes permisos para asignar planes.")
+
         plan = self.get_object()
         user_id = request.data.get("user_id")
         
@@ -509,9 +587,10 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"])
     def toggle_complete(self, request):
         """Alias legacy — redirige a update_status."""
-        request.data._mutable = True if hasattr(request.data, "_mutable") else None
-        if "status" not in request.data:
-            request.data["status"] = UserMealLog.MealLogStatus.COMPLETED
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        if "status" not in data:
+            data["status"] = UserMealLog.MealLogStatus.COMPLETED
+        request._full_data = data
         return self.update_status(request)
 
 
@@ -624,19 +703,20 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             raise PermissionDenied("No puedes asignar planes de nutrición.")
 
+        # Validar que no se asigne un plan de biblioteca directamente
+        plan = serializer.validated_data.get("plan")
+        if plan and plan.created_for is None and user.role != User.Role.SUPER_ADMIN:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                "plan": "Este es un plan de biblioteca (plantilla). Crea un plan personalizado para el atleta usando 'Usar como base'."
+            })
+
         start_date = serializer.validated_data.get("start_date", date.today())
         target_status = (
             UserNutritionPlan.AssignmentStatus.SCHEDULED
             if start_date > date.today()
             else UserNutritionPlan.AssignmentStatus.ACTIVE
         )
-        target_user = serializer.validated_data.get("user")
-
-        # Evitar duplicados: solo 1 activo y 1 programado por usuario
-        if UserNutritionPlan.objects.filter(user=target_user, status=target_status).exists():
-            from rest_framework.exceptions import ValidationError
-            label = "activo" if target_status == "active" else "programado"
-            raise ValidationError({"detail": f"Este atleta ya tiene un plan {label}."})
 
         kwargs = {"status": target_status}
         if user.role != User.Role.SUPER_ADMIN:
@@ -656,41 +736,129 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             return
         raise PermissionDenied("No puedes modificar esta asignación.")
 
+    def perform_destroy(self, instance):
+        user = self.request.user
+        # Plan personal (gym_id=None): verificar por gym del atleta o del assigned_by
+        same_gym = (
+            (instance.plan.gym_id and instance.plan.gym_id == user.gym_id)
+            or (instance.user.gym_id and instance.user.gym_id == user.gym_id)
+            or (instance.assigned_by_id and instance.assigned_by.gym_id == user.gym_id)
+        )
+        can = user.role == User.Role.SUPER_ADMIN or (
+            user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST} and same_gym
+        )
+        if not can:
+            raise PermissionDenied("No puedes eliminar esta asignación.")
+        instance.delete()
+
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
     def my_active(self, request):
         user = request.user
 
-        # Auto-activate any scheduled plan whose start_date has arrived
-        UserNutritionPlan.objects.filter(
+        # Auto-activate any scheduled plan whose start_date has arrived,
+        # completing any currently active plan first to avoid duplicate actives.
+        today = date.today()
+        scheduled_due = UserNutritionPlan.objects.filter(
             user=user,
             status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
-            start_date__lte=date.today(),
-        ).update(status=UserNutritionPlan.AssignmentStatus.ACTIVE)
+            start_date__lte=today,
+        )
+        if scheduled_due.exists():
+            # Complete currently active plans before promoting the scheduled one
+            UserNutritionPlan.objects.filter(
+                user=user,
+                status=UserNutritionPlan.AssignmentStatus.ACTIVE,
+            ).update(status=UserNutritionPlan.AssignmentStatus.COMPLETED, end_date=today)
+            scheduled_due.update(status=UserNutritionPlan.AssignmentStatus.ACTIVE)
 
         assignment = UserNutritionPlan.objects.filter(
             user=user,
             status=UserNutritionPlan.AssignmentStatus.ACTIVE,
         ).select_related('plan', 'plan__gym', 'assigned_by').first()
 
-        if not assignment:
+        from datetime import timedelta
+        from .serializers import NutritionPlanDetailSerializer
+
+        # ── Chain: todas las asignaciones del atleta, ordenadas por start_date
+        chain_qs = UserNutritionPlan.objects.filter(
+            user=user,
+        ).select_related("plan").order_by("start_date")
+
+        chain_list = list(chain_qs)
+
+        # Si no hay plan activo y el chain está vacío, devolver 404 clásico
+        if not assignment and not chain_list:
             return Response({"detail": "No tienes un plan activo."}, status=status.HTTP_404_NOT_FOUND)
 
-        completed_weeks = UserNutritionPlan.objects.filter(
-            user=user, status=UserNutritionPlan.AssignmentStatus.COMPLETED
-        ).count()
+        total_weeks = len(chain_list)
 
-        # Include upcoming scheduled plan if exists
-        scheduled = UserNutritionPlan.objects.filter(
-            user=user,
-            status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
-        ).select_related('plan').first()
+        # Posición del plan activo en el chain (1-indexed)
+        week_number = next(
+            (i + 1 for i, a in enumerate(chain_list) if assignment and a.id == assignment.id),
+            1,
+        )
+
+        # Semanas completadas dentro de este chain (no del historial global)
+        completed_weeks = sum(1 for a in chain_list if a.status == UserNutritionPlan.AssignmentStatus.COMPLETED)
+
+        chain_data = []
+        for i, a in enumerate(chain_list):
+            chain_data.append({
+                "week_number": i + 1,
+                "assignment_id": str(a.id),
+                "status": a.status,
+                "plan_name": a.plan.name,
+                "plan_id": str(a.plan.id),
+                "start_date": a.start_date.isoformat(),
+                "compliance": float(a.compliance_percentage or 0),
+            })
+
+        # ── Próxima semana programada (primera SCHEDULED del chain)
+        scheduled = next(
+            (a for a in chain_list if a.status == UserNutritionPlan.AssignmentStatus.SCHEDULED),
+            None,
+        )
+
+        scheduled_plan_data = None
+        scheduled_plan_detail = None
+        if scheduled:
+            scheduled_plan_data = {
+                "id": str(scheduled.id),
+                "plan_name": scheduled.plan.name,
+                "start_date": scheduled.start_date.isoformat(),
+                "plan_id": str(scheduled.plan.id),
+            }
+            scheduled_plan_detail = NutritionPlanDetailSerializer(
+                scheduled.plan, context={"request": self.request}
+            ).data
+
+        # Si no hay plan activo pero hay historial, devolver respuesta con chain
+        if not assignment:
+            return Response({
+                "active_plan": None,
+                "chain": chain_data,
+                "week_number": week_number,
+                "total_weeks": total_weeks,
+                "completed_weeks": completed_weeks,
+                "scheduled_plan": scheduled_plan_data,
+                "scheduled_plan_detail": scheduled_plan_detail,
+                "is_overdue": False,
+                "week_deadline": None,
+            })
+
+        # ── is_overdue usa duration_days real del plan
+        duration = assignment.plan.duration_days or 7
+        week_deadline = assignment.start_date + timedelta(days=duration)
 
         data = self.get_serializer(assignment).data
+        data['week_number'] = week_number
+        data['total_weeks'] = total_weeks
         data['completed_weeks'] = completed_weeks
-        data['scheduled_plan'] = (
-            {"id": str(scheduled.id), "plan_name": scheduled.plan.name, "start_date": scheduled.start_date.isoformat()}
-            if scheduled else None
-        )
+        data['chain'] = chain_data
+        data['scheduled_plan'] = scheduled_plan_data
+        data['scheduled_plan_detail'] = scheduled_plan_detail
+        data['is_overdue'] = date.today() > week_deadline
+        data['week_deadline'] = week_deadline.isoformat()
         return Response(data)
 
     @action(detail=True, methods=["post"])
@@ -780,16 +948,29 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         if not athlete_id:
             return Response({"detail": "Se requiere athlete_id."}, status=400)
 
-        active = UserNutritionPlan.objects.filter(
-            user_id=athlete_id, status="active"
-        ).select_related("plan").first()
-
-        if not active:
-            return Response({"detail": "El atleta no tiene plan activo.", "logs": []})
+        assignment_id = request.query_params.get("assignment_id")
 
         from datetime import timedelta
         today = date.today()
-        week_start = today - timedelta(days=today.weekday())  # lunes de esta semana
+
+        if assignment_id:
+            # Specific assignment (completed or any week)
+            try:
+                active = UserNutritionPlan.objects.select_related("plan").get(
+                    id=assignment_id, user_id=athlete_id
+                )
+            except UserNutritionPlan.DoesNotExist:
+                return Response({"detail": "Asignación no encontrada.", "logs": []}, status=404)
+            week_start = active.start_date
+        else:
+            active = UserNutritionPlan.objects.filter(
+                user_id=athlete_id, status="active"
+            ).select_related("plan").first()
+
+            if not active:
+                return Response({"detail": "El atleta no tiene plan activo.", "logs": []})
+
+            week_start = today - timedelta(days=today.weekday())  # lunes de esta semana
 
         logs = (
             UserMealLog.objects
@@ -901,22 +1082,209 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             assignment.end_date = today
             assignment.save(update_fields=["status", "compliance_percentage", "end_date", "updated_at"])
 
-            # Otorgar puntos
+            # Otorgar puntos según configuración del gym (fallback: points_reward del plan)
+            from gamification.models import GymPointsConfig
             points_awarded = 0
-            if assignment.plan.points_reward > 0:
+            gym = assignment.plan.gym
+            if gym:
+                cfg, _ = GymPointsConfig.objects.get_or_create(gym=gym)
+                pts = cfg.nutrition_week_points
+            else:
+                pts = assignment.plan.points_reward
+
+            if pts > 0:
                 UserPoints.objects.create(
                     user=assignment.user,
-                    points=assignment.plan.points_reward,
+                    points=pts,
                     source="weekly_plan_approved",
                     description=f"Semana aprobada: {assignment.plan.name} ({week_start.isoformat()})",
                     related_nutrition_plan=assignment.plan,
                 )
-                points_awarded = assignment.plan.points_reward
+                points_awarded = pts
+
+        # Si existe un plan programado cuyo start_date ya llegó, activarlo ahora
+        from datetime import timedelta
+        next_scheduled = UserNutritionPlan.objects.filter(
+            user=assignment.user,
+            status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
+            start_date__lte=today + timedelta(days=7),
+        ).order_by("start_date").first()
+
+        activated_plan_name = None
+        if next_scheduled:
+            next_scheduled.status = UserNutritionPlan.AssignmentStatus.ACTIVE
+            next_scheduled.save(update_fields=["status", "updated_at"])
+            activated_plan_name = next_scheduled.plan.name
+
+        # Notificar al atleta
+        try:
+            from gyms.views import create_notification
+            from gyms.models import Notification
+            import logging as _log
+            gym = assignment.plan.gym
+            next_msg = f" Tu siguiente plan '{activated_plan_name}' ya está activo." if activated_plan_name else ""
+            create_notification(
+                recipient=assignment.user,
+                notification_type=Notification.Type.PLAN_UPDATED,
+                title="¡Semana aprobada!",
+                message=f"Tu nutricionista aprobó tu semana del plan '{assignment.plan.name}'. Se te otorgaron {points_awarded} puntos." + next_msg,
+                actor=user,
+                gym=gym,
+                link=f"/{gym.slug}/panel/mi-nutricion" if gym else None,
+            )
+        except Exception:
+            _log.getLogger(__name__).warning("approve_week: notificación fallida", exc_info=True)
 
         return Response({
             "detail": f"Semana aprobada. Se otorgaron {points_awarded} puntos a {assignment.user.get_full_name() or assignment.user.email}.",
             "points_awarded": points_awarded,
             "compliance_pct": compliance_pct,
+            "next_plan_activated": activated_plan_name,
+        })
+
+    @action(detail=True, methods=["post"], url_path="reject-week")
+    def reject_week(self, request, pk=None):
+        """
+        Nutricionista rechaza la semana del atleta:
+        - Limpia review_requested_at para que el atleta pueda volver a enviar
+        - Notifica al atleta con el motivo
+        POST /api/nutrition/assignments/{id}/reject-week/
+        """
+        user = request.user
+        if user.role not in {User.Role.NUTRITIONIST, User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}:
+            return Response({"detail": "No tienes permisos."}, status=403)
+
+        assignment = self.get_object()
+
+        if assignment.status != UserNutritionPlan.AssignmentStatus.ACTIVE:
+            return Response({"detail": "Solo se puede rechazar una semana activa."}, status=400)
+
+        if not assignment.review_requested_at:
+            return Response({"detail": "Este atleta no ha solicitado revisión."}, status=400)
+
+        reason = request.data.get("reason", "").strip()
+
+        assignment.review_requested_at = None
+        assignment.save(update_fields=["review_requested_at", "updated_at"])
+
+        try:
+            from gyms.views import create_notification
+            from gyms.models import Notification
+            import logging as _log
+            gym = assignment.plan.gym
+            msg = f"Tu nutricionista necesita que corrijas algunos registros del plan '{assignment.plan.name}'."
+            if reason:
+                msg += f" Motivo: {reason}"
+            create_notification(
+                recipient=assignment.user,
+                notification_type=Notification.Type.PLAN_UPDATED,
+                title="Revisión de semana rechazada",
+                message=msg,
+                actor=user,
+                gym=gym,
+                link=f"/{gym.slug}/panel/mi-nutricion" if gym else None,
+            )
+        except Exception:
+            _log.getLogger(__name__).warning("reject_week: notificación fallida", exc_info=True)
+
+        return Response({"detail": "Semana rechazada. El atleta puede volver a enviar su solicitud."})
+
+    @action(detail=True, methods=["post"], url_path="request-review")
+    def request_review(self, request, pk=None):
+        """
+        El atleta solicita al nutricionista que revise su semana.
+        Solo habilitado si completó todos los logs de los días transcurridos.
+        POST /api/nutrition/assignments/{id}/request-review/
+        """
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        from gyms.views import create_notification
+        from gyms.models import Notification
+
+        assignment = self.get_object()
+
+        if assignment.user_id != request.user.id:
+            return Response({"detail": "No puedes solicitar revisión de otro atleta."}, status=403)
+
+        if assignment.status != UserNutritionPlan.AssignmentStatus.ACTIVE:
+            return Response({"detail": "Solo puedes solicitar revisión de un plan activo."}, status=400)
+
+        if assignment.review_requested_at:
+            return Response({
+                "detail": "Ya enviaste la solicitud de revisión.",
+                "review_requested_at": assignment.review_requested_at,
+            }, status=400)
+
+        # ── Validar que todos los días transcurridos esta semana estén completos ──
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())  # lunes
+
+        # Días de la semana ya transcurridos (lunes=0 … hoy)
+        WEEKDAY_ORDER = {
+            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+            "friday": 4, "saturday": 5, "sunday": 6,
+        }
+        today_order = today.weekday()  # 0=lunes
+
+        # Comidas del plan para días ya transcurridos
+        due_meals = assignment.plan.meal_templates.filter(
+            weekday__isnull=False,
+        ).values_list("id", "weekday")
+
+        due_meal_ids = [
+            meal_id for meal_id, weekday in due_meals
+            if WEEKDAY_ORDER.get(weekday, 7) <= today_order
+        ]
+
+        if not due_meal_ids:
+            return Response({"detail": "No hay comidas asignadas para revisar aún."}, status=400)
+
+        # Logs existentes esta semana para esas comidas (cualquier status cuenta)
+        logged_ids = set(
+            UserMealLog.objects.filter(
+                user=request.user,
+                meal_template_id__in=due_meal_ids,
+                date__gte=week_start,
+                date__lte=today,
+            ).values_list("meal_template_id", flat=True)
+        )
+
+        missing = [mid for mid in due_meal_ids if mid not in logged_ids]
+        if missing:
+            return Response({
+                "detail": f"Te faltan {len(missing)} comida(s) sin registrar. Registra todas antes de enviar.",
+                "missing_count": len(missing),
+            }, status=400)
+
+        # ── Guardar y notificar ──
+        assignment.review_requested_at = tz.now()
+        assignment.save(update_fields=["review_requested_at", "updated_at"])
+
+        # Notificar al nutricionista asignado (si existe) o al gym_admin
+        recipient = assignment.assigned_by
+        if not recipient and assignment.plan.gym:
+            from accounts.models import User as UserModel
+            recipient = UserModel.objects.filter(
+                gym=assignment.plan.gym,
+                role__in=[UserModel.Role.NUTRITIONIST, UserModel.Role.GYM_ADMIN],
+            ).first()
+
+        if recipient:
+            athlete_name = request.user.get_full_name() or request.user.email
+            gym_slug = assignment.plan.gym.slug if assignment.plan.gym else ""
+            create_notification(
+                recipient=recipient,
+                notification_type=Notification.Type.PLAN_UPDATED,
+                title=f"{athlete_name} completó su semana",
+                message=f"{athlete_name} registro todas sus comidas y solicita que revises su semana del plan '{assignment.plan.name}'.",
+                actor=request.user,
+                gym=assignment.plan.gym,
+                link=f"/{gym_slug}/panel/gestion/atletas/{request.user.id}",
+            )
+
+        return Response({
+            "detail": "Solicitud enviada. Tu nutricionista recibirá una notificación.",
+            "review_requested_at": assignment.review_requested_at,
         })
 
     @action(detail=False, methods=["get"])
@@ -932,12 +1300,19 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
 
         today = date.today()
 
-        # Auto-activate scheduled plans that have started
-        UserNutritionPlan.objects.filter(
+        # Auto-activate scheduled plans that have started,
+        # completing any currently active plan first to avoid duplicate actives.
+        scheduled_due = UserNutritionPlan.objects.filter(
             user_id=athlete_id,
             status=UserNutritionPlan.AssignmentStatus.SCHEDULED,
             start_date__lte=today,
-        ).update(status=UserNutritionPlan.AssignmentStatus.ACTIVE)
+        )
+        if scheduled_due.exists():
+            UserNutritionPlan.objects.filter(
+                user_id=athlete_id,
+                status=UserNutritionPlan.AssignmentStatus.ACTIVE,
+            ).update(status=UserNutritionPlan.AssignmentStatus.COMPLETED, end_date=today)
+            scheduled_due.update(status=UserNutritionPlan.AssignmentStatus.ACTIVE)
 
         active_plan = UserNutritionPlan.objects.filter(
             user_id=athlete_id, status="active"
@@ -949,11 +1324,83 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             user_id=athlete_id, status="scheduled"
         ).select_related("plan").first()
 
-        completed_plans = UserNutritionPlan.objects.filter(
-            user_id=athlete_id, status="completed"
-        ).select_related("plan").order_by("-end_date")
-
         from datetime import timedelta
+        from .serializers import NutritionPlanDetailSerializer
+
+        # ── Chain del programa: todas las asignaciones del atleta, ordenadas por start_date
+        chain_qs = UserNutritionPlan.objects.filter(
+            user_id=athlete_id,
+        ).select_related("plan").order_by("start_date")
+
+        chain_list = list(chain_qs)
+        total_weeks = len(chain_list)
+        week_number = next(
+            (i + 1 for i, a in enumerate(chain_list) if active_plan and a.id == active_plan.id),
+            1,
+        )
+        completed_weeks = sum(
+            1 for a in chain_list if a.status == UserNutritionPlan.AssignmentStatus.COMPLETED
+        )
+
+        # ── Detalle por semana para el nutricionista
+        # Contar logs de cada asignación
+        all_logs = UserMealLog.objects.filter(
+            user_id=athlete_id,
+        ).values("meal_template__plan_id", "status", "nutritionist_approved", "date")
+
+        logs_by_plan = {}
+        for log in all_logs:
+            pid = str(log["meal_template__plan_id"])
+            if pid not in logs_by_plan:
+                logs_by_plan[pid] = {"completed": 0, "total": 0, "photos_pending": 0}
+            logs_by_plan[pid]["total"] += 1
+            if log["status"] == UserMealLog.MealLogStatus.COMPLETED:
+                logs_by_plan[pid]["completed"] += 1
+            if log["nutritionist_approved"] is None and log.get("date"):
+                logs_by_plan[pid]["photos_pending"] += 1
+
+        chain_data = []
+        for i, a in enumerate(chain_list):
+            pid = str(a.plan.id)
+            log_stats = logs_by_plan.get(pid, {"completed": 0, "total": 0, "photos_pending": 0})
+            meals_total = a.plan.meal_templates.count() if hasattr(a.plan, 'meal_templates') else 0
+
+            day_in_week = None
+            if a.status == UserNutritionPlan.AssignmentStatus.ACTIVE:
+                day_in_week = min((today - a.start_date).days + 1, a.plan.duration_days or 7)
+
+            chain_data.append({
+                "week_number": i + 1,
+                "assignment_id": str(a.id),
+                "status": a.status,
+                "plan_name": a.plan.name,
+                "plan_id": pid,
+                "start_date": a.start_date.isoformat(),
+                "end_date": a.end_date.isoformat() if a.end_date else None,
+                "compliance": float(a.compliance_percentage or 0),
+                "meals_logged": log_stats["completed"],
+                "meals_total": meals_total,
+                "photos_pending": log_stats["photos_pending"],
+                "day_in_week": day_in_week,
+                "review_requested_at": a.review_requested_at.isoformat() if a.review_requested_at else None,
+            })
+
+        # ── Próxima semana programada
+        scheduled_plan = next(
+            (a for a in chain_list if a.status == UserNutritionPlan.AssignmentStatus.SCHEDULED),
+            None,
+        )
+        scheduled_data = (
+            {
+                "id": str(scheduled_plan.id),
+                "plan_name": scheduled_plan.plan.name,
+                "start_date": scheduled_plan.start_date.isoformat(),
+                "plan_id": str(scheduled_plan.plan.id),
+            }
+            if scheduled_plan else None
+        )
+
+        # ── Logs de la semana actual para cumplimiento
         week_meals = UserMealLog.objects.filter(
             user_id=athlete_id,
             date__gte=(today - timedelta(days=7)).isoformat(),
@@ -968,36 +1415,40 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             meal_data[day].append({
                 "meal_name": log.meal_template.name,
                 "meal_type": log.meal_template.meal_type,
-                "completed": log.status == UserMealLog.MealLogStatus.COMPLETED,
+                "completed": True,
             })
 
         plan_serializer = UserNutritionPlanSerializer(active_plan, context={"request": request}) if active_plan else None
-        completed_serializer = UserNutritionPlanSerializer(completed_plans, many=True, context={"request": request})
-
-        completed_weeks = UserNutritionPlan.objects.filter(
+        completed_plans_qs = UserNutritionPlan.objects.filter(
             user_id=athlete_id, status="completed"
-        ).count()
+        ).select_related("plan").order_by("-end_date")
+        completed_serializer = UserNutritionPlanSerializer(completed_plans_qs, many=True, context={"request": request})
 
-        scheduled_data = (
-            {
-                "id": str(scheduled_plan.id),
-                "plan_name": scheduled_plan.plan.name,
-                "start_date": scheduled_plan.start_date.isoformat(),
-                "plan_id": str(scheduled_plan.plan.id),
+        # ── is_overdue usa duration_days real
+        overdue_data = None
+        if active_plan:
+            duration = active_plan.plan.duration_days or 7
+            deadline = active_plan.start_date + timedelta(days=duration)
+            overdue_data = {
+                "is_overdue": today > deadline,
+                "week_deadline": deadline.isoformat(),
+                "days_overdue": max(0, (today - deadline).days),
             }
-            if scheduled_plan else None
-        )
 
         return Response({
             "active_plan": plan_serializer.data if plan_serializer else None,
             "scheduled_plan": scheduled_data,
             "completed_plans": completed_serializer.data,
+            "overdue": overdue_data,
+            "week_number": week_number,
+            "total_weeks": total_weeks,
+            "completed_weeks": completed_weeks,
+            "chain": chain_data,
             "week_meal_compliance": {
                 "dates": sorted(meal_data.keys(), reverse=True),
                 "meals_by_date": meal_data,
             },
             "total_meals_logged_week": len(week_meals),
-            "completed_weeks": completed_weeks,
         })
 
 

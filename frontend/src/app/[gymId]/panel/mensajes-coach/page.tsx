@@ -59,6 +59,13 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
     refetchInterval: 15000,
   })
 
+  const assignedAthletesQuery = useQuery({
+    queryKey: ['coach-assigned-athletes', gymId],
+    queryFn: () => api.get<{ results: Array<{ id: string; first_name: string; last_name: string; email: string }> }>(
+      '/api/gyms/coach-messages/my_athletes/'
+    ),
+  })
+
   const messagesQuery = useQuery({
     queryKey: ['coach-messages-with', gymId, selectedThread?.athlete_id],
     queryFn: () => api.get<CoachMessage[]>('/api/gyms/coach-messages/with_athlete/', {
@@ -84,9 +91,45 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messagesQuery.data])
 
-  const threads = (threadsQuery.data || []).filter(t =>
+  // Merge: todos los atletas asignados + threads existentes (misma lógica que nutricionista)
+  const contacts: CoachThread[] = (() => {
+    const existingThreads = threadsQuery.data ?? []
+    const assigned = assignedAthletesQuery.data?.results ?? []
+    const threadMap = new Map(existingThreads.map(t => [t.athlete_id, t]))
+
+    const merged: CoachThread[] = assigned.map(a => {
+      const t = threadMap.get(a.id)
+      return t ?? {
+        athlete_id:    a.id,
+        athlete_name:  `${a.first_name} ${a.last_name}`.trim(),
+        athlete_email: a.email,
+        last_message:  '',
+        last_message_at: null,
+        unread: 0,
+        total:  0,
+      }
+    })
+
+    // Incluir threads de atletas ya no en las asignaciones activas
+    existingThreads.forEach(t => {
+      if (!assigned.find(a => a.id === t.athlete_id)) merged.push(t)
+    })
+
+    return merged.sort((a, b) => {
+      if (b.unread !== a.unread) return b.unread - a.unread
+      if (a.last_message_at && b.last_message_at)
+        return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+      if (a.last_message_at) return -1
+      if (b.last_message_at) return 1
+      return a.athlete_name.localeCompare(b.athlete_name)
+    })
+  })()
+
+  const threads = contacts.filter(t =>
     !search || t.athlete_name.toLowerCase().includes(search.toLowerCase())
   )
+
+  const isLoading = threadsQuery.isLoading || assignedAthletesQuery.isLoading
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,7 +161,7 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {threadsQuery.isLoading ? (
+              {isLoading ? (
                 <div className="space-y-1 p-2">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-14 bg-slate-100 animate-pulse rounded-xl" />
@@ -127,8 +170,8 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
               ) : threads.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2 p-4 text-center">
                   <MessageSquare className="w-8 h-8 text-slate-200" />
-                  <p className="text-xs text-slate-400">Sin conversaciones</p>
-                  <p className="text-[10px] text-slate-300">Los atletas pueden iniciarte un mensaje</p>
+                  <p className="text-xs text-slate-400">Sin atletas asignados</p>
+                  <p className="text-[10px] text-slate-300">Asigna atletas en el panel de equipo</p>
                 </div>
               ) : (
                 <div className="p-2 space-y-0.5">
@@ -266,7 +309,7 @@ function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }
   })
 
   const sendMutation = useMutation({
-    mutationFn: (body: string) => api.post('/api/gyms/coach-messages/', { athlete: user.id, body }),
+    mutationFn: (body: string) => api.post('/api/gyms/coach-messages/', { body }),
     onSuccess: () => {
       setNewMessage('')
       queryClient.invalidateQueries({ queryKey: ['athlete-coach-messages', gymId] })

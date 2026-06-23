@@ -326,10 +326,13 @@ class UserNutritionPlan(BaseModel):
     end_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=AssignmentStatus.choices, default=AssignmentStatus.ACTIVE)
     compliance_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    review_requested_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Fecha en que el atleta solicitó revisión de su semana al nutricionista",
+    )
 
     class Meta:
         ordering = ["-start_date"]
-        unique_together = ("user", "plan", "status")
 
     def __str__(self) -> str:
         return f"{self.user.email} - {self.plan.name}"

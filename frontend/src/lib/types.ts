@@ -366,6 +366,13 @@ export type NutritionistDashboard = {
   avg_compliance_percentage: number
   meals_logged_week: number
   low_compliance_athletes: number
+  reviews_pending: {
+    assignment_id: string
+    athlete_id: string
+    athlete_name: string
+    plan_name: string
+    requested_at: string
+  }[]
 }
 
 export type CoachAssignment = {

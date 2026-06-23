@@ -123,7 +123,7 @@ export default function SaaSAdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <AreaChart data={metrics.revenueHistory}>
                   <defs>
                     <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
@@ -151,7 +151,7 @@ export default function SaaSAdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <BarChart data={metrics.gymHistory}>
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} tickFormatter={(v) => {
                     const [, m] = v.split('-')

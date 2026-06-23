@@ -130,7 +130,7 @@ export default function AnaliticaPage() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <BarChart data={usage.chartData}>
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
@@ -149,7 +149,7 @@ export default function AnaliticaPage() {
           </CardHeader>
           <CardContent>
             <div className="h-64 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <PieChart>
                   <Pie
                     data={roles}
@@ -189,7 +189,7 @@ export default function AnaliticaPage() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <BarChart data={gyms}>
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} tickFormatter={(v) => {
                     const [, m] = v.split('-')
@@ -211,7 +211,7 @@ export default function AnaliticaPage() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={256}>
                 <BarChart
                   data={[
                     { name: 'Check-ins\nDAU', value: engagement?.checkins.dau ?? 0 },

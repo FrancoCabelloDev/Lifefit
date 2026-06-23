@@ -111,5 +111,8 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     def active_membership(self):
         return self.gym_subscriptions.filter(status="active").select_related("plan").first()
 
+    def get_full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}".strip()
+
     def __str__(self) -> str:
         return self.email

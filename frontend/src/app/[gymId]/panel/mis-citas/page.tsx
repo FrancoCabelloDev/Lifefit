@@ -21,7 +21,7 @@ import type { NutritionistAppointment } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const TODAY = startOfDay(new Date())
-const MAX_DATE = addDays(TODAY, 21)
+const MAX_DATE = addDays(TODAY, 60)
 
 const STATUS_STYLES: Record<string, string> = {
   scheduled:             'bg-blue-50 text-blue-700 border-blue-100',
@@ -51,13 +51,153 @@ function slotLabel(isoSlot: string) {
   return format(parseISO(isoSlot), 'HH:mm')
 }
 
+// ── ActionModal (shared base) ─────────────────────────────────────────────────
+
+function ActionModal({
+  open, onClose, icon, iconBg, title, subtitle, children, onConfirm, confirmLabel, confirmClass, loading,
+}: {
+  open: boolean
+  onClose: () => void
+  icon: React.ReactNode
+  iconBg: string
+  title: string
+  subtitle: string
+  children?: React.ReactNode
+  onConfirm: () => void
+  confirmLabel: React.ReactNode
+  confirmClass: string
+  loading: boolean
+}) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => setMounted(true))
+    else setMounted(false)
+  }, [open])
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-[3px] transition-opacity duration-200"
+        style={{ opacity: mounted ? 1 : 0 }}
+        onClick={onClose}
+      />
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100 transition-all duration-200 overflow-hidden"
+        style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1) translateY(0)' : 'scale(0.96) translateY(8px)',
+          transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        }}
+      >
+        {/* Header strip */}
+        <div className={cn('px-5 pt-5 pb-4 flex items-start gap-3', iconBg)}>
+          <div className="shrink-0 mt-0.5">{icon}</div>
+          <div>
+            <p className="font-semibold text-slate-900 text-sm">{title}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="ml-auto w-7 h-7 rounded-lg hover:bg-black/5 flex items-center justify-center text-slate-400 transition-all active:scale-90 shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {children && <div className="px-5 py-4">{children}</div>}
+
+        <div className="px-5 pb-5 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all active:scale-[0.98]"
+          >
+            Volver
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={cn(
+              'flex-1 h-10 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 disabled:opacity-50',
+              confirmClass,
+            )}
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── CancelModal ───────────────────────────────────────────────────────────────
+
+function CancelModal({
+  appt, open, onClose, onSuccess,
+}: {
+  appt: NutritionistAppointment
+  open: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleConfirm = async () => {
+    setSaving(true)
+    try {
+      await api.post(`/api/gyms/appointments/${appt.id}/cancel/`, {})
+      showSuccess('Cita cancelada')
+      onSuccess()
+      onClose()
+    } catch (err) {
+      showError(err, 'No se pudo cancelar la cita')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const apptLabel = format(new Date(appt.scheduled_at), "EEEE d 'de' MMMM, HH:mm", { locale: es })
+
+  return (
+    <ActionModal
+      open={open}
+      onClose={onClose}
+      icon={<X className="w-5 h-5 text-rose-500" />}
+      iconBg="bg-rose-50/60"
+      title="Cancelar cita"
+      subtitle={apptLabel}
+      onConfirm={handleConfirm}
+      confirmLabel="Sí, cancelar cita"
+      confirmClass="bg-rose-500 hover:bg-rose-600"
+      loading={saving}
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">
+          Tu nutricionista será notificada. Si quieres reagendar, usa "Solicitar reprogramación" en su lugar.
+        </p>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">
+            Motivo <span className="font-normal normal-case">(opcional)</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={2}
+            placeholder="Ej: Tengo un imprevisto ese día..."
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 text-slate-700 placeholder:text-slate-300"
+          />
+        </div>
+      </div>
+    </ActionModal>
+  )
+}
+
 // ── RescheduleModal ───────────────────────────────────────────────────────────
 
 function RescheduleModal({
-  appt,
-  open,
-  onClose,
-  onSuccess,
+  appt, open, onClose, onSuccess,
 }: {
   appt: NutritionistAppointment
   open: boolean
@@ -67,11 +207,11 @@ function RescheduleModal({
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const handleSubmit = async () => {
+  const handleConfirm = async () => {
     setSaving(true)
     try {
       await api.post(`/api/gyms/appointments/${appt.id}/request-reschedule/`, { note })
-      showSuccess('Solicitud de reprogramación enviada')
+      showSuccess('Solicitud enviada — tu nutricionista te propondrá un nuevo horario')
       onSuccess()
       onClose()
     } catch (err) {
@@ -81,52 +221,39 @@ function RescheduleModal({
     }
   }
 
+  const apptLabel = format(new Date(appt.scheduled_at), "EEEE d 'de' MMMM, HH:mm", { locale: es })
+
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <RefreshCw className="w-5 h-5 text-amber-500" />
-            Solicitar reprogramación
-          </DialogTitle>
-          <p className="text-sm text-slate-500">
-            Cita del {format(new Date(appt.scheduled_at), "d 'de' MMMM, HH:mm", { locale: es })}
-          </p>
-        </DialogHeader>
-
-        <div className="space-y-3 py-1">
-          <div>
-            <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
-              Motivo <span className="font-normal normal-case">(opcional)</span>
-            </Label>
-            <Textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="Ej: Tengo un compromiso inesperado ese día..."
-              rows={3}
-              className="text-sm resize-none"
-            />
-          </div>
-          <p className="text-xs text-slate-400">
-            Tu nutricionista recibirá la solicitud y te propondrá un nuevo horario.
-          </p>
+    <ActionModal
+      open={open}
+      onClose={onClose}
+      icon={<RefreshCw className="w-5 h-5 text-amber-500" />}
+      iconBg="bg-amber-50/60"
+      title="Solicitar reprogramación"
+      subtitle={apptLabel}
+      onConfirm={handleConfirm}
+      confirmLabel="Enviar solicitud"
+      confirmClass="bg-amber-500 hover:bg-amber-600"
+      loading={saving}
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-1.5">
+            Motivo <span className="font-normal normal-case">(opcional)</span>
+          </label>
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            rows={3}
+            placeholder="Ej: Tengo un compromiso inesperado ese día..."
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 text-slate-700 placeholder:text-slate-300"
+          />
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
-          >
-            {saving
-              ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" /> Enviando...</>
-              : <><RefreshCw className="w-4 h-4 mr-1.5" /> Solicitar reprogramación</>
-            }
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <p className="text-xs text-slate-400">
+          Tu nutricionista recibirá la solicitud y te propondrá un nuevo horario.
+        </p>
+      </div>
+    </ActionModal>
   )
 }
 
@@ -149,78 +276,79 @@ function AppointmentCard({
 
   const showConfirm    = isFuture && appt.status === 'scheduled'
   const showReschedule = isFuture && (appt.status === 'scheduled' || appt.status === 'confirmed')
-  const showCancel     = isFuture && isActive
+  const showCancel     = isFuture && isActive && appt.status !== 'reschedule_requested'
+
+  const isRescheduleReq = appt.status === 'reschedule_requested'
 
   return (
     <div className={cn(
-      'bg-white rounded-2xl border transition-all p-4',
-      appt.status === 'reschedule_requested'
-        ? 'border-amber-200 bg-amber-50/30'
-        : 'border-slate-100 hover:border-slate-200',
+      'bg-white rounded-2xl border transition-all duration-150 p-4',
+      isRescheduleReq
+        ? 'border-amber-200 bg-amber-50/20'
+        : 'border-slate-100 hover:border-slate-200 hover:shadow-sm',
     )}>
       <div className="flex items-start gap-4">
-        <div className="flex-shrink-0 w-12 text-center">
-          <p className="text-lg font-bold text-slate-800 leading-none">
+        {/* Date block */}
+        <div className="flex-shrink-0 w-11 text-center pt-0.5">
+          <p className="text-xl font-bold text-slate-800 leading-none">
             {new Date(appt.scheduled_at).getDate()}
           </p>
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-0.5">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-1">
             {new Date(appt.scheduled_at).toLocaleDateString('es', { month: 'short' })}
           </p>
         </div>
 
-        <div className="w-px self-stretch bg-slate-100" />
+        <div className="w-px self-stretch bg-slate-100 shrink-0" />
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 flex-wrap">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
-                {appt.appointment_type === 'first' ? 'Primera Consulta' : 'Consulta de Seguimiento'}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900 leading-tight">
+                {appt.appointment_type === 'first' ? 'Primera Consulta' : 'Seguimiento'}
               </p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <User className="w-3 h-3 text-slate-400" />
-                <p className="text-xs text-slate-500">{appt.nutritionist_name ?? 'Nutricionista'}</p>
+                <User className="w-3 h-3 text-slate-400 shrink-0" />
+                <p className="text-xs text-slate-500 truncate">{appt.nutritionist_name ?? 'Nutricionista'}</p>
               </div>
             </div>
-            <Badge className={`text-[10px] font-bold flex items-center gap-1 shrink-0 ${STATUS_STYLES[appt.status] ?? ''}`}>
+            <Badge className={cn('text-[10px] font-bold flex items-center gap-1 shrink-0 border', STATUS_STYLES[appt.status] ?? '')}>
               {STATUS_ICONS[appt.status]}
               {appt.status_display}
             </Badge>
           </div>
 
-          <div className="flex items-center gap-3 mt-2.5 text-xs text-slate-500">
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {formatTime(appt.scheduled_at)} – {formatTime(end.toISOString())}
-            </span>
+          <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+            <Clock className="w-3 h-3 shrink-0" />
+            <span>{formatTime(appt.scheduled_at)} – {formatTime(end.toISOString())}</span>
             <span className="text-slate-300">·</span>
             <span>{appt.duration_minutes} min</span>
           </div>
 
           {appt.notes && (
-            <p className="text-xs text-slate-400 mt-2 bg-slate-50 rounded-lg px-2.5 py-1.5 line-clamp-2">
-              {appt.notes}
+            <p className="text-xs text-slate-400 mt-2 bg-slate-50 rounded-lg px-2.5 py-1.5 line-clamp-2 italic">
+              "{appt.notes}"
             </p>
           )}
 
-          {appt.status === 'reschedule_requested' && appt.reschedule_note && (
-            <p className="text-xs text-amber-600 mt-2 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
-              <span className="font-semibold">Tu nota:</span> {appt.reschedule_note}
-            </p>
+          {isRescheduleReq && (
+            <div className="mt-2 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 flex items-start gap-2">
+              <RefreshCw className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700">
+                {appt.reschedule_note
+                  ? <><span className="font-semibold">Tu nota:</span> {appt.reschedule_note}</>
+                  : 'Esperando respuesta de tu nutricionista...'
+                }
+              </p>
+            </div>
           )}
 
-          {appt.status === 'reschedule_requested' && !appt.reschedule_note && (
-            <p className="text-xs text-amber-600 mt-2 italic">
-              Esperando respuesta del nutricionista...
-            </p>
-          )}
-
-          {/* Action buttons */}
+          {/* Actions */}
           {(showConfirm || showReschedule || showCancel) && (
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 flex-wrap">
               {showConfirm && onConfirm && (
                 <button
                   onClick={onConfirm}
-                  className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-xs text-emerald-700 font-semibold transition-all active:scale-[0.97]"
                 >
                   <ThumbsUp className="w-3 h-3" /> Confirmar asistencia
                 </button>
@@ -228,7 +356,7 @@ function AppointmentCard({
               {showReschedule && onReschedule && (
                 <button
                   onClick={onReschedule}
-                  className="flex items-center gap-1 text-xs text-amber-500 hover:text-amber-600 font-semibold transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-xs text-amber-700 font-semibold transition-all active:scale-[0.97]"
                 >
                   <RefreshCw className="w-3 h-3" /> Reprogramar
                 </button>
@@ -236,7 +364,7 @@ function AppointmentCard({
               {showCancel && onCancel && (
                 <button
                   onClick={onCancel}
-                  className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-600 font-semibold transition-colors ml-auto"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-rose-50 text-xs text-rose-400 hover:text-rose-600 font-semibold transition-all active:scale-[0.97] ml-auto"
                 >
                   <X className="w-3 h-3" /> Cancelar
                 </button>
@@ -319,18 +447,19 @@ function BookingModal({
   }
 
   const isDisabledDay = (day: Date) => {
+    const d = startOfDay(day)
     const dayStr = format(day, 'yyyy-MM-dd')
     return (
-      !isAfter(startOfDay(day), TODAY) ||
-      isAfter(startOfDay(day), MAX_DATE) ||
+      d < TODAY ||
+      d > MAX_DATE ||
       (availableDays ? !availableDays.has(dayStr) : false)
     )
   }
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="w-5 h-5 text-emerald-600" />
             Agendar nueva cita
@@ -338,22 +467,21 @@ function BookingModal({
           <p className="text-sm text-slate-500">Elige un día y horario disponible</p>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
+        <div className="space-y-4 py-1 overflow-y-auto flex-1 pr-1">
           <div>
             <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
               Selecciona un día
             </Label>
-            <div className="flex justify-center rounded-xl border border-slate-100 bg-slate-50/50">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                disabled={isDisabledDay}
-                locale={es}
-                defaultMonth={addDays(TODAY, 1)}
-                className="rounded-xl"
-              />
-            </div>
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              disabled={isDisabledDay}
+              locale={es}
+              defaultMonth={TODAY}
+              showOutsideDays
+              className="rounded-xl border border-slate-100 bg-slate-50/50"
+            />
             {availableDays !== undefined && (
               <p className="text-[11px] text-slate-400 text-center mt-1.5">
                 Los días en gris no tienen disponibilidad
@@ -461,8 +589,9 @@ function BookingModal({
 export default function MisCitasPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId }   = use(params)
   const queryClient = useQueryClient()
-  const [bookingOpen, setBookingOpen]   = useState(false)
+  const [bookingOpen, setBookingOpen]           = useState(false)
   const [rescheduleTarget, setRescheduleTarget] = useState<NutritionistAppointment | null>(null)
+  const [cancelTarget, setCancelTarget]         = useState<NutritionistAppointment | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-appointments', gymId],
@@ -476,7 +605,7 @@ export default function MisCitasPage({ params }: { params: Promise<{ gymId: stri
   const { data: assignments } = useQuery({
     queryKey: ['my-nutritionist-assignment', gymId],
     queryFn: async () => {
-      const res = await api.get<any>('/api/gyms/nutritionist-assignments/').catch(() => null)
+      const res = await api.get<any>('/api/gyms/nutritionist-assignments/')
       return (res?.results ?? res ?? []) as import('@/lib/types').NutritionistAssignment[]
     },
   })
@@ -496,15 +625,6 @@ export default function MisCitasPage({ params }: { params: Promise<{ gymId: stri
     }
   }
 
-  const handleCancel = async (apptId: string) => {
-    try {
-      await api.post(`/api/gyms/appointments/${apptId}/cancel/`, {})
-      showSuccess('Cita cancelada')
-      invalidate()
-    } catch (err) {
-      showError(err, 'No se pudo cancelar la cita')
-    }
-  }
 
   const now = new Date()
   const upcoming = (data || [])
@@ -561,7 +681,7 @@ export default function MisCitasPage({ params }: { params: Promise<{ gymId: stri
                 key={a.id}
                 appt={a}
                 onConfirm={() => handleConfirm(a.id)}
-                onCancel={() => handleCancel(a.id)}
+                onCancel={() => setCancelTarget(a)}
                 onReschedule={() => setRescheduleTarget(a)}
               />
             ))}
@@ -588,6 +708,15 @@ export default function MisCitasPage({ params }: { params: Promise<{ gymId: stri
           appt={rescheduleTarget}
           open={!!rescheduleTarget}
           onClose={() => setRescheduleTarget(null)}
+          onSuccess={invalidate}
+        />
+      )}
+
+      {cancelTarget && (
+        <CancelModal
+          appt={cancelTarget}
+          open={!!cancelTarget}
+          onClose={() => setCancelTarget(null)}
           onSuccess={invalidate}
         />
       )}
