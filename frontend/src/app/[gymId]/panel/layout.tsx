@@ -105,50 +105,51 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
             { title: "Resumen", url: `/${gymId}/panel`, icon: LayoutDashboard },
           ],
         },
-        {
+        ...(isEnabled('rutinas') ? [{
           title: "Mi Coach",
           items: [
             { title: "Plan Semanal", url: `/${gymId}/panel/mi-plan-semanal`, icon: CalendarDays },
-            { title: "Rutinas", url: `/${gymId}/panel/mis-rutinas`, icon: Dumbbell },
-            { title: "Mis Sesiones", url: `/${gymId}/panel/mis-sesiones`, icon: History },
-            { title: "Mensajes", url: `/${gymId}/panel/mensajes-coach`, icon: MessageSquare },
+            { title: "Rutinas",      url: `/${gymId}/panel/mis-rutinas`,     icon: Dumbbell },
+            { title: "Mis Sesiones", url: `/${gymId}/panel/mis-sesiones`,    icon: History },
+            { title: "Mensajes",     url: `/${gymId}/panel/mensajes-coach`,  icon: MessageSquare },
           ],
-        },
-        {
+        }] : []),
+        ...(isEnabled('nutricion') ? [{
           title: "Mi Nutrición",
           items: [
-            { title: "Plan Alimentario", url: `/${gymId}/panel/mi-nutricion`, icon: UtensilsCrossed },
-            { title: "Mis Medidas", url: `/${gymId}/panel/mis-medidas`, icon: Ruler },
+            { title: "Plan Alimentario", url: `/${gymId}/panel/mi-nutricion`,  icon: UtensilsCrossed },
+            { title: "Mis Medidas",      url: `/${gymId}/panel/mis-medidas`,   icon: Ruler },
             ...(isPremium ? [
-              { title: "Citas", url: `/${gymId}/panel/mis-citas`, icon: CalendarDays },
-              { title: "Mensajes", url: `/${gymId}/panel/mensajes-nutricionista`, icon: MessageSquare },
+              { title: "Citas",     url: `/${gymId}/panel/mis-citas`,                  icon: CalendarDays },
+              { title: "Mensajes",  url: `/${gymId}/panel/mensajes-nutricionista`,      icon: MessageSquare },
             ] : []),
           ],
-        },
-        {
+        }] : []),
+        ...(isEnabled('retos') ? [{
           title: "Retos",
           items: [
-            // Retos solo para Premium
             ...(isPremium ? [
-              { title: "Retos Activos", url: `/${gymId}/panel/mis-retos`, icon: Target },
+              { title: "Retos Activos",    url: `/${gymId}/panel/mis-retos`, icon: Target },
             ] : [
               { title: "Retos 🔒 Premium", url: `/${gymId}/panel/mis-retos`, icon: Target },
             ]),
           ],
-        },
+        }] : []),
         {
           title: "Recompensas",
           items: [
-            { title: "Mis Puntos", url: `/${gymId}/panel/puntos`, icon: Star },
-            { title: "Canjear Recompensas", url: `/${gymId}/panel/recompensas`, icon: Gift },
+            { title: "Mis Puntos",         url: `/${gymId}/panel/puntos`,      icon: Star },
+            { title: "Canjear Recompensas",url: `/${gymId}/panel/recompensas`, icon: Gift },
           ],
         },
         {
           title: "Mi Perfil",
           items: [
-            { title: "Ranking", url: `/${gymId}/panel/ranking`, icon: Medal },
-            { title: "Mi Equipo", url: `/${gymId}/panel/mi-equipo`, icon: BookUser },
-            { title: "Configuración", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
+            ...(isEnabled('ranking') ? [
+              { title: "Ranking", url: `/${gymId}/panel/ranking`, icon: Medal },
+            ] : []),
+            { title: "Mi Equipo",     url: `/${gymId}/panel/mi-equipo`,       icon: BookUser },
+            { title: "Configuración", url: `/${gymId}/panel/sistema/perfil`,  icon: UserCircle },
           ],
         },
       ],
