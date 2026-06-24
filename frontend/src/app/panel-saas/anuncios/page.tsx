@@ -77,7 +77,7 @@ export default function AnunciosPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Anuncios Globales</h1>
-          <p className="text-slate-500 mt-1">Comunícate exclusivamente con los dueños de los gimnasios (B2B).</p>
+          <p className="text-slate-500 mt-1">Comunícate con administradores, atletas o toda la plataforma.</p>
         </div>
         <Button onClick={() => setIsCreating(!isCreating)} className="bg-emerald-600 hover:bg-emerald-700">
           <Plus className="w-4 h-4 mr-2" />
@@ -114,9 +114,14 @@ export default function AnunciosPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Audiencia</Label>
-                  <div className="h-10 px-3 flex items-center border border-slate-200 rounded-md bg-slate-50 text-slate-500 text-sm">
-                    Dueños de Gimnasio
-                  </div>
+                  <Select value={formData.target_audience} onValueChange={v => setFormData({...formData, target_audience: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gym_admins">Dueños de Gimnasio</SelectItem>
+                      <SelectItem value="athletes">Atletas</SelectItem>
+                      <SelectItem value="all">Todos los usuarios</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">

@@ -77,7 +77,7 @@ class Payment(BaseModel):
 
     subscription = models.ForeignKey(Subscription, related_name="payments", on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=8, decimal_places=2)
-    currency = models.CharField(max_length=10, default="USD")
+    currency = models.CharField(max_length=10, default="PEN")
     status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.SUCCESS)
     paid_at = models.DateTimeField()
     provider = models.CharField(max_length=50, default="manual")

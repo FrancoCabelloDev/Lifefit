@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { api } from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import type { SubscriptionPlan, PaginatedResponse, BillingCycle } from "@/lib/types"
 import { toast } from "sonner"
 
@@ -196,9 +196,11 @@ export default function SaaSPlanesPage() {
       await api.delete(`/api/subscriptions/plans/${plan.id}/hard_delete/`)
       toast.success("Plan eliminado definitivamente")
       await fetchPlans()
-    } catch (error: any) {
-      const msg = error.response?.data?.detail || "No se pudo eliminar el plan. Es probable que esté en uso."
-      toast.error("No permitido", { description: msg })
+    } catch (error) {
+      const msg = error instanceof ApiError
+        ? error.message
+        : "No se pudo eliminar el plan."
+      toast.error("No se puede eliminar", { description: msg })
     }
   }
 

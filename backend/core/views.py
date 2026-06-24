@@ -31,6 +31,21 @@ class FeatureFlagViewSet(viewsets.ModelViewSet):
             return [IsSuperAdmin()]
         return super().get_permissions()
 
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        from gyms.models import GymFeatureFlag
+        active_count = GymFeatureFlag.objects.filter(
+            feature_flag=instance, is_active=True
+        ).count()
+        if active_count:
+            raise DRFValidationError(
+                f"No puedes eliminar el módulo '{instance.name}' porque "
+                f"{active_count} gimnasio{'s' if active_count != 1 else ''} "
+                f"lo {'tienen' if active_count != 1 else 'tiene'} activo. "
+                "Desactívalo globalmente primero."
+            )
+        instance.delete()
+
 
 class GlobalAnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = GlobalAnnouncementSerializer

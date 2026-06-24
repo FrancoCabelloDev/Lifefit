@@ -5,8 +5,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Plus, ToggleLeft, Trash2, AlertTriangle, Loader2 } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -266,8 +267,10 @@ export default function ModulosPage() {
     try {
       await api.delete(`/api/system/feature-flags/${id}/`)
       fetchFlags()
+      toast.success('Módulo eliminado')
     } catch (err) {
-      console.error(err)
+      const msg = err instanceof ApiError ? err.message : 'No se pudo eliminar el módulo.'
+      toast.error('No se puede eliminar', { description: msg })
     }
   }
 
