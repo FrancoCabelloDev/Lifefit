@@ -1,15 +1,22 @@
 from decimal import Decimal
 
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, serializers as drf_serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncMonth
-from .models import FeatureFlag, GlobalAnnouncement
+from .models import AuditLog, FeatureFlag, GlobalAnnouncement
 from .serializers import FeatureFlagSerializer, GlobalAnnouncementSerializer
 from .permissions import IsSuperAdmin
+
+
+def _get_client_ip(request) -> str | None:
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
 
 
 def _monthly_equivalent(price: Decimal, billing_cycle: str) -> Decimal:
@@ -22,14 +29,41 @@ def _monthly_equivalent(price: Decimal, billing_cycle: str) -> Decimal:
 
 
 class FeatureFlagViewSet(viewsets.ModelViewSet):
-    queryset = FeatureFlag.objects.all()
     serializer_class = FeatureFlagSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Soft-deleted flags are invisible by default
+        return FeatureFlag.objects.filter(deleted_at__isnull=True)
 
     def get_permissions(self):
         if self.action in ["create", "update", "partial_update", "destroy"]:
             return [IsSuperAdmin()]
         return super().get_permissions()
+
+    def _record_audit(self, instance: FeatureFlag, action: str, details: dict) -> None:
+        AuditLog.objects.create(
+            user=self.request.user,
+            action=action,
+            target_object_id=str(instance.id),
+            target_object_repr=f"{instance.name} ({instance.code})",
+            details=details,
+            ip_address=_get_client_ip(self.request),
+        )
+
+    def perform_update(self, serializer):
+        old_active = serializer.instance.is_active_globally
+        instance = serializer.save()
+        if old_active != instance.is_active_globally:
+            self._record_audit(
+                instance,
+                action="feature_flag_toggled",
+                details={
+                    "from": old_active,
+                    "to": instance.is_active_globally,
+                    "flag_code": instance.code,
+                },
+            )
 
     def perform_destroy(self, instance):
         from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -44,7 +78,33 @@ class FeatureFlagViewSet(viewsets.ModelViewSet):
                 f"lo {'tienen' if active_count != 1 else 'tiene'} activo. "
                 "Desactívalo globalmente primero."
             )
-        instance.delete()
+        self._record_audit(instance, action="feature_flag_deleted", details={
+            "flag_code": instance.code,
+        })
+        instance.soft_delete()
+
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        """Audit log de toggles y eliminaciones para este feature flag."""
+        flag = self.get_object()
+        logs = (
+            AuditLog.objects
+            .filter(target_object_id=str(flag.id))
+            .select_related("user")
+            .order_by("-created_at")[:50]
+        )
+        data = [
+            {
+                "id":       str(log.id),
+                "action":   log.action,
+                "user":     log.user.email if log.user else None,
+                "details":  log.details,
+                "ip":       log.ip_address,
+                "timestamp":log.created_at.isoformat(),
+            }
+            for log in logs
+        ]
+        return Response(data)
 
 
 class GlobalAnnouncementViewSet(viewsets.ModelViewSet):

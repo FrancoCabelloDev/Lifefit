@@ -6,7 +6,7 @@ class FeatureFlagSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeatureFlag
         fields = "__all__"
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "deleted_at"]
 
 
 class GlobalAnnouncementSerializer(serializers.ModelSerializer):

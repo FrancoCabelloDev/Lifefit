@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
-import { Plus, ToggleLeft, Trash2, AlertTriangle, Loader2 } from 'lucide-react'
+import { Plus, ToggleLeft, Trash2, AlertTriangle, Loader2, Clock, X, CheckCircle2, XCircle } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -17,6 +16,144 @@ interface FeatureFlag {
   code:                string
   description:         string
   is_active_globally:  boolean
+}
+
+// ── Audit log types ───────────────────────────────────────────────────────────
+
+interface AuditEntry {
+  id:        string
+  action:    string
+  user:      string | null
+  details:   Record<string, unknown>
+  ip:        string | null
+  timestamp: string
+}
+
+// ── History slide-out panel ───────────────────────────────────────────────────
+
+interface HistoryPanelProps {
+  flag:    FeatureFlag
+  onClose: () => void
+}
+
+function HistoryPanel({ flag, onClose }: HistoryPanelProps) {
+  const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [loading, setLoading]  = useState(true)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    api.get<any>(`/api/system/feature-flags/${flag.id}/history/`)
+      .then(data => setEntries(Array.isArray(data) ? data : []))
+      .catch(() => setEntries([]))
+      .finally(() => setLoading(false))
+  }, [flag.id])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  function label(entry: AuditEntry) {
+    if (entry.action === 'feature_flag_toggled') {
+      const to = entry.details?.to
+      return to ? 'Activado globalmente' : 'Desactivado globalmente'
+    }
+    if (entry.action === 'feature_flag_deleted') return 'Eliminado'
+    return entry.action
+  }
+
+  function entryIcon(entry: AuditEntry) {
+    if (entry.action === 'feature_flag_deleted')
+      return <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+    const to = entry.details?.to
+    return to
+      ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+      : <XCircle className="w-3.5 h-3.5 text-amber-500" />
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40"
+        style={{ background: 'rgba(15,23,42,0.25)', backdropFilter: 'blur(2px)' }}
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div
+        ref={panelRef}
+        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-white shadow-2xl flex flex-col"
+        style={{ animation: 'panel-in 250ms cubic-bezier(0.23,1,0.32,1) both' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Historial de cambios</h2>
+            <p className="text-xs text-slate-500 mt-0.5 font-mono">{flag.code}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
+              <Clock className="w-8 h-8 text-slate-200" />
+              <p className="text-sm font-semibold text-slate-500">Sin cambios registrados</p>
+              <p className="text-xs text-slate-400">Los toggles futuros aparecerán aquí.</p>
+            </div>
+          ) : (
+            <ol className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-[13px] top-2 bottom-2 w-px bg-slate-100" />
+
+              {entries.map((entry, i) => (
+                <li key={entry.id} className="relative flex gap-3 pb-5 last:pb-0">
+                  {/* Icon */}
+                  <div className="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-100 flex items-center justify-center z-10">
+                    {entryIcon(entry)}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <p className="text-xs font-semibold text-slate-800">{label(entry)}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {entry.user ?? 'Desconocido'}
+                      {entry.ip ? ` · ${entry.ip}` : ''}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {new Date(entry.timestamp).toLocaleString('es-PE', {
+                        day: '2-digit', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes panel-in {
+          from { transform: translateX(100%); opacity: 0.6; }
+          to   { transform: translateX(0);    opacity: 1;   }
+        }
+      `}</style>
+    </>
+  )
 }
 
 // ── Impact descriptions shown in the deactivation warning modal ───────────────
@@ -214,11 +351,12 @@ function CreateFlagForm({ onSave, onCancel }: CreateFormProps) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ModulosPage() {
-  const [flags, setFlags]         = useState<FeatureFlag[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [isCreating, setIsCreating] = useState(false)
+  const [flags, setFlags]                 = useState<FeatureFlag[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [isCreating, setIsCreating]       = useState(false)
   const [pendingToggle, setPendingToggle] = useState<FeatureFlag | null>(null)
-  const [toggling, setToggling]   = useState(false)
+  const [toggling, setToggling]           = useState(false)
+  const [historyFlag, setHistoryFlag]     = useState<FeatureFlag | null>(null)
 
   async function fetchFlags() {
     try {
@@ -348,7 +486,7 @@ export default function ModulosPage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex items-center gap-3 shrink-0">
                 <div className="flex flex-col items-center gap-1">
                   <Switch
                     checked={flag.is_active_globally}
@@ -362,8 +500,23 @@ export default function ModulosPage() {
                   </span>
                 </div>
 
+                {/* History */}
+                <button
+                  onClick={() => setHistoryFlag(flag)}
+                  title="Ver historial de cambios"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), color 150ms, background-color 150ms' }}
+                  onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.92)' }}
+                  onMouseUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = '' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = '' }}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Delete */}
                 <button
                   onClick={() => handleDelete(flag.id)}
+                  title="Eliminar módulo"
                   className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
                   style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), color 150ms, background-color 150ms' }}
                   onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.92)' }}
@@ -385,6 +538,14 @@ export default function ModulosPage() {
           onCancel={() => setPendingToggle(null)}
           onConfirm={confirmDeactivate}
           loading={toggling}
+        />
+      )}
+
+      {/* Audit history panel */}
+      {historyFlag && (
+        <HistoryPanel
+          flag={historyFlag}
+          onClose={() => setHistoryFlag(null)}
         />
       )}
     </div>

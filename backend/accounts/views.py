@@ -402,36 +402,70 @@ class CreateIziPayOrderView(APIView):
         })
 
 
+def _verify_izipay_hmac(kr_answer: str, kr_hash: str) -> bool:
+    """
+    Valida la firma HMAC-SHA256 de Izipay (Lyra).
+    La firma se calcula sobre `kr-answer` (JSON string), no sobre el body completo.
+    Referencia: https://docs.lyra.com/es/rest/V4.0/kb/payment_done.html
+    """
+    import hmac as _hmac, hashlib
+    hmac_key = settings.IZIPAY_HMAC_SHA256
+    if not hmac_key:
+        return True  # Sin clave configurada, no se puede validar; se permite en dev
+    expected = _hmac.new(
+        hmac_key.encode("utf-8"),
+        kr_answer.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return _hmac.compare_digest(expected, kr_hash)
+
+
 class IziPayWebhookView(APIView):
     """
-    Webhook de IziPay — se llama cuando el pago es confirmado.
-    Valida la firma HMAC, extrae el pending_token del metadata y completa el registro.
+    IPN de Izipay para el flujo atleta → registro tras pago confirmado.
+
+    Izipay envía form-encoded con:
+      kr-answer  — JSON string con el resultado del pago
+      kr-hash    — HMAC-SHA256(HMAC_KEY, kr-answer)
+
+    Referencia: https://docs.lyra.com/es/rest/V4.0/kb/payment_done.html
     """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        import hmac, hashlib
+        import json as _json
 
-        raw_body = request.body.decode("utf-8")
-        received_signature = request.headers.get("kr-hash", "")
-        hmac_key = settings.IZIPAY_HMAC_SHA256
+        kr_answer = request.data.get("kr-answer", "")
+        kr_hash   = request.data.get("kr-hash",   "")
 
-        if hmac_key:
-            expected = hmac.new(hmac_key.encode(), raw_body.encode(), hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(expected, received_signature):
-                return Response({"detail": "Firma inválida."}, status=status.HTTP_400_BAD_REQUEST)
+        if not kr_answer:
+            return Response({"detail": "kr-answer ausente."}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = request.data
-        order_status = data.get("orderStatus")
+        if not _verify_izipay_hmac(kr_answer, kr_hash):
+            return Response({"detail": "Firma inválida."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            answer = _json.loads(kr_answer)
+        except _json.JSONDecodeError:
+            return Response({"detail": "kr-answer malformado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        order_status = answer.get("orderStatus")
         if order_status != "PAID":
-            return Response({"detail": "Pago no completado."}, status=status.HTTP_200_OK)
+            # Siempre responder 200 para que Izipay no reintente
+            return Response({"detail": f"Ignorado: orderStatus={order_status}"})
 
-        pending_token = data.get("metadata", {}).get("pending_token", "")
+        metadata     = answer.get("metadata") or {}
+        pending_token = metadata.get("pending_token", "")
         if not pending_token:
             return Response({"detail": "Sin pending_token en metadata."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Reutilizar la lógica de CompleteGoogleRegistrationView
-        _complete_registration(pending_token)
+        try:
+            _complete_registration(pending_token)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception("Error completando registro tras pago: %s", exc)
+            return Response({"detail": "Error procesando el pago."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response({"detail": "OK"})
 
 
