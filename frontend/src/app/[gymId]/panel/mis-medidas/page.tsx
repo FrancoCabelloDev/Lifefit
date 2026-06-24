@@ -16,6 +16,7 @@ import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { showSuccess, showError } from '@/lib/toast'
 import type { User, BodyMeasurement } from '@/lib/types'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 function fmtDate(s: string) {
   return new Date(s + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: '2-digit' })
@@ -83,6 +84,7 @@ function NoMeasurementsState({ gymId }: { gymId: string }) {
 
 export default function MisMedidasPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useFeatureGuard(gymId, 'nutricion')
   const user = getStoredUser<User>()
   const queryClient = useQueryClient()
   const [activeChart, setActiveChart] = useState<'weight' | 'fat' | 'waist'>('weight')

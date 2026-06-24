@@ -363,7 +363,11 @@ class GymFeatureFlagViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = GymFeatureFlag.objects.select_related("gym", "feature_flag")
+        queryset = (
+            GymFeatureFlag.objects
+            .select_related("gym", "feature_flag")
+            .filter(feature_flag__is_active_globally=True)
+        )
 
         gym_id = self.request.query_params.get("gym_id")
         if gym_id:
@@ -372,7 +376,7 @@ class GymFeatureFlagViewSet(viewsets.ModelViewSet):
         if user.role == User.Role.SUPER_ADMIN:
             return queryset
 
-        if user.role == User.Role.GYM_ADMIN and user.gym_id:
+        if user.gym_id:
             return queryset.filter(gym_id=user.gym_id)
 
         return queryset.none()

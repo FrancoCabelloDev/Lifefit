@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import type { User, NutritionistMessageThread, NutritionistMessage } from '@/lib/types'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 function formatRelative(dateStr: string) {
   const d = new Date(dateStr)
@@ -37,6 +38,7 @@ interface AthleteContact {
 
 export default function MensajesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useFeatureGuard(gymId, 'nutricion')
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const user = getStoredUser<User>()

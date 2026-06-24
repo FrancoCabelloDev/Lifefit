@@ -12,6 +12,7 @@ import { showError } from '@/lib/toast'
 import type { Challenge, ChallengeParticipation, PaginatedResponse } from '@/lib/types'
 import PremiumGate from '@/components/PremiumGate'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 const typeIcons: Record<string, string> = {
   attendance: '📋',
@@ -33,6 +34,7 @@ export default function MisRetosPage({ params }: { params: Promise<{ gymId: stri
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
   useRoleGuard(gymId, ['athlete'])
+  useFeatureGuard(gymId, 'retos')
 
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [participations, setParticipations] = useState<ChallengeParticipation[]>([])

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Crown, Loader2, Medal, Trophy } from 'lucide-react'
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 type RankEntry = {
   rank: number
@@ -34,6 +35,7 @@ function initials(name: string) {
 
 export default function RankingPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useFeatureGuard(gymId, 'ranking')
   const me = getStoredUser() as any
 
   const { data, isLoading } = useQuery({

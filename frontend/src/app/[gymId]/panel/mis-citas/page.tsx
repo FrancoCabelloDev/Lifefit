@@ -20,6 +20,7 @@ import { showSuccess, showError } from '@/lib/toast'
 import type { NutritionistAppointment } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 const TODAY = startOfDay(new Date())
 const MAX_DATE = addDays(TODAY, 60)
@@ -590,6 +591,7 @@ function BookingModal({
 export default function MisCitasPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId }   = use(params)
   useRoleGuard(gymId, ['athlete'])
+  useFeatureGuard(gymId, 'nutricion')
   const queryClient = useQueryClient()
   const [bookingOpen, setBookingOpen]           = useState(false)
   const [rescheduleTarget, setRescheduleTarget] = useState<NutritionistAppointment | null>(null)

@@ -12,6 +12,7 @@ import { getStoredUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import type { User, UserRoutineAssignment, WorkoutRoutine } from '@/lib/types'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -299,6 +300,7 @@ function RoutineCard({ assignment, gymId }: { assignment: UserRoutineAssignment;
 export default function MisRutinasPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
   useRoleGuard(gymId, ['athlete'])
+  useFeatureGuard(gymId, 'rutinas')
   const user = getStoredUser<User>()
 
   const weeklyQuery = useQuery({

@@ -19,6 +19,7 @@ import type { WorkoutRoutine, UserRoutineAssignment, PaginatedResponse } from '@
 import { useSubscriptionTier } from '@/lib/hooks'
 import { cn } from '@/lib/utils'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -517,6 +518,7 @@ function RestDay({
 export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId }   = use(params)
   useRoleGuard(gymId, ['athlete'])
+  useFeatureGuard(gymId, 'rutinas')
   const { tier }    = useSubscriptionTier()
   const isBasic     = tier !== 'premium'
 

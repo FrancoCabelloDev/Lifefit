@@ -7,6 +7,7 @@ import { Send, MessageSquare, Dumbbell, Search, UserPlus, ArrowRight } from 'luc
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 import type { User } from '@/lib/types'
 
 type CoachMessage = {
@@ -480,6 +481,7 @@ function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }
 
 export default function MensajesCoachPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useFeatureGuard(gymId, 'rutinas')
   const user = getStoredUser<User>()
 
   if (!user) return null

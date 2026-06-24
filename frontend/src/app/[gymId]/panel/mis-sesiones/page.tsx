@@ -13,6 +13,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getStoredUser } from '@/lib/auth'
+import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -191,6 +192,7 @@ function SessionCard({ session }: { session: SessionSummary }) {
 export default function MisSesionesPage({ params }: { params: Promise<{ gymId: string }> }) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { gymId }       = use(params)
+  useFeatureGuard(gymId, 'rutinas')
   const router          = useRouter()
   const [page, setPage] = useState(1)
 
