@@ -37,10 +37,15 @@ if env_file.exists():
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("DJANGO_SECRET_KEY", default='django-insecure-0=st)q!lpbzr0kut&jubp*j$mg9!8^zyz#+igq$v3ls^ty8tq5')
+# Local dev: set DJANGO_SECRET_KEY in .env. Production: required via Railway env vars.
+SECRET_KEY = env(
+    "DJANGO_SECRET_KEY",
+    default='django-insecure-0=st)q!lpbzr0kut&jubp*j$mg9!8^zyz#+igq$v3ls^ty8tq5',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool("DJANGO_DEBUG", default=True)
+# Default False — local .env should set DJANGO_DEBUG=True explicitly.
+DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
@@ -54,6 +59,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cloudinary_storage',
+    'cloudinary',
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -72,6 +79,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Sirve estáticos en producción
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -116,6 +124,7 @@ if env("DB_NAME", default=None):
             'PASSWORD': env('DB_PASSWORD'),
             'HOST': env('DB_HOST', default='localhost'),
             'PORT': env('DB_PORT', default='5432'),
+            'CONN_MAX_AGE': env.int('CONN_MAX_AGE', default=60),
         }
     }
 else:
@@ -164,8 +173,24 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# WhiteNoise: comprime y hashea estáticos solo en producción
+if not DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# ── Cloudinary (almacenamiento de imágenes en producción) ─────────────────────
+# Solo activo si se proveen las credenciales — local sigue usando filesystem.
+CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME", default="")
+
+if CLOUDINARY_CLOUD_NAME:
+    CLOUDINARY_STORAGE = {
+        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+        "API_KEY":    env("CLOUDINARY_API_KEY",    default=""),
+        "API_SECRET": env("CLOUDINARY_API_SECRET", default=""),
+    }
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -204,6 +229,14 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
+    default=[
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ],
+)
+
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
     default=[
         'http://localhost:3000',
         'http://127.0.0.1:3000',

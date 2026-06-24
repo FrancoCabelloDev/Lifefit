@@ -3,6 +3,12 @@ from django.db.models import Q, UniqueConstraint
 from django.conf import settings
 from django.utils import timezone
 
+try:
+    from cloudinary.models import CloudinaryField as _CloudinaryField
+    _CLOUDINARY = True
+except ImportError:
+    _CLOUDINARY = False
+
 from core.models import BaseModel
 
 
@@ -44,7 +50,11 @@ class Reward(BaseModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    image = models.ImageField(upload_to="rewards/", null=True, blank=True)
+    image = (
+        _CloudinaryField("image", folder="rewards/", null=True, blank=True)
+        if _CLOUDINARY else
+        models.ImageField(upload_to="rewards/", null=True, blank=True)
+    )
     points_cost = models.PositiveIntegerField()
     stock = models.PositiveIntegerField(
         null=True,

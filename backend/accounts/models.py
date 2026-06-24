@@ -3,6 +3,12 @@ from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
+try:
+    from cloudinary.models import CloudinaryField as _CloudinaryField
+    _CLOUDINARY = True
+except ImportError:
+    _CLOUDINARY = False
+
 from core.models import BaseModel
 
 
@@ -74,7 +80,11 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     is_google_account = models.BooleanField(default=False)
 
     # Perfil profesional (coach / nutritionist)
-    profile_picture = models.ImageField(upload_to="users/profiles/", null=True, blank=True)
+    profile_picture = (
+        _CloudinaryField("image", folder="users/profiles/", null=True, blank=True)
+        if _CLOUDINARY else
+        models.ImageField(upload_to="users/profiles/", null=True, blank=True)
+    )
     bio = models.TextField(blank=True, max_length=600)
     specialty = models.CharField(max_length=100, blank=True)
     years_experience = models.PositiveSmallIntegerField(null=True, blank=True)

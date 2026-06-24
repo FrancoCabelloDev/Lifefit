@@ -1,5 +1,11 @@
 from django.db import models
 
+try:
+    from cloudinary.models import CloudinaryField as _CloudinaryField
+    _CLOUDINARY = True
+except ImportError:
+    _CLOUDINARY = False
+
 from core.models import BaseModel
 
 
@@ -13,7 +19,11 @@ class Gym(BaseModel):
     description = models.TextField(blank=True)
     location = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
-    logo = models.ImageField(upload_to="gyms/logos/", null=True, blank=True)
+    logo = (
+        _CloudinaryField("image", folder="gyms/logos/", null=True, blank=True)
+        if _CLOUDINARY else
+        models.ImageField(upload_to="gyms/logos/", null=True, blank=True)
+    )
     ruc = models.CharField(max_length=20, blank=True)
     brand_color = models.CharField(max_length=7, blank=True, help_text="Hex color code")
     website = models.URLField(blank=True)

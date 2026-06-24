@@ -1,6 +1,12 @@
 from django.conf import settings
 from django.db import models
 
+try:
+    from cloudinary.models import CloudinaryField as _CloudinaryField
+    _CLOUDINARY = True
+except ImportError:
+    _CLOUDINARY = False
+
 from core.models import BaseModel
 
 
@@ -242,7 +248,11 @@ class UserMealLog(BaseModel):
     notes = models.TextField(blank=True)
 
     # Evidencia fotográfica
-    photo = models.ImageField(upload_to="meal_proofs/%Y/%m/", null=True, blank=True)
+    photo = (
+        _CloudinaryField("image", folder="meal_proofs/", null=True, blank=True)
+        if _CLOUDINARY else
+        models.ImageField(upload_to="meal_proofs/%Y/%m/", null=True, blank=True)
+    )
 
     # Validación del nutricionista: null=sin foto/pendiente, True=aprobado, False=rechazado
     nutritionist_approved = models.BooleanField(null=True, blank=True, default=None)
