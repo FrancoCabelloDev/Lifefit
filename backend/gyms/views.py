@@ -19,6 +19,32 @@ from rest_framework.response import Response
 from core.constants import DASHBOARD_CACHE_TTL
 from core.permissions import IsGymAdmin, IsSuperAdmin
 
+
+def _revoke_gym_sessions(gym) -> int:
+    """
+    Blacklist all outstanding JWT tokens for every user belonging to this gym.
+    Returns the number of tokens blacklisted. Never raises — failure is logged only.
+    """
+    try:
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken, OutstandingToken,
+        )
+        user_ids = (
+            get_user_model().objects
+            .filter(gym=gym)
+            .values_list("id", flat=True)
+        )
+        tokens = OutstandingToken.objects.filter(user_id__in=user_ids)
+        count = 0
+        for token in tokens:
+            _, created = BlacklistedToken.objects.get_or_create(token=token)
+            if created:
+                count += 1
+        return count
+    except Exception as exc:
+        logger.warning("No se pudieron revocar sesiones del gym %s: %s", gym.pk, exc)
+        return 0
+
 from .models import (
     AthleteGoal, BodyMeasurement, Branch, CheckIn, CoachAssignment, CoachMessage, Gym,
     GymMembershipPlan, GymFeatureFlag, GymPayment, GymSubscription, Notification,
@@ -211,6 +237,7 @@ class GymViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         if self.request.user.role != User.Role.SUPER_ADMIN:
             raise PermissionDenied("Solo los super administradores pueden eliminar gimnasios.")
+        _revoke_gym_sessions(instance)
         instance.soft_delete()
 
     @action(detail=True, methods=["post"])
@@ -218,8 +245,9 @@ class GymViewSet(viewsets.ModelViewSet):
         gym = self.get_object()
         if request.user.role != User.Role.SUPER_ADMIN:
             raise PermissionDenied("Solo los super administradores pueden desactivar gimnasios.")
+        revoked = _revoke_gym_sessions(gym)
         gym.soft_delete()
-        return Response({"status": "gimnasio desactivado"})
+        return Response({"status": "gimnasio desactivado", "sessions_revoked": revoked})
 
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
@@ -371,7 +399,10 @@ class GymFeatureFlagViewSet(viewsets.ModelViewSet):
         queryset = (
             GymFeatureFlag.objects
             .select_related("gym", "feature_flag")
-            .filter(feature_flag__is_active_globally=True)
+            .filter(
+                feature_flag__is_active_globally=True,
+                gym__deleted_at__isnull=True,      # excluye gyms desactivados
+            )
         )
 
         gym_id = self.request.query_params.get("gym_id")

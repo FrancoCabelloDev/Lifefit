@@ -29,6 +29,23 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate_price(self, value):
+        if value < 0:
+            raise serializers.ValidationError("El precio no puede ser negativo.")
+        return value
+
+    def validate(self, data):
+        max_athletes = data.get("max_athletes", getattr(self.instance, "max_athletes", None))
+        max_coaches  = data.get("max_coaches",  getattr(self.instance, "max_coaches",  None))
+        max_nutri    = data.get("max_nutritionists", getattr(self.instance, "max_nutritionists", None))
+        if max_athletes is not None and max_athletes < 1:
+            raise serializers.ValidationError({"max_athletes": "Debe permitir al menos 1 atleta."})
+        if max_coaches is not None and max_coaches < 0:
+            raise serializers.ValidationError({"max_coaches": "El límite de coaches no puede ser negativo."})
+        if max_nutri is not None and max_nutri < 0:
+            raise serializers.ValidationError({"max_nutritionists": "El límite de nutricionistas no puede ser negativo."})
+        return data
+
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan_detail = SubscriptionPlanSerializer(source="plan", read_only=True)
@@ -54,6 +71,21 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "plan_detail", "gym_name", "gym_slug"]
+
+    def validate(self, data):
+        start_date       = data.get("start_date",       getattr(self.instance, "start_date",       None))
+        end_date         = data.get("end_date",          getattr(self.instance, "end_date",          None))
+        next_billing     = data.get("next_billing_date", getattr(self.instance, "next_billing_date", None))
+
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({
+                "end_date": "La fecha de fin no puede ser anterior a la fecha de inicio."
+            })
+        if start_date and next_billing and next_billing < start_date:
+            raise serializers.ValidationError({
+                "next_billing_date": "La fecha del próximo cobro no puede ser anterior a la fecha de inicio."
+            })
+        return data
 
 
 class PaymentSerializer(serializers.ModelSerializer):
