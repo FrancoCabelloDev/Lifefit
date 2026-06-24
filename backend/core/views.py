@@ -1,13 +1,24 @@
+from decimal import Decimal
+
 from rest_framework import viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.db.models.functions import TruncMonth
 from .models import FeatureFlag, GlobalAnnouncement
 from .serializers import FeatureFlagSerializer, GlobalAnnouncementSerializer
 from .permissions import IsSuperAdmin
+
+
+def _monthly_equivalent(price: Decimal, billing_cycle: str) -> Decimal:
+    """Normaliza el precio de una suscripción a su equivalente mensual."""
+    if billing_cycle == "annual":
+        return price / Decimal("12")
+    if billing_cycle == "quarterly":
+        return price / Decimal("3")
+    return price  # monthly / custom → 1:1
 
 
 class FeatureFlagViewSet(viewsets.ModelViewSet):
@@ -29,7 +40,9 @@ class GlobalAnnouncementViewSet(viewsets.ModelViewSet):
         from django.utils import timezone
         queryset = GlobalAnnouncement.objects.all().order_by("-created_at")
         if self.request.user.role != get_user_model().Role.SUPER_ADMIN:
-            queryset = queryset.filter(is_active=True, expires_at__gt=timezone.now())
+            queryset = queryset.filter(is_active=True).filter(
+                Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+            )
         return queryset
 
     def get_permissions(self):
@@ -40,7 +53,12 @@ class GlobalAnnouncementViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def active(self, request):
         from django.utils import timezone
-        qs = GlobalAnnouncement.objects.filter(is_active=True, expires_at__gt=timezone.now()).order_by("-created_at")
+        qs = (
+            GlobalAnnouncement.objects
+            .filter(is_active=True)
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
+            .order_by("-created_at")
+        )
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
@@ -58,25 +76,39 @@ class SystemAnalyticsView(APIView):
 
         today = timezone.now().date()
 
-        # Current month MRR
-        mrr = (
-            Subscription.objects
-            .filter(status="active")
-            .aggregate(total=Sum("plan__price"))
-        )["total"] or 0
-
-        # Previous month MRR (for growth)
+        # ── MRR (normalizado por ciclo de facturación) ───────────────────────
         first_of_this_month = today.replace(day=1)
         last_month_end = first_of_this_month - timedelta(days=1)
         first_of_last_month = last_month_end.replace(day=1)
 
-        prev_subscriptions = Subscription.objects.filter(
-            status__in=["active", "past_due"],
-            start_date__lte=last_month_end,
-        ).exclude(
-            status="canceled", end_date__lt=first_of_last_month
+        active_subs = (
+            Subscription.objects
+            .filter(status="active")
+            .select_related("plan")
         )
-        prev_mrr = prev_subscriptions.aggregate(total=Sum("plan__price"))["total"] or 0
+        mrr = sum(
+            _monthly_equivalent(s.plan.price, s.plan.billing_cycle)
+            for s in active_subs
+        )
+
+        # Suscripciones activas durante el mes anterior
+        prev_subs = (
+            Subscription.objects
+            .filter(
+                start_date__lte=last_month_end,
+            )
+            .filter(
+                Q(end_date__isnull=True) | Q(end_date__gte=first_of_last_month)
+            )
+            .exclude(
+                Q(status="canceled") & Q(end_date__lt=first_of_last_month)
+            )
+            .select_related("plan")
+        )
+        prev_mrr = sum(
+            _monthly_equivalent(s.plan.price, s.plan.billing_cycle)
+            for s in prev_subs
+        )
 
         mrr_growth = 0
         if prev_mrr > 0:

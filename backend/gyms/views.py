@@ -17,7 +17,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticate
 from rest_framework.response import Response
 
 from core.constants import DASHBOARD_CACHE_TTL
-from core.permissions import IsGymAdmin
+from core.permissions import IsGymAdmin, IsSuperAdmin
 
 from .models import (
     AthleteGoal, BodyMeasurement, Branch, CheckIn, CoachAssignment, CoachMessage, Gym,
@@ -360,6 +360,11 @@ class GymMembershipPlanViewSet(viewsets.ModelViewSet):
 class GymFeatureFlagViewSet(viewsets.ModelViewSet):
     serializer_class = GymFeatureFlagSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsSuperAdmin()]
+        return super().get_permissions()
 
     def get_queryset(self):
         user = self.request.user
