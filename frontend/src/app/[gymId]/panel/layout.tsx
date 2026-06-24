@@ -271,7 +271,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
   }
 
   const teamItems = [
-    isEnabled('coach') && { title: "Coaches", url: `/${gymId}/panel/equipo/coaches` },
+    { title: "Coaches", url: `/${gymId}/panel/equipo/coaches` },
     isEnabled('nutricion') && { title: "Nutricionistas", url: `/${gymId}/panel/equipo/nutricionistas` },
     { title: "Atención al Cliente", url: `/${gymId}/panel/equipo/atencion` },
   ].filter(Boolean) as { title: string; url: string }[]

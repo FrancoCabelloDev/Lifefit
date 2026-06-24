@@ -13,7 +13,6 @@ class Command(BaseCommand):
         ("Check-in", "checkin", "Módulo de registro de asistencia"),
         ("Retos", "retos", "Módulo de retos y competencias"),
         ("Ranking", "ranking", "Módulo de ranking y leaderboard"),
-        ("Coach", "coach", "Módulo de coaches"),
     ]
 
     def handle(self, *args, **options):
