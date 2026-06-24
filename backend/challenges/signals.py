@@ -51,10 +51,7 @@ def _sync_auto_participations(user_id, challenge_type: str) -> None:
 
 @receiver(post_save, sender="workouts.WorkoutSession")
 def on_workout_session_save(sender, instance, **kwargs):
-    """
-    Actualiza progreso de retos tipo 'workouts' y registra racha
-    cuando una sesión se completa.
-    """
+    """Actualiza progreso de retos tipo 'workouts' cuando una sesión se completa."""
     if instance.status != "completed" or not instance.user_id:
         return
 
@@ -73,20 +70,7 @@ def on_workout_session_save(sender, instance, **kwargs):
     if not user or user.role != "athlete":
         return
 
-    # Racha por entrenamiento
-    if instance.gym_id:
-        from gamification.models import AthleteStreak
-        streak, _ = AthleteStreak.objects.get_or_create(
-            user=user,
-            gym_id=instance.gym_id,
-        )
-        streak.register_activity(
-            instance.performed_at.date() if instance.performed_at else None
-        )
-
-    # Progreso automático de retos tipo workouts
     _sync_auto_participations(instance.user_id, "workouts")
-
     check_and_award_badges(user)
 
 

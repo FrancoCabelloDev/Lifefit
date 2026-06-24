@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -258,6 +259,7 @@ function WeekGrid({
 
 export default function DisponibilidadAdminPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
   const [selectedNutriId, setSelectedNutriId] = useState<string | null>(null)
 
   const { data: nutritionists, isLoading: loadingNutris } = useQuery({

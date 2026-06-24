@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { api } from '@/lib/api'
 import { showError } from '@/lib/toast'
 import type { Exercise, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 const categoryColors: Record<string, string> = {
   strength: 'bg-red-50 text-red-700 border-red-100',
@@ -47,6 +48,7 @@ const categoryColors: Record<string, string> = {
 export default function ExercisesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
+  useRoleGuard(gymId, ['coach'])
 
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [isLoading, setIsLoading] = useState(true)

@@ -31,11 +31,13 @@ import { api } from '@/lib/api'
 import { showError } from '@/lib/toast'
 import { roleColors, roleLabels } from '@/lib/constants'
 import type { CheckIn, User, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 
 export default function CheckInPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
+  useRoleGuard(gymId, ['gym_admin', 'super_admin', 'receptionist'])
   const qrRef = useRef<HTMLDivElement>(null)
 
   const [checkins, setCheckins] = useState<CheckIn[]>([])

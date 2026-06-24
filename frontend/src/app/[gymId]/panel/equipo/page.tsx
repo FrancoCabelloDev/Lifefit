@@ -46,7 +46,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { api } from '@/lib/api'
 import { showError, showSuccess } from '@/lib/toast'
-import { setTokens, setStoredUser, dispatchAuthEvent, backupAdminTokens } from '@/lib/auth'
+import { setTokens, setStoredUser, getStoredUser, dispatchAuthEvent, backupAdminTokens } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import type { StaffMember } from '@/lib/types'
 
@@ -266,6 +266,16 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
   const searchParams = useSearchParams()
   const router = useRouter()
   const roleFilter = searchParams.get('role') || 'all'
+
+  // Protección de rol — solo admin puede ver esta página
+  const currentUser = getStoredUser<{ role: string }>()
+  const isAllowed = !currentUser || ['gym_admin', 'super_admin'].includes(currentUser.role)
+
+  useEffect(() => {
+    if (!isAllowed) router.replace(`/${gymId}/panel`)
+  }, [isAllowed, gymId])
+
+  if (!isAllowed) return null
   
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -273,6 +283,36 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
 
   // Schedule drawer
   const [scheduleTarget, setScheduleTarget] = useState<StaffMember | null>(null)
+
+  // Edit modal
+  const [editTarget, setEditTarget] = useState<StaffMember | null>(null)
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '', role: 'coach' })
+
+  const openEdit = (member: StaffMember) => {
+    setEditForm({ first_name: member.first_name, last_name: member.last_name, email: member.email, role: member.role })
+    setEditError(null)
+    setEditTarget(member)
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editTarget) return
+    setIsEditSubmitting(true)
+    setEditError(null)
+    try {
+      await api.patch(`/api/accounts/gym-members/${String(editTarget.id)}/`, editForm)
+      setEditTarget(null)
+      showSuccess('Miembro actualizado')
+      fetchStaff()
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Error al actualizar.'
+      setEditError(detail)
+    } finally {
+      setIsEditSubmitting(false)
+    }
+  }
 
   // Invite Modal States
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
@@ -474,7 +514,7 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
                             <DropdownMenuContent align="end" className="w-52 shadow-xl border-slate-200">
                               <DropdownMenuLabel className="text-xs text-slate-500">Acciones de Staff</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="gap-2 text-sm font-medium">
+                              <DropdownMenuItem onClick={() => openEdit(member)} className="gap-2 text-sm font-medium cursor-pointer">
                                 <Edit className="w-4 h-4 text-slate-400" /> Editar Miembro
                               </DropdownMenuItem>
                               {member.role === 'nutritionist' && (
@@ -605,6 +645,93 @@ export default function EquipoPage({ params }: { params: Promise<{ gymId: string
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Enviar Invitación
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Edit Member Modal ── */}
+      {editTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-sm animate-in fade-in duration-200">
+          <Card className="w-full max-w-md bg-white/95 shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-200">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-5">
+              <CardTitle className="text-lg flex items-center gap-2 text-slate-800 font-bold">
+                <Edit className="w-5 h-5 text-emerald-600" />
+                Editar Miembro
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500 mt-1">
+                Actualiza los datos de {editTarget.first_name} {editTarget.last_name}.
+              </CardDescription>
+            </CardHeader>
+            <div className="p-6">
+              <form id="edit-staff-form" onSubmit={handleEditSubmit} className="space-y-4">
+                {editError && (
+                  <div className="bg-rose-50 border border-rose-100 text-rose-700 text-xs rounded-lg p-3">
+                    {editError}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_first_name" className="text-xs font-semibold text-slate-600">Nombre</Label>
+                    <Input
+                      id="edit_first_name"
+                      required
+                      value={editForm.first_name}
+                      onChange={e => setEditForm({ ...editForm, first_name: e.target.value })}
+                      className="border-slate-200 focus-visible:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_last_name" className="text-xs font-semibold text-slate-600">Apellidos</Label>
+                    <Input
+                      id="edit_last_name"
+                      required
+                      value={editForm.last_name}
+                      onChange={e => setEditForm({ ...editForm, last_name: e.target.value })}
+                      className="border-slate-200 focus-visible:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_email" className="text-xs font-semibold text-slate-600">Correo Electrónico</Label>
+                  <Input
+                    id="edit_email"
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                    className="border-slate-200 focus-visible:ring-emerald-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_role" className="text-xs font-semibold text-slate-600">Rol</Label>
+                  <Select value={editForm.role} onValueChange={val => setEditForm({ ...editForm, role: val })}>
+                    <SelectTrigger className="border-slate-200 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-slate-200 shadow-md">
+                      <SelectItem value="coach">Entrenador (Coach)</SelectItem>
+                      <SelectItem value="nutritionist">Nutricionista</SelectItem>
+                      <SelectItem value="receptionist">Atención al Cliente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </form>
+            </div>
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)} className="border-slate-200">
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                form="edit-staff-form"
+                disabled={isEditSubmitting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white flex gap-2 items-center"
+                style={{ transition: 'transform 160ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
+              >
+                {isEditSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Guardar cambios
               </Button>
             </div>
           </Card>

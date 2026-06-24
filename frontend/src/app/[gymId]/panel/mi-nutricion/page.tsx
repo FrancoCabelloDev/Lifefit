@@ -14,6 +14,7 @@ import { showError, showSuccess } from '@/lib/toast'
 import MealLogger, { type MealLogEntry } from '@/components/nutrition/MealLogger'
 import { useSubscriptionTier } from '@/lib/hooks'
 import MacroProgress from '@/components/shared/MacroProgress'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -263,6 +264,7 @@ function MiniCalendar({
 
 export default function MiNutricionPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['athlete'])
   const router    = useRouter()
   const { tier }  = useSubscriptionTier()
   const isBasic   = tier !== 'premium'

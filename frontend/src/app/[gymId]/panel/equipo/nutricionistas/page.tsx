@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { Users, Apple, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,8 +9,12 @@ import { Badge } from '@/components/ui/badge'
 import StaffList from '@/components/team/StaffList'
 import { api } from '@/lib/api'
 import type { NutritionistAssignment } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 export default function NutritionistsPage() {
+  const { gymId } = useParams<{ gymId: string }>()
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
+
   const [assignments, setAssignments] = useState<NutritionistAssignment[]>([])
   const [loading, setLoading] = useState(true)
 

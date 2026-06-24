@@ -18,6 +18,7 @@ import { levelColors, levelLabels } from '@/lib/constants'
 import type { WorkoutRoutine, UserRoutineAssignment, PaginatedResponse } from '@/lib/types'
 import { useSubscriptionTier } from '@/lib/hooks'
 import { cn } from '@/lib/utils'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -515,6 +516,7 @@ function RestDay({
 
 export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId }   = use(params)
+  useRoleGuard(gymId, ['athlete'])
   const { tier }    = useSubscriptionTier()
   const isBasic     = tier !== 'premium'
 

@@ -117,14 +117,11 @@ class UserPoints(BaseModel):
         PENDING  = "pending",  "Pendiente"
         APPROVED = "approved", "Aprobado"
 
-    # ── quién y cuánto ────────────────────────────────────────────────────────
     user            = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="points",
     )
-    # ``points`` = monto confirmado (0 mientras pending, se iguala a
-    # pending_points al aprobar).
     points          = models.IntegerField(default=0)
     pending_points  = models.IntegerField(
         default=0,
@@ -136,20 +133,14 @@ class UserPoints(BaseModel):
         default=Status.PENDING,
         db_index=True,
     )
-
-    # ── origen ────────────────────────────────────────────────────────────────
     source          = models.CharField(max_length=100, blank=True)
     description     = models.TextField(blank=True)
-
-    # ── semana (solo source='workout_week') ───────────────────────────────────
     week_start      = models.DateField(
         null=True,
         blank=True,
         db_index=True,
         help_text="Lunes de la semana premiada. Solo aplica a source='workout_week'.",
     )
-
-    # ── revisión ─────────────────────────────────────────────────────────────
     reviewed_by     = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -158,8 +149,6 @@ class UserPoints(BaseModel):
         related_name="approved_points",
     )
     reviewed_at     = models.DateTimeField(null=True, blank=True)
-
-    # ── relaciones opcionales ─────────────────────────────────────────────────
     related_session = models.ForeignKey(
         "workouts.WorkoutSession",
         on_delete=models.SET_NULL,
@@ -194,8 +183,6 @@ class UserPoints(BaseModel):
     def __str__(self):
         return f"{self.user.email} — {self.pending_points} pts [{self.status}] ({self.source})"
 
-    # ── business logic ────────────────────────────────────────────────────────
-
     def approve(self, reviewed_by) -> None:
         """Confirma los puntos pendientes. Idempotente si ya está aprobado."""
         if self.status == self.Status.APPROVED:
@@ -205,47 +192,3 @@ class UserPoints(BaseModel):
         self.reviewed_by = reviewed_by
         self.reviewed_at = timezone.now()
         self.save(update_fields=["points", "status", "reviewed_by", "reviewed_at", "updated_at"])
-
-
-class AthleteStreak(BaseModel):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="streaks",
-    )
-    gym = models.ForeignKey(
-        "gyms.Gym",
-        on_delete=models.CASCADE,
-        related_name="athlete_streaks",
-    )
-    current_streak = models.PositiveIntegerField(default=0)
-    longest_streak = models.PositiveIntegerField(default=0)
-    last_activity_date = models.DateField(null=True, blank=True)
-
-    class Meta:
-        unique_together = [("user", "gym")]
-
-    def __str__(self):
-        return f"{self.user.email} - racha {self.current_streak} días"
-
-    def register_activity(self, activity_date=None):
-        today = activity_date or timezone.now().date()
-        if self.last_activity_date == today:
-            return
-        if self.last_activity_date and (today - self.last_activity_date).days == 1:
-            self.current_streak += 1
-        else:
-            self.current_streak = 1
-        if self.current_streak > self.longest_streak:
-            self.longest_streak = self.current_streak
-        self.last_activity_date = today
-        self.save(update_fields=["current_streak", "longest_streak", "last_activity_date", "updated_at"])
-
-    def get_multiplier(self) -> float:
-        if self.current_streak >= 30:
-            return 3.0
-        if self.current_streak >= 14:
-            return 2.0
-        if self.current_streak >= 7:
-            return 1.5
-        return 1.0

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, use, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Send, MessageSquare, Dumbbell, Search } from 'lucide-react'
+import { Send, MessageSquare, Dumbbell, Search, UserPlus, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
@@ -307,14 +308,22 @@ function CoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
 
 // ── Vista atleta ──────────────────────────────────────────────────────────────
 function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }) {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [newMessage, setNewMessage] = useState('')
+
+  const assignmentQuery = useQuery({
+    queryKey: ['athlete-coach-assignment', gymId],
+    queryFn: () => api.get<{ count: number; results: Array<{ is_active: boolean }> }>('/api/gyms/coach-assignments/'),
+    staleTime: 60_000,
+  })
 
   const messagesQuery = useQuery({
     queryKey: ['athlete-coach-messages', gymId],
     queryFn: () => api.get<CoachMessage[]>('/api/gyms/coach-messages/my_conversation/'),
     refetchInterval: 10000,
+    enabled: assignmentQuery.isSuccess && (assignmentQuery.data?.results ?? []).some(a => a.is_active),
   })
 
   const sendMutation = useMutation({
@@ -329,6 +338,8 @@ function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messagesQuery.data])
 
+  const hasCoach = (assignmentQuery.data?.results ?? []).some(a => a.is_active)
+  const isCheckingAssignment = assignmentQuery.isLoading
   const messages = messagesQuery.data || []
   const coachName = messages.find(m => m.sender_is_coach)?.sender_name ?? 'Tu coach'
 
@@ -336,6 +347,57 @@ function AthleteCoachMessagesView({ gymId, user }: { gymId: string; user: User }
     e.preventDefault()
     if (!newMessage.trim()) return
     sendMutation.mutate(newMessage.trim())
+  }
+
+  if (isCheckingAssignment) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mensajes con mi Coach</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Comunicación directa con tu coach asignado</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-100 flex items-center justify-center" style={{ height: 'calc(100vh - 220px)', minHeight: '480px' }}>
+          <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-t-emerald-500 animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasCoach) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mensajes con mi Coach</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Comunicación directa con tu coach asignado</p>
+        </div>
+        <div
+          className="bg-white rounded-2xl border border-slate-100 flex flex-col items-center justify-center gap-5 text-center px-8"
+          style={{ height: 'calc(100vh - 220px)', minHeight: '480px' }}
+        >
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center">
+            <Dumbbell className="w-7 h-7 text-emerald-400" />
+          </div>
+          <div className="space-y-1.5 max-w-xs">
+            <p className="text-base font-semibold text-slate-800">Aún no tienes coach asignado</p>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Elige un coach del directorio para poder comunicarte con él y recibir tu plan de entrenamiento.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push(`/${gymId}/panel/mi-equipo`)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
+            style={{ transition: 'background-color 150ms, transform 160ms cubic-bezier(0.23,1,0.32,1)' }}
+            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+            onMouseUp={e => (e.currentTarget.style.transform = '')}
+            onMouseLeave={e => (e.currentTarget.style.transform = '')}
+          >
+            <UserPlus className="w-4 h-4" />
+            Elegir mi coach
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

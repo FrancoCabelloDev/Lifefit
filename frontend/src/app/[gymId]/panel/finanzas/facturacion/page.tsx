@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { api } from '@/lib/api'
 import { showError } from '@/lib/toast'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 import type {
   GymPayment, GymPaymentMetrics, GymPaymentStatus,
   RevenuePoint, PaginatedResponse,
@@ -87,6 +88,7 @@ function RevenueChart({ data }: { data: RevenuePoint[] }) {
 
 export default function FacturacionPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
   const [metrics, setMetrics] = useState<GymPaymentMetrics | null>(null)
   const [payments, setPayments] = useState<GymPayment[]>([])
   const [revenueData, setRevenueData] = useState<RevenuePoint[]>([])

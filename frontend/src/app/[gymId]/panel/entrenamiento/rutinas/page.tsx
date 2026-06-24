@@ -43,12 +43,14 @@ import { api } from '@/lib/api'
 import { showError } from '@/lib/toast'
 import { levelColors, levelLabels, routineStatusColors, routineStatusLabels } from '@/lib/constants'
 import type { User, WorkoutRoutine, RoutineExercise, Exercise, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 
 
 export default function RoutinesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
+  useRoleGuard(gymId, ['coach'])
 
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([])
   const [isLoading, setIsLoading] = useState(true)

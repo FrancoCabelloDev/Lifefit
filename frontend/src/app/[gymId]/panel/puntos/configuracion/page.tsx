@@ -6,6 +6,7 @@ import { Settings2, Utensils, Dumbbell, Trophy, Save, Loader2 } from 'lucide-rea
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { showError, showSuccess } from '@/lib/toast'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 interface PointsConfig {
   id: string
@@ -49,6 +50,7 @@ const CONFIG_ROWS: ConfigRow[] = [
 
 export default function ConfiguracionPuntosPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
   const queryClient = useQueryClient()
 
   const { data: config, isLoading } = useQuery({

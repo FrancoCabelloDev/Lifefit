@@ -11,6 +11,7 @@ import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -634,10 +635,14 @@ function AthletePanel({
   )
 }
 
+// ── Types for pending points ───────────────────────────────────────────────────
+
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdherenciaPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId }               = use(params)
+  useRoleGuard(gymId, ['coach'])
   const [data, setData]         = useState<AthleteAdherence[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -670,11 +675,15 @@ export default function AdherenciaPage({ params }: { params: Promise<{ gymId: st
         'flex-1 min-w-0 space-y-5 transition-all duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)]',
         selectedId ? 'lg:mr-[420px]' : '',
       )}>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Adherencia</h1>
-          <p className="text-slate-500 mt-0.5 text-sm">Aprobación de semanas completadas</p>
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Entrenamiento</h1>
+            <p className="text-slate-500 mt-0.5 text-sm">Seguimiento y aprobación de tus atletas</p>
+          </div>
+
         </div>
 
+        {<>
         {/* Summary */}
         <div className="grid grid-cols-3 gap-3">
           {[
@@ -781,9 +790,10 @@ export default function AdherenciaPage({ params }: { params: Promise<{ gymId: st
             })}
           </div>
         )}
+        </>}
       </div>
 
-      {/* ── Right: slide-in panel ── */}
+      {/* ── Right: slide-in athlete detail panel ── */}
       {selectedId && (
         <AthletePanel
           key={selectedId}

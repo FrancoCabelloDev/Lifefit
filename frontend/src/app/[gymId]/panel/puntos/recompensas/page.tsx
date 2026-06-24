@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { showError, showSuccess } from '@/lib/toast'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 interface Reward {
   id: string
@@ -136,6 +137,7 @@ function RewardForm({ gymId, reward, onClose }: { gymId: string; reward?: Reward
 
 export default function PuntosRecompensasPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
   const queryClient = useQueryClient()
 
   const [tab, setTab] = useState<'catalog' | 'requests'>('requests')

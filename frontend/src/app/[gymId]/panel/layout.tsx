@@ -36,6 +36,7 @@ import {
   CalendarRange,
   Gift,
   Star,
+  History,
 } from 'lucide-react'
 import { useSubscriptionTier } from '@/lib/hooks'
 import {
@@ -109,6 +110,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           items: [
             { title: "Plan Semanal", url: `/${gymId}/panel/mi-plan-semanal`, icon: CalendarDays },
             { title: "Rutinas", url: `/${gymId}/panel/mis-rutinas`, icon: Dumbbell },
+            { title: "Mis Sesiones", url: `/${gymId}/panel/mis-sesiones`, icon: History },
             { title: "Mensajes", url: `/${gymId}/panel/mensajes-coach`, icon: MessageSquare },
           ],
         },
@@ -116,7 +118,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           title: "Mi Nutrición",
           items: [
             { title: "Plan Alimentario", url: `/${gymId}/panel/mi-nutricion`, icon: UtensilsCrossed },
-            // Citas y mensajes con nutricionista requieren Premium (necesitan asignación activa)
+            { title: "Mis Medidas", url: `/${gymId}/panel/mis-medidas`, icon: Ruler },
             ...(isPremium ? [
               { title: "Citas", url: `/${gymId}/panel/mis-citas`, icon: CalendarDays },
               { title: "Mensajes", url: `/${gymId}/panel/mensajes-nutricionista`, icon: MessageSquare },
@@ -137,6 +139,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
         {
           title: "Recompensas",
           items: [
+            { title: "Mis Puntos", url: `/${gymId}/panel/puntos`, icon: Star },
             { title: "Canjear Recompensas", url: `/${gymId}/panel/recompensas`, icon: Gift },
           ],
         },
@@ -144,7 +147,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
           title: "Mi Perfil",
           items: [
             { title: "Ranking", url: `/${gymId}/panel/ranking`, icon: Medal },
-            { title: "Mi Equipo", url: `/${gymId}/panel/directorio`, icon: BookUser },
+            { title: "Mi Equipo", url: `/${gymId}/panel/mi-equipo`, icon: BookUser },
             { title: "Configuración", url: `/${gymId}/panel/sistema/perfil`, icon: UserCircle },
           ],
         },

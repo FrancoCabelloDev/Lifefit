@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import { api } from '@/lib/api'
 import { setTokens, setStoredUser, dispatchAuthEvent } from '@/lib/auth'
 import type { User } from '@/lib/types'
 
-export default function GoogleCallbackPage() {
+function GoogleCallbackInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -23,16 +23,13 @@ export default function GoogleCallbackPage() {
       api.get<User>("/api/accounts/me/")
         .then(user => {
           setStoredUser(user)
-          // Limpiar sessionStorage del flujo /unirse si venía de ahí
           sessionStorage.removeItem('lifefit_unirse')
 
-          // Si el backend ya calculó un next específico, usarlo
           if (next && next !== '/resumen' && next !== '/unirse') {
             router.push(next)
             return
           }
 
-          // Fallback por rol
           const gymSlug = (user as any).gym_slug || user.gym
           if (user.role === 'super_admin') {
             router.push('/panel-saas')
@@ -60,5 +57,13 @@ export default function GoogleCallbackPage() {
         <p className="text-slate-500 mt-2 text-sm">Preparando tu panel de LifeFit, un momento por favor.</p>
       </div>
     </div>
+  )
+}
+
+export default function GoogleCallbackPage() {
+  return (
+    <Suspense>
+      <GoogleCallbackInner />
+    </Suspense>
   )
 }

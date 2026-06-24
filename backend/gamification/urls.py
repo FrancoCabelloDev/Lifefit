@@ -10,7 +10,6 @@ router.register(r"redemptions", views.RewardRedemptionViewSet, basename="redempt
 urlpatterns = [
     path("my-stats/", views.my_stats),
     path("ranking/", views.ranking),
-    path("points/<uuid:pk>/approve/", views.approve_points),
     path("<slug:gym_slug>/points-config/", views.gym_points_config),
     path("<slug:gym_slug>/", include(router.urls)),
 ]

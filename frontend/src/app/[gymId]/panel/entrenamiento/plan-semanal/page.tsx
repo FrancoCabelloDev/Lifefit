@@ -16,6 +16,7 @@ import { showSuccess, showError } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { levelColors, levelLabels } from '@/lib/constants'
 import type { User as UserType, WorkoutRoutine, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -203,6 +204,7 @@ function DayColumn({
 
 export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['coach'])
 
   const [athletes, setAthletes]               = useState<UserType[]>([])
   const [selectedAthleteId, setSelectedAthleteId] = useState('')

@@ -7,7 +7,7 @@ import {
   Users, Dumbbell, Activity, Target, AlertTriangle,
   ChevronRight, Trophy, Medal, Flame, CheckCircle2,
   Plus, ClipboardList, List, TrendingUp, Clock,
-  Zap, ArrowRight,
+  ArrowRight,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -31,23 +31,6 @@ function getInitials(first: string, last: string) {
   return `${first[0] || ''}${last[0] || ''}`.toUpperCase()
 }
 
-const LEVEL_COLORS = [
-  'bg-slate-100 text-slate-500',
-  'bg-emerald-50 text-emerald-700',
-  'bg-blue-50 text-blue-700',
-  'bg-amber-50 text-amber-700',
-  'bg-purple-50 text-purple-700',
-  'bg-rose-50 text-rose-700',
-]
-
-function LevelBadge({ nivel }: { nivel: number }) {
-  const cls = LEVEL_COLORS[Math.min(nivel, LEVEL_COLORS.length - 1)]
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${cls}`}>
-      <Zap className="w-2.5 h-2.5" />Nvl {nivel}
-    </span>
-  )
-}
 
 export default function CoachDashboard({ gymId, user }: { gymId: string; user: User }) {
   const router = useRouter()
@@ -196,8 +179,7 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
                       <p className="text-[10px] text-slate-400">Última sesión: {formatRelative(a.last_session)}</p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <LevelBadge nivel={a.nivel} />
-                      <button
+                                            <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/${gymId}/panel/entrenamiento/rutinas`) }}
                         className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg transition-colors"
                       >
@@ -259,8 +241,7 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <LevelBadge nivel={a.nivel} />
-                        <span className="text-xs font-bold text-amber-600">{a.puntos.toLocaleString()} pts</span>
+                                                <span className="text-xs font-bold text-amber-600">{a.puntos.toLocaleString()} pts</span>
                       </div>
                       <div className="flex-shrink-0">
                         {a.has_active_routine ? (
@@ -318,8 +299,7 @@ export default function CoachDashboard({ gymId, user }: { gymId: string; user: U
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-slate-800 truncate">{a.first_name} {a.last_name}</p>
-                        <LevelBadge nivel={a.nivel} />
-                      </div>
+                                              </div>
                       <span className="text-xs font-bold text-amber-600 flex-shrink-0">
                         {a.puntos.toLocaleString()} pts
                       </span>

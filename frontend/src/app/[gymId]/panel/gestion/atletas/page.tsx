@@ -815,9 +815,6 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                       </td>}
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
-                          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 px-3 py-1 font-bold">
-                            Nivel {athlete.nivel}
-                          </Badge>
                           <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{athlete.puntos} PTS</span>
                         </div>
                       </td>

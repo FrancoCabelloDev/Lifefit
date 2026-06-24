@@ -80,9 +80,9 @@ def award_daily_points(user, target_date: date) -> dict | None:
     """
     Awards gamification points for target_date's nutrition compliance.
     Idempotent — returns None if already awarded.
-    Returns a dict with points_awarded, compliance_pct, streak, multiplier.
+    Returns a dict with points_awarded and compliance_pct.
     """
-    from gamification.models import AthleteStreak, UserPoints
+    from gamification.models import UserPoints
 
     source_key = f"nutrition_daily_{target_date.isoformat()}"
     if UserPoints.objects.filter(user=user, source=source_key).exists():
@@ -99,32 +99,16 @@ def award_daily_points(user, target_date: date) -> dict | None:
     elif compliance_pct >= 80:
         base_pts = 8
     else:
-        # Below threshold — no points, no streak
-        return {"points_awarded": 0, "compliance_pct": compliance_pct, "streak": 0, "multiplier": 1.0}
-
-    # Register activity and compute multiplier
-    gym = getattr(user, "gym", None)
-    if gym:
-        streak_obj, _ = AthleteStreak.objects.get_or_create(user=user, gym=gym)
-        streak_obj.register_activity(target_date)
-        multiplier   = streak_obj.get_multiplier()
-        streak_days  = streak_obj.current_streak
-    else:
-        multiplier  = 1.0
-        streak_days = 0
-
-    final_pts = int(base_pts * multiplier)
+        return {"points_awarded": 0, "compliance_pct": compliance_pct}
 
     UserPoints.objects.create(
         user=user,
-        points=final_pts,
+        points=base_pts,
         source=source_key,
-        description=f"Nutrición {target_date.isoformat()}: {compliance_pct}% (racha ×{multiplier})",
+        description=f"Nutrición {target_date.isoformat()}: {compliance_pct}%",
     )
 
     return {
-        "points_awarded": final_pts,
+        "points_awarded": base_pts,
         "compliance_pct": compliance_pct,
-        "streak":         streak_days,
-        "multiplier":     multiplier,
     }

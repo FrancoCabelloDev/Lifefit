@@ -37,6 +37,7 @@ import {
 
 import { api } from '@/lib/api'
 import type { Gym, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 import QRCode from 'qrcode'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
@@ -44,6 +45,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 export default function ConfigPage({ params }: { params: Promise<{ gymId: string }> }) {
   const resolvedParams = use(params)
   const { gymId } = resolvedParams
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
   
   const [gymData, setGymData] = useState<Gym | null>(null)
   const [isLoading, setIsLoading] = useState(true)

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 
 import { api } from '@/lib/api'
 import type { GymSubscription, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 const statusConfig: Record<string, { label: string; class: string }> = {
   active: { label: 'Activa', class: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -17,6 +18,7 @@ const statusConfig: Record<string, { label: string; class: string }> = {
 
 export default function SuscripcionesPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['gym_admin', 'super_admin', 'receptionist'])
   const [subscriptions, setSubscriptions] = useState<GymSubscription[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')

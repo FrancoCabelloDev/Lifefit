@@ -2,11 +2,10 @@
 
 Badge.condition format: "<key>:<threshold>"
 Supported keys:
-  workouts_completed  — total completed WorkoutSessions
-  streak              — current streak days
-  level               — UserProgress.level
+  workouts_completed   — total completed WorkoutSessions
+  level                — UserProgress.level
   challenges_completed — completed ChallengeParticipations
-  checkins            — total CheckIns
+  checkins             — total CheckIns
 """
 from django.db import transaction
 
@@ -42,11 +41,6 @@ def _meets_condition(user, condition: str) -> bool:
             WorkoutSession.objects.filter(user=user, status="completed").count()
             >= threshold
         )
-
-    if key == "streak":
-        from gamification.models import AthleteStreak
-        streak = AthleteStreak.objects.filter(user=user).first()
-        return bool(streak and streak.current_streak >= threshold)
 
     if key == "level":
         from .models import UserProgress

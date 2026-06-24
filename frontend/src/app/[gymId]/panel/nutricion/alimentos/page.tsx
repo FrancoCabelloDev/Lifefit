@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 interface Food {
   id: string
@@ -65,6 +66,7 @@ const EMPTY_FORM = {
 
 export default function AlimentosPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['nutritionist'])
   const queryClient = useQueryClient()
 
   const [search, setSearch] = useState('')

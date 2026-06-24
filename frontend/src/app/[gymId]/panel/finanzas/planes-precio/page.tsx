@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
 import type { GymMembershipPlan } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 type FormState = {
   name: string
@@ -35,6 +36,7 @@ const EMPTY_FORM: FormState = {
 
 export default function PlanesPrecioPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['gym_admin', 'super_admin'])
   const queryClient = useQueryClient()
 
   const [search, setSearch] = useState('')

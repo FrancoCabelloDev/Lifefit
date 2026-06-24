@@ -295,7 +295,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
               <CardDescription>Tu coach y nutricionista asignados</CardDescription>
             </div>
             <button
-              onClick={() => router.push(`/${gymId}/panel/directorio`)}
+              onClick={() => router.push(`/${gymId}/panel/mi-equipo`)}
               className="h-8 px-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
             >
               <BookUser className="w-3.5 h-3.5" />
@@ -328,7 +328,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
               </div>
             ) : (
               <button
-                onClick={() => router.push(`/${gymId}/panel/directorio`)}
+                onClick={() => router.push(`/${gymId}/panel/mi-equipo`)}
                 className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-emerald-50 border-2 border-dashed border-slate-200 hover:border-emerald-300 rounded-xl transition-all text-left"
               >
                 <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center">
@@ -359,7 +359,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
               </div>
             ) : (
               <button
-                onClick={() => router.push(`/${gymId}/panel/directorio`)}
+                onClick={() => router.push(`/${gymId}/panel/mi-equipo`)}
                 className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-amber-50 border-2 border-dashed border-slate-200 hover:border-amber-300 rounded-xl transition-all text-left"
               >
                 <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center">

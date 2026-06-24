@@ -114,93 +114,8 @@ def ranking(request):
 
 
 # ── Points approval ──────────────────────────────────────────────────────────
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def approve_points(request, pk):
-    """
-    POST /api/gamification/points/{id}/approve/
-
-    El coach aprueba una entrada de puntos pendiente de uno de sus atletas.
-    - Verifica que el solicitante es coach del atleta via CoachAssignment.
-    - Mueve status → approved, acredita puntos en User.puntos y UserProgress.
-    - Notifica al atleta.
-    """
-    user = request.user
-    if user.role not in (User.Role.COACH, User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN):
-        return Response({"detail": "Solo los coaches pueden aprobar puntos."}, status=403)
-
-    try:
-        entry = (
-            UserPoints.objects
-            .select_related("user", "related_session__routine")
-            .get(pk=pk, status=UserPoints.Status.PENDING)
-        )
-    except UserPoints.DoesNotExist:
-        return Response({"detail": "Entrada no encontrada o ya procesada."}, status=404)
-
-    athlete = entry.user
-
-    # Verificar que el coach tiene este atleta asignado (admins omiten la comprobación)
-    if user.role == User.Role.COACH:
-        from gyms.models import CoachAssignment
-        assigned = CoachAssignment.objects.filter(
-            coach=user,
-            athlete=athlete,
-            is_active=True,
-        ).exists()
-        if not assigned:
-            return Response({"detail": "Este atleta no está asignado a ti."}, status=403)
-
-    with transaction.atomic():
-        entry.approve(reviewed_by=user)
-
-        # Acreditar en el campo denormalizado User.puntos
-        User.objects.filter(pk=athlete.pk).update(puntos=F("puntos") + entry.points)
-
-        # Sincronizar XP / nivel en UserProgress
-        _sync_user_progress(athlete.pk, entry.points)
-
-    # Notificar al atleta fuera de la transacción para no bloquearla
-    _notify_points_approved(entry, approved_by=user)
-
-    return Response({
-        "id":           str(entry.id),
-        "status":       entry.status,
-        "points":       entry.points,
-        "description":  entry.description,
-        "reviewed_by":  user.get_full_name() or user.email,
-        "reviewed_at":  entry.reviewed_at,
-    })
-
-
-def _notify_points_approved(entry: UserPoints, approved_by) -> None:
-    """Envía notificación al atleta cuando su coach aprueba puntos."""
-    try:
-        from gyms.views import create_notification
-        from gyms.models import Notification
-
-        athlete  = entry.user
-        gym      = athlete.gym
-        routine_name = (
-            entry.related_session.routine.name
-            if entry.related_session and entry.related_session.routine
-            else entry.description
-        )
-        create_notification(
-            recipient=athlete,
-            notification_type=Notification.Type.SYSTEM,
-            title="¡Puntos confirmados!",
-            message=(
-                f"{approved_by.get_full_name() or approved_by.email} aprobó "
-                f"{entry.points} pts por '{routine_name}'."
-            ),
-            actor=approved_by,
-            gym=gym,
-            link=f"/{gym.slug}/panel/puntos" if gym else None,
-        )
-    except Exception:
-        logger.warning("_notify_points_approved: notificación fallida", exc_info=True)
+# Session-level pending/approve removed. Points are granted at the weekly level
+# via POST /api/workouts/approve-week/<athlete_id>/ from the adherencia view.
 
 
 def _sync_user_progress(user_id, delta_points: int) -> None:
@@ -363,12 +278,23 @@ class RewardRedemptionViewSet(viewsets.ModelViewSet):
         redemption.save(update_fields=["status", "notes", "reviewed_by", "reviewed_at", "updated_at"])
 
         if new_status == RewardRedemption.Status.APPROVED:
-            # Deduct points from athlete
+            cost = redemption.reward.points_cost
+            # Deduct points atomically — born approved so they count immediately
             UserPoints.objects.create(
                 user=redemption.athlete,
-                points=-redemption.reward.points_cost,
+                points=-cost,
+                pending_points=-cost,
+                status=UserPoints.Status.APPROVED,
+                reviewed_by=request.user,
+                reviewed_at=timezone.now(),
                 source="reward_redemption",
                 description=f"Canje: {redemption.reward.name}",
+            )
+            # Sync denormalized User.puntos
+            from django.contrib.auth import get_user_model
+            from django.db.models import F
+            get_user_model().objects.filter(pk=redemption.athlete_id).update(
+                puntos=F("puntos") - cost
             )
 
         return Response(RewardRedemptionSerializer(redemption).data)

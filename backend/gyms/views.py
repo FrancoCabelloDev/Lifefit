@@ -18,7 +18,7 @@ from rest_framework.response import Response
 
 from core.constants import DASHBOARD_CACHE_TTL
 from core.permissions import IsGymAdmin
-from gamification.models import AthleteStreak
+
 from .models import (
     AthleteGoal, BodyMeasurement, Branch, CheckIn, CoachAssignment, CoachMessage, Gym,
     GymMembershipPlan, GymFeatureFlag, GymPayment, GymSubscription, Notification,
@@ -506,10 +506,6 @@ class CheckInViewSet(viewsets.ModelViewSet):
             method=serializer.validated_data.get("method", CheckIn.Method.MANUAL),
         )
 
-        if target_user.role == User.Role.ATHLETE:
-            streak, _ = AthleteStreak.objects.get_or_create(user=target_user, gym_id=gym_id)
-            streak.register_activity()
-
         return Response(
             CheckInSerializer(checkin).data,
             status=status.HTTP_201_CREATED,
@@ -547,10 +543,6 @@ class CheckInViewSet(viewsets.ModelViewSet):
             gym_id=user.gym_id,
             method=CheckIn.Method.SELF,
         )
-
-        if user.role == User.Role.ATHLETE:
-            streak, _ = AthleteStreak.objects.get_or_create(user=user, gym_id=user.gym_id)
-            streak.register_activity()
 
         return Response(
             CheckInSerializer(checkin).data,
@@ -2412,24 +2404,21 @@ class BodyMeasurementViewSet(viewsets.ModelViewSet):
         from rest_framework.exceptions import ValidationError as DRFValidationError
 
         user = self.request.user
-        if user.role not in {"nutritionist", "gym_admin", "super_admin", "athlete"}:
-            raise PermissionDenied("No tienes permiso para registrar medidas.")
+        if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
+            raise PermissionDenied("Las medidas antropométricas deben ser registradas por un profesional.")
         try:
             gym = Gym.objects.get(id=user.gym_id)
         except Gym.DoesNotExist:
             raise PermissionDenied("Gimnasio no encontrado.")
 
-        if user.role == "athlete":
-            serializer.save(athlete=user, gym=gym)
-        else:
-            athlete_id = self.request.data.get("athlete")
-            if not athlete_id:
-                raise DRFValidationError({"athlete": "Se requiere el atleta."})
-            try:
-                athlete = User.objects.get(id=athlete_id, gym_id=user.gym_id, role="athlete")
-            except User.DoesNotExist:
-                raise DRFValidationError({"athlete": "Atleta no encontrado en este gimnasio."})
-            serializer.save(nutritionist=user, athlete=athlete, gym=gym)
+        athlete_id = self.request.data.get("athlete")
+        if not athlete_id:
+            raise DRFValidationError({"athlete": "Se requiere el atleta."})
+        try:
+            athlete = User.objects.get(id=athlete_id, gym_id=user.gym_id, role="athlete")
+        except User.DoesNotExist:
+            raise DRFValidationError({"athlete": "Atleta no encontrado en este gimnasio."})
+        serializer.save(nutritionist=user, athlete=athlete, gym=gym)
 
     def perform_update(self, serializer):
         user = self.request.user

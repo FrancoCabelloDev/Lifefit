@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { showError, showSuccess } from '@/lib/toast'
 import { useSubscriptionTier } from '@/lib/hooks'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 interface Reward {
   id: string
@@ -38,6 +39,7 @@ const STATUS_UI: Record<string, { label: string; color: string; icon: React.Comp
 
 export default function RecompensasPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['athlete'])
   const queryClient = useQueryClient()
 
   const statsQuery = useQuery({

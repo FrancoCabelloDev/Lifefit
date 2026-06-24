@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
 import type { NutritionPlan, MealTemplate, User, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export default function PlanDetailPage({
   params: Promise<{ gymId: string; planId: string }>
 }) {
   const { gymId, planId } = use(params)
+  useRoleGuard(gymId, ['nutritionist'])
   const router = useRouter()
 
   const [plan, setPlan] = useState<NutritionPlan | null>(null)

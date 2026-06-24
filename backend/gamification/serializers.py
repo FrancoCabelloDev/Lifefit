@@ -1,13 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import AthleteStreak, GymPointsConfig, Reward, RewardRedemption, UserPoints
-
-
-class AthleteStreakSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AthleteStreak
-        fields = ["current_streak", "longest_streak", "last_activity_date"]
+from .models import GymPointsConfig, Reward, RewardRedemption, UserPoints
 
 
 class UserPointsSerializer(serializers.ModelSerializer):
@@ -21,7 +15,6 @@ class AthleteStatsSerializer(serializers.Serializer):
     level = serializers.IntegerField()
     xp_in_level = serializers.IntegerField()
     xp_to_next = serializers.IntegerField()
-    streak = AthleteStreakSerializer()
     recent_points = UserPointsSerializer(many=True)
 
 

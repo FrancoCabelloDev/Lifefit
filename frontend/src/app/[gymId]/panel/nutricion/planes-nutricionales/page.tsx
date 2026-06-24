@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api } from '@/lib/api'
 import { showError } from '@/lib/toast'
 import type { NutritionPlan, MealTemplate, User, PaginatedResponse } from '@/lib/types'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 const STATUES: Record<string, { label: string; color: string }> = {
   draft: { label: 'Borrador', color: 'bg-slate-100 text-slate-700' },
@@ -41,6 +42,7 @@ type DayMeals = {
 
 export default function NutritionPlansPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId } = use(params)
+  useRoleGuard(gymId, ['nutritionist'])
   const router = useRouter()
   const [plans, setPlans] = useState<NutritionPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)

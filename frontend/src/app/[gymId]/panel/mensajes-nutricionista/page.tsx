@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, use, useRef, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Send, MessageSquare, Search, Stethoscope, UserCircle2 } from 'lucide-react'
+import { Send, MessageSquare, Search, Stethoscope, UserCircle2, UserPlus, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
@@ -314,15 +314,23 @@ export default function MensajesPage({ params }: { params: Promise<{ gymId: stri
 
 // ── Vista de mensajes para el atleta ────────────────────────────────────────
 function AthleteMessagesView({ gymId, user }: { gymId: string; user: User }) {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [newMessage, setNewMessage] = useState('')
 
+  const assignmentQuery = useQuery({
+    queryKey: ['athlete-nutritionist-assignment', gymId],
+    queryFn: () => api.get<{ count: number; results: Array<{ is_active: boolean }> }>('/api/gyms/nutritionist-assignments/'),
+    staleTime: 60_000,
+  })
+
   const messagesQuery = useQuery({
     queryKey: ['athlete-messages', gymId],
     queryFn: () => api.get<NutritionistMessage[]>('/api/gyms/messages/'),
     refetchInterval: 10000,
+    enabled: assignmentQuery.isSuccess && (assignmentQuery.data?.results ?? []).some(a => a.is_active),
   })
 
   const sendMutation = useMutation({
@@ -352,12 +360,65 @@ function AthleteMessagesView({ gymId, user }: { gymId: string; user: User }) {
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
+  const hasNutritionist = (assignmentQuery.data?.results ?? []).some(a => a.is_active)
+  const isCheckingAssignment = assignmentQuery.isLoading
   const nutritionistName = messages.find(m => m.sender_is_nutritionist)?.sender_name ?? 'Tu nutricionista'
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim()) return
     sendMutation.mutate(newMessage.trim())
+  }
+
+  if (isCheckingAssignment) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mensajes</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Comunicación con tu nutricionista</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-100 flex items-center justify-center" style={{ height: 'calc(100vh - 220px)', minHeight: '480px' }}>
+          <div className="w-8 h-8 rounded-full border-2 border-slate-200 border-t-emerald-500 animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasNutritionist) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mensajes</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Comunicación con tu nutricionista</p>
+        </div>
+        <div
+          className="bg-white rounded-2xl border border-slate-100 flex flex-col items-center justify-center gap-5 text-center px-8"
+          style={{ height: 'calc(100vh - 220px)', minHeight: '480px' }}
+        >
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 flex items-center justify-center">
+            <Stethoscope className="w-7 h-7 text-teal-500" />
+          </div>
+          <div className="space-y-1.5 max-w-xs">
+            <p className="text-base font-semibold text-slate-800">Aún no tienes nutricionista asignada</p>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Elige una nutricionista del directorio para poder comunicarte con ella y recibir tu plan alimentario.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push(`/${gymId}/panel/mi-equipo`)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors"
+            style={{ transition: 'background-color 150ms, transform 160ms cubic-bezier(0.23,1,0.32,1)' }}
+            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+            onMouseUp={e => (e.currentTarget.style.transform = '')}
+            onMouseLeave={e => (e.currentTarget.style.transform = '')}
+          >
+            <UserPlus className="w-4 h-4" />
+            Elegir nutricionista
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -1268,7 +1268,7 @@ function AssignPlanModal({ onClose, athleteId, gymId: _gymId, onAssigned, hasAct
   const [newCal, setNewCal]       = useState('2000')
   const [newDuration, setNewDuration] = useState('7')
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD en zona local
   const isScheduled = startDate > today
 
   const createAndAssignMutation = useMutation({
@@ -1365,18 +1365,170 @@ function AssignPlanModal({ onClose, athleteId, gymId: _gymId, onAssigned, hasAct
 
 // ─── Tab: Medidas ─────────────────────────────────────────────────────────────
 
-function MeasurementsTab({ measurements }: { measurements: any[] }) {
+type MeasForm = {
+  measured_at: string
+  weight_kg: string; height_cm: string; body_fat_pct: string
+  muscle_mass_kg: string; waist_cm: string; hip_cm: string
+  arm_cm: string; visceral_fat: string; notes: string
+}
+
+const MEAS_EMPTY: MeasForm = {
+  measured_at: new Date().toLocaleDateString('en-CA'),
+  weight_kg: '', height_cm: '', body_fat_pct: '', muscle_mass_kg: '',
+  waist_cm: '', hip_cm: '', arm_cm: '', visceral_fat: '', notes: '',
+}
+
+const MEAS_FIELDS: { key: keyof MeasForm; label: string; unit: string; placeholder: string }[] = [
+  { key: 'weight_kg',      label: 'Peso',           unit: 'kg',  placeholder: '72.5' },
+  { key: 'height_cm',      label: 'Talla',          unit: 'cm',  placeholder: '170'  },
+  { key: 'body_fat_pct',   label: 'Grasa corporal', unit: '%',   placeholder: '18.2' },
+  { key: 'muscle_mass_kg', label: 'Masa muscular',  unit: 'kg',  placeholder: '35.0' },
+  { key: 'waist_cm',       label: 'Cintura',        unit: 'cm',  placeholder: '80'   },
+  { key: 'hip_cm',         label: 'Cadera',         unit: 'cm',  placeholder: '95'   },
+  { key: 'arm_cm',         label: 'Brazo',          unit: 'cm',  placeholder: '32'   },
+  { key: 'visceral_fat',   label: 'Grasa visceral', unit: 'niv', placeholder: '8'    },
+]
+
+function MeasurementsTab({ measurements, athleteId }: { measurements: any[]; athleteId: string }) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState<MeasForm>(MEAS_EMPTY)
+
+  const set = (k: keyof MeasForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const body: Record<string, any> = { measured_at: form.measured_at, athlete: athleteId }
+      if (form.weight_kg)      body.weight_kg      = parseFloat(form.weight_kg)
+      if (form.height_cm)      body.height_cm      = parseFloat(form.height_cm)
+      if (form.body_fat_pct)   body.body_fat_pct   = parseFloat(form.body_fat_pct)
+      if (form.muscle_mass_kg) body.muscle_mass_kg = parseFloat(form.muscle_mass_kg)
+      if (form.waist_cm)       body.waist_cm       = parseFloat(form.waist_cm)
+      if (form.hip_cm)         body.hip_cm         = parseFloat(form.hip_cm)
+      if (form.arm_cm)         body.arm_cm         = parseFloat(form.arm_cm)
+      if (form.visceral_fat)   body.visceral_fat   = parseInt(form.visceral_fat)
+      if (form.notes.trim())   body.notes          = form.notes.trim()
+      return api.post('/api/gyms/body-measurements/', body)
+    },
+    onSuccess: () => {
+      showSuccess('Medidas registradas')
+      queryClient.invalidateQueries({ queryKey: ['athlete-profile', athleteId] })
+      setOpen(false)
+      setForm(MEAS_EMPTY)
+    },
+    onError: (err) => showError(err, 'No se pudieron guardar las medidas'),
+  })
+
+  const hasValue = MEAS_FIELDS.some(f => form[f.key])
+
+  const RegisterButton = (
+    <button
+      onClick={() => { setForm(MEAS_EMPTY); setOpen(true) }}
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0"
+      style={{ transition: 'background-color 150ms, transform 160ms cubic-bezier(0.23,1,0.32,1)' }}
+      onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+      onMouseUp={e => (e.currentTarget.style.transform = '')}
+      onMouseLeave={e => (e.currentTarget.style.transform = '')}
+    >
+      <Plus className="w-3.5 h-3.5" />
+      Registrar medidas
+    </button>
+  )
+
+  const Modal = (
+    <Dialog open={open} onOpenChange={v => { if (!v) setOpen(false) }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Scale className="w-5 h-5 text-emerald-600" />
+            Registrar medidas
+          </DialogTitle>
+          <p className="text-sm text-slate-500">Completa los campos disponibles en la consulta</p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1 max-h-[60vh] overflow-y-auto pr-1">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">
+              Fecha de medición
+            </label>
+            <input
+              type="date"
+              value={form.measured_at}
+              max={new Date().toLocaleDateString('en-CA')}
+              onChange={set('measured_at')}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {MEAS_FIELDS.map(f => (
+              <div key={f.key}>
+                <label className="text-xs text-slate-500 mb-1 block">
+                  {f.label} <span className="text-slate-300">({f.unit})</span>
+                </label>
+                <input
+                  type="number" step="0.1" min="0"
+                  value={form[f.key]}
+                  onChange={set(f.key)}
+                  placeholder={f.placeholder}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-colors"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">
+              Notas <span className="text-slate-300">(opcional)</span>
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={set('notes')}
+              placeholder="Observaciones clínicas..."
+              rows={2}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none transition-colors"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={!hasValue || saveMutation.isPending}
+            className="bg-emerald-600 hover:bg-emerald-700"
+            style={{ transition: 'background-color 150ms, transform 160ms cubic-bezier(0.23,1,0.32,1)' }}
+          >
+            {saveMutation.isPending
+              ? <><Loader2 className="w-4 h-4 animate-spin mr-1.5" />Guardando...</>
+              : <><Scale className="w-4 h-4 mr-1.5" />Guardar medidas</>
+            }
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (!measurements || measurements.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-3 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-          <Ruler className="w-7 h-7 text-slate-300" />
+      <>
+        {Modal}
+        <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-4 text-center px-6">
+          <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+            <Ruler className="w-7 h-7 text-slate-300" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-slate-700">Sin medidas registradas</p>
+            <p className="text-xs text-slate-400 max-w-xs">
+              Registra las medidas de este atleta para hacer seguimiento de su composición corporal.
+            </p>
+          </div>
+          {RegisterButton}
         </div>
-        <div>
-          <p className="text-sm font-medium text-slate-600">Sin medidas registradas</p>
-          <p className="text-xs text-slate-400 mt-1">Registra las primeras medidas desde la agenda.</p>
-        </div>
-      </div>
+      </>
     )
   }
 
@@ -1394,7 +1546,13 @@ function MeasurementsTab({ measurements }: { measurements: any[] }) {
   ]
 
   return (
+    <>
+      {Modal}
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-400">{measurements.length} registro{measurements.length !== 1 ? 's' : ''}</p>
+        {RegisterButton}
+      </div>
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="border-b border-slate-100 pb-4">
           <div className="flex items-center justify-between">
@@ -1452,6 +1610,7 @@ function MeasurementsTab({ measurements }: { measurements: any[] }) {
         </Card>
       )}
     </div>
+    </>
   )
 }
 
@@ -1571,7 +1730,6 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
                   { label: 'DNI', value: a.dni },
                   { label: 'Celular', value: a.phone },
                   { label: 'Miembro desde', value: fmtDate(a.date_joined) },
-                  { label: 'Nivel', value: `Nivel ${a.nivel}` },
                   { label: 'Objetivo fitness', value: a.fitness_goal?.replace(/_/g, ' ') },
                   { label: 'Check-ins totales', value: s.checkins_total },
                 ].map(({ label, value }) => (
@@ -1592,7 +1750,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
 
           {/* Medidas */}
           <TabsContent value="medidas" className="mt-4">
-            <MeasurementsTab measurements={measurements || []} />
+            <MeasurementsTab measurements={measurements || []} athleteId={id} />
           </TabsContent>
 
           {/* Plan de Alimentación */}
@@ -1664,7 +1822,6 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
                     { label: 'Miembro desde', value: fmtDate(a.date_joined) },
                     { label: 'Check-ins totales', value: s.checkins_total },
                     { label: 'Check-ins este mes', value: s.checkins_month },
-                    { label: 'Nivel', value: `Nivel ${a.nivel}` },
                   ].map(({ label, value }) => (
                     <div key={label}>
                       <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
@@ -1726,7 +1883,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
           </TabsContent>
 
           <TabsContent value="nutricion" className="mt-4">
-            <MeasurementsTab measurements={measurements || []} />
+            <MeasurementsTab measurements={measurements || []} athleteId={id} />
           </TabsContent>
 
           <TabsContent value="puntos" className="mt-4">

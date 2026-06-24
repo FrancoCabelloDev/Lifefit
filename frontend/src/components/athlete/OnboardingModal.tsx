@@ -131,7 +131,7 @@ export default function OnboardingModal({ gymId }: Props) {
 
   function goToDirectory() {
     dismiss()
-    router.push(`/${gymId}/panel/directorio`)
+    router.push(`/${gymId}/panel/mi-equipo`)
   }
 
   if (!visible) return null

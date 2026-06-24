@@ -463,8 +463,6 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
             "date":           target_date.isoformat(),
             "points_awarded": result["points_awarded"],
             "compliance_pct": result["compliance_pct"],
-            "streak":         result["streak"],
-            "multiplier":     result["multiplier"],
         })
 
     @action(detail=True, methods=["post"], url_path="upload-photo")

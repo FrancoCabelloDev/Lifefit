@@ -599,7 +599,6 @@ export type UserProgress = {
   total_points: number
   current_xp: number
   next_level_xp: number
-  streak_days?: number
   created_at: string
   updated_at: string
 }
