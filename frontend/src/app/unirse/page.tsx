@@ -522,7 +522,10 @@ export default function UnirsePage() {
           {stepLabel && (
             <span className="text-sm font-medium text-slate-500">{stepLabel}</span>
           )}
-          <a href="/ingresar" className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
+          <a
+            href={selectedGym ? `/${selectedGym.slug}/ingresar` : '/ingresar'}
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          >
             Ya tengo cuenta →
           </a>
         </div>
