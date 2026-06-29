@@ -494,13 +494,18 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
             meal_log.photo.delete(save=False)
 
         meal_log.photo = photo
-        meal_log.nutritionist_approved = None  # Vuelve a pendiente si se reemplaza la foto
+        meal_log.nutritionist_approved = None
         meal_log.xp_awarded = False
-        meal_log.save(update_fields=["photo", "nutritionist_approved", "xp_awarded", "updated_at"])
+        meal_log.save(update_fields=["photo", "nutritionist_approved", "xp_awarded"])
+
+        try:
+            photo_url = request.build_absolute_uri(meal_log.photo.url)
+        except Exception:
+            photo_url = None
 
         return Response({
             "detail": "Foto subida. Pendiente de revisión por el nutricionista.",
-            "photo_url": request.build_absolute_uri(meal_log.photo.url),
+            "photo_url": photo_url,
             "log_id": str(meal_log.id),
         })
 
@@ -556,7 +561,18 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
         if user.role not in {"nutritionist", "gym_admin", "super_admin"}:
             return Response({"detail": "Solo para nutricionistas."}, status=403)
 
-        meal_log = self.get_object()
+        # Buscar directamente sin el queryset del atleta
+        from django.shortcuts import get_object_or_404
+        from gyms.models import NutritionistAssignment
+        meal_log = get_object_or_404(UserMealLog, pk=pk)
+
+        # Verificar que el nutricionista tiene asignado a ese atleta
+        if user.role == "nutritionist":
+            assigned = NutritionistAssignment.objects.filter(
+                nutritionist=user, athlete=meal_log.user, is_active=True
+            ).exists()
+            if not assigned:
+                return Response({"detail": "No tienes acceso a este registro."}, status=403)
 
         if not meal_log.photo:
             return Response({"detail": "Este log no tiene foto."}, status=status.HTTP_400_BAD_REQUEST)
@@ -574,7 +590,7 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
             meal_log.reviewed_at = timezone.now()
             meal_log.save(update_fields=[
                 "nutritionist_approved", "nutritionist_notes",
-                "reviewed_by", "reviewed_at", "updated_at",
+                "reviewed_by", "reviewed_at",
             ])
 
         return Response({
@@ -915,6 +931,7 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
             user_points = UserPoints.objects.create(
                 user=assignment.user,
                 points=assignment.plan.points_reward,
+                status=UserPoints.Status.APPROVED,
                 source="nutrition_plan_completed",
                 description=f"Completaste el plan de nutrición: {assignment.plan.name}",
                 related_nutrition_plan=assignment.plan,
@@ -1112,6 +1129,8 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
                 UserPoints.objects.create(
                     user=assignment.user,
                     points=pts,
+                    status=UserPoints.Status.APPROVED,
+                    reviewed_by=user,
                     source="weekly_plan_approved",
                     description=f"Semana aprobada: {assignment.plan.name} ({week_start.isoformat()})",
                     related_nutrition_plan=assignment.plan,
@@ -1453,6 +1472,13 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
                 "days_overdue": max(0, (today - deadline).days),
             }
 
+        # Puntos configurados por el gym admin
+        from gamification.models import GymPointsConfig
+        gym = active_plan.plan.gym if active_plan else (user.gym if hasattr(user, "gym") else None)
+        gym_pts_cfg = None
+        if gym:
+            gym_pts_cfg, _ = GymPointsConfig.objects.get_or_create(gym=gym)
+
         return Response({
             "active_plan": plan_serializer.data if plan_serializer else None,
             "scheduled_plan": scheduled_data,
@@ -1467,6 +1493,10 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
                 "meals_by_date": meal_data,
             },
             "total_meals_logged_week": len(week_meals),
+            "gym_points": {
+                "nutrition_week": gym_pts_cfg.nutrition_week_points if gym_pts_cfg else 100,
+                "workout_week":   gym_pts_cfg.workout_week_points   if gym_pts_cfg else 50,
+            },
         })
 
 

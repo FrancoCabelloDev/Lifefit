@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState, useCallback } from 'react'
+import { use, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -490,6 +490,20 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
     }
   }, [athleteId, weekEvCache])
 
+  // Auto-fetch evidencias si la semana por defecto es completada (no hay plan activo).
+  // Debe estar antes de cualquier early return para no violar Rules of Hooks.
+  const _chainForEffect: any[] = (nutritionQuery.data as any)?.chain ?? []
+  const _activeIdForEffect = _chainForEffect.find((w: any) => w.status === 'active')?.assignment_id ?? null
+  const _defaultWeekForEffect = !_activeIdForEffect
+    ? (_chainForEffect.find((w: any) => w.assignment_id === (selectedChainWeekId ?? _chainForEffect[_chainForEffect.length - 1]?.assignment_id)) ?? _chainForEffect[_chainForEffect.length - 1] ?? null)
+    : null
+  useEffect(() => {
+    if (_defaultWeekForEffect?.status === 'completed') {
+      fetchWeekEvidence(_defaultWeekForEffect)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_defaultWeekForEffect?.assignment_id])
+
   if (nutritionQuery.isLoading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-emerald-600" /></div>
   }
@@ -519,6 +533,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
   const nutData = nutritionQuery.data
   const activePlan = nutData?.active_plan?.plan_detail ?? null
   const assignment = nutData?.active_plan ?? null
+  const nutritionWeekPts: number = nutData?.gym_points?.nutrition_week ?? 100
   const completedWeeks: number = nutData?.completed_weeks ?? 0
   const weekNumber: number = nutData?.week_number ?? 1
   const totalWeeks: number = nutData?.total_weeks ?? 0
@@ -531,7 +546,8 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
 
   // ── Viewing week derivations ─────────────────────────────────────────────
   const activeChainWeekId  = chain.find((w: any) => w.status === 'active')?.assignment_id ?? null
-  const viewingWeekId      = selectedChainWeekId ?? activeChainWeekId
+  const defaultWeekId      = activeChainWeekId ?? chain[chain.length - 1]?.assignment_id ?? null
+  const viewingWeekId      = selectedChainWeekId ?? defaultWeekId
   const viewingWeek        = chain.find((w: any) => w.assignment_id === viewingWeekId) ?? chain[0] ?? null
   const isViewingActive    = viewingWeek?.status === 'active'
   const isViewingScheduled = viewingWeek?.status === 'scheduled'
@@ -797,8 +813,19 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
 
           {/* Right actions area */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Review actions (active week with review request) */}
-            {isViewingActive && reviewRequestedAt && (
+            {/* Delete active week */}
+            {isViewingActive && assignment && (
+              <button
+                onClick={() => setDeleteWeekConfirm(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-500 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors"
+                title="Eliminar plan de esta semana"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Eliminar semana
+              </button>
+            )}
+
+            {/* Review actions (active week) */}
+            {isViewingActive && (
               <>
                 <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg">
                   <Bell className="w-3.5 h-3.5 shrink-0" />
@@ -808,7 +835,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
                   <X className="w-3.5 h-3.5" /> Rechazar
                 </button>
                 <button onClick={() => setApproveConfirm(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar · +{activePlan.points_reward ?? 0} pts
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar · +{nutritionWeekPts} pts
                 </button>
               </>
             )}
@@ -898,11 +925,11 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
       {/* ── TAB: Evidencias ── */}
       {(innerTab === 'logs' || isViewingCompleted) && (
         <div className="space-y-4">
-          {(isViewingActive ? weekLogsQuery.isLoading : weekEvLoading === viewingWeekId) && (
+          {(isViewingActive ? weekLogsQuery.isLoading : (viewingWeekId !== null && weekEvLoading === viewingWeekId)) && (
             <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
           )}
 
-          {!(isViewingActive ? weekLogsQuery.isLoading : weekEvLoading === viewingWeekId) && viewingLogs.length === 0 && (
+          {!(isViewingActive ? weekLogsQuery.isLoading : (viewingWeekId !== null && weekEvLoading === viewingWeekId)) && viewingLogs.length === 0 && (
             <div className="rounded-2xl border border-slate-100 py-14 text-center">
               <p className="text-sm text-slate-400">
                 {isViewingCompleted ? 'No hay evidencias registradas para esta semana.' : 'El atleta aún no ha registrado comidas esta semana.'}
@@ -1161,19 +1188,24 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
       {/* Modal eliminar semana */}
       <Dialog open={deleteWeekConfirm} onOpenChange={setDeleteWeekConfirm}>
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle>¿Eliminar semana programada?</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>¿Eliminar semana?</DialogTitle></DialogHeader>
           <p className="text-sm text-slate-500">
-            Se eliminará la semana <strong>{viewingWeek?.plan_name}</strong> del programa del atleta. Esta acción no se puede deshacer.
+            Se eliminará la semana <strong>{viewingWeek?.plan_name ?? activePlan?.name}</strong> del programa del atleta.
+            Esta acción no se puede deshacer.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteWeekConfirm(false)}>Cancelar</Button>
             <Button
               variant="destructive"
               disabled={deleteWeekMutation.isPending}
-              onClick={() => viewingWeek && deleteWeekMutation.mutate({ assignmentId: viewingWeek.assignment_id, planId: viewingWeek.plan_id })}
+              onClick={() => {
+                const aid = viewingWeek?.assignment_id ?? assignment?.id
+                const pid = viewingWeek?.plan_id ?? activePlan?.id
+                if (aid) deleteWeekMutation.mutate({ assignmentId: aid, planId: pid })
+              }}
             >
               {deleteWeekMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              Eliminar semana
+              Sí, eliminar semana
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1186,7 +1218,7 @@ function NutritionPlanTab({ athleteId, gymId, membership_tier }: {
             <DialogTitle>¿Aprobar semana?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-500">
-            Se otorgarán <span className="font-bold text-emerald-700">{activePlan.points_reward} puntos</span> al atleta
+            Se otorgarán <span className="font-bold text-emerald-700">{nutritionWeekPts} puntos</span> al atleta
             y el plan se marcará como completado. Podrás asignar uno nuevo después.
           </p>
           <DialogFooter>
@@ -1265,9 +1297,8 @@ function AssignPlanModal({ onClose, athleteId, gymId: _gymId, onAssigned, hasAct
   onClose: () => void; athleteId: string; gymId: string; onAssigned: () => void; hasActivePlan?: boolean
 }) {
   const [startDate, setStartDate] = useState(hasActivePlan ? nextMonday() : new Date().toISOString().split('T')[0])
-  const [newName, setNewName]     = useState('')
-  const [newCal, setNewCal]       = useState('2000')
-  const [newDuration, setNewDuration] = useState('7')
+  const [newName, setNewName] = useState('')
+  const [newCal, setNewCal]   = useState('2000')
 
   const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD en zona local
   const isScheduled = startDate > today
@@ -1278,7 +1309,7 @@ function AssignPlanModal({ onClose, athleteId, gymId: _gymId, onAssigned, hasAct
         name: newName,
         points_reward: 0,
         calories_per_day: parseInt(newCal) || 2000,
-        duration_days: parseInt(newDuration) || 7,
+        duration_days: 7,
         status: 'active',
         created_for: athleteId,
       })
@@ -1330,18 +1361,11 @@ function AssignPlanModal({ onClose, athleteId, gymId: _gymId, onAssigned, hasAct
             />
           </div>
 
-          {/* Kcal / Días */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Kcal/día</label>
-              <input type="number" value={newCal} onChange={e => setNewCal(e.target.value)}
-                className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Días</label>
-              <input type="number" value={newDuration} onChange={e => setNewDuration(e.target.value)}
-                className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
-            </div>
+          {/* Kcal/día */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Kcal/día</label>
+            <input type="number" value={newCal} onChange={e => setNewCal(e.target.value)}
+              className="mt-1 w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
           </div>
 
           <p className="text-xs text-slate-400">Después de crear el plan podrás agregar días y comidas desde el editor.</p>

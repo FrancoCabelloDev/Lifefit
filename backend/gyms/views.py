@@ -1067,6 +1067,17 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
             assignment.gym_id = user.gym_id
             assignment.save(update_fields=["is_active", "gym_id", "updated_at"])
 
+        athlete_name = f"{athlete.first_name} {athlete.last_name}".strip() or athlete.email
+        create_notification(
+            recipient=nutritionist,
+            notification_type=Notification.Type.SYSTEM,
+            title="Nuevo atleta asignado",
+            message=f"{athlete_name} te ha sido asignado como atleta.",
+            actor=user,
+            gym=nutritionist.gym,
+            link=f"/{nutritionist.gym.slug}/panel/gestion/atletas/{athlete.id}" if nutritionist.gym else "",
+        )
+
         from .serializers import NutritionistAssignmentSerializer
         return Response(
             NutritionistAssignmentSerializer(assignment).data,

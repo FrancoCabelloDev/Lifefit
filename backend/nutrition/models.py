@@ -3,7 +3,9 @@ from django.db import models
 
 try:
     from cloudinary.models import CloudinaryField as _CloudinaryField
-    _CLOUDINARY = True
+    import cloudinary
+    _cld = cloudinary.config()
+    _CLOUDINARY = bool(getattr(_cld, "cloud_name", None) and getattr(_cld, "api_key", None))
 except ImportError:
     _CLOUDINARY = False
 

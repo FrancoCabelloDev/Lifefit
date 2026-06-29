@@ -55,7 +55,7 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
     try {
       const form = new FormData()
       form.append('photo', file)
-      await api.post(`/api/nutrition/meal-logs/${logId}/upload-photo/`, form)
+      await api.post(`/api/nutrition/meal-logs/${logId}/upload-photo/`, form, { formData: true })
       toast.success('Foto enviada. Tu nutricionista la revisará pronto.')
       onRefresh()
     } catch (err) {
@@ -280,7 +280,8 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
                   </div>
 
                   {approvalStatus !== true && (
-                    <>
+                    <div className="flex items-center gap-2">
+                      {/* Galería */}
                       <input
                         ref={el => { fileInputRefs.current[meal.id] = el }}
                         type="file"
@@ -288,19 +289,36 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
                         className="hidden"
                         onChange={handleFileChange(log!.id!, meal.id)}
                       />
+                      {/* Cámara (móvil) */}
+                      <input
+                        ref={el => { fileInputRefs.current[`${meal.id}_cam`] = el }}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        capture="environment"
+                        className="hidden"
+                        onChange={handleFileChange(log!.id!, meal.id)}
+                      />
                       <button
                         disabled={isUploading}
-                        onClick={() => fileInputRefs.current[meal.id]?.click()}
-                        className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                        onClick={() => fileInputRefs.current[`${meal.id}_cam`]?.click()}
+                        title="Tomar foto con la cámara"
+                        className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700 transition-all active:scale-95 disabled:opacity-50"
                       >
                         {isUploading ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <Camera className="w-3.5 h-3.5" />
                         )}
-                        {log?.photo_url ? 'Cambiar foto' : 'Subir evidencia'}
+                        Cámara
                       </button>
-                    </>
+                      <button
+                        disabled={isUploading}
+                        onClick={() => fileInputRefs.current[meal.id]?.click()}
+                        className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        {log?.photo_url ? 'Cambiar foto' : 'Subir foto'}
+                      </button>
+                    </div>
                   )}
                 </div>
 
