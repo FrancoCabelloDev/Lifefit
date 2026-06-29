@@ -217,7 +217,7 @@ export type RevenuePoint = {
 export type SubscriptionTier = 'basic' | 'premium' | null
 
 export type GymMembershipPlan = {
-  id: number
+  id: string
   gym: string
   gym_name: string
   name: string
@@ -231,21 +231,26 @@ export type GymMembershipPlan = {
   updated_at: string
 }
 
-export type GymSubscriptionStatus = 'active' | 'expired' | 'canceled'
+export type GymSubscriptionStatus = 'active' | 'expired' | 'canceled' | 'paused'
 
 export type GymSubscription = {
   id: string
   athlete: string
   athlete_name: string
+  athlete_email: string
+  athlete_avatar: string | null
   gym: string
-  plan: number | null
+  plan: string | null
   plan_name: string | null
   plan_price: number | null
   plan_tier: 'basic' | 'premium' | null
+  plan_duration_days: number | null
   status: GymSubscriptionStatus
   start_date: string
   end_date: string | null
   auto_renew: boolean
+  cancel_reason: string
+  pause_reason: string
   days_remaining: number | null
   is_expired: boolean
   created_at: string

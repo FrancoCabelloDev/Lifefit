@@ -290,11 +290,5 @@ class RewardRedemptionViewSet(viewsets.ModelViewSet):
                 source="reward_redemption",
                 description=f"Canje: {redemption.reward.name}",
             )
-            # Sync denormalized User.puntos
-            from django.contrib.auth import get_user_model
-            from django.db.models import F
-            get_user_model().objects.filter(pk=redemption.athlete_id).update(
-                puntos=F("puntos") - cost
-            )
 
         return Response(RewardRedemptionSerializer(redemption).data)

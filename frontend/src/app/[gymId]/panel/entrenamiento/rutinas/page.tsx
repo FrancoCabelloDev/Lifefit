@@ -14,7 +14,6 @@ import {
   Layers,
   Edit,
   Trash2,
-  UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -42,7 +41,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { api } from '@/lib/api'
 import { showError } from '@/lib/toast'
 import { levelColors, levelLabels, routineStatusColors, routineStatusLabels } from '@/lib/constants'
-import type { User, WorkoutRoutine, RoutineExercise, Exercise, PaginatedResponse } from '@/lib/types'
+import type { WorkoutRoutine, RoutineExercise, Exercise, PaginatedResponse } from '@/lib/types'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
 
 
@@ -76,12 +75,6 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
   const [availableExercises, setAvailableExercises] = useState<Exercise[]>([])
   const [selectedExercises, setSelectedExercises] = useState<Record<string, { sets: number; reps: number; rest_seconds: number; weight_kg: number }>>({})
 
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false)
-  const [assignRoutine, setAssignRoutine] = useState<WorkoutRoutine | null>(null)
-  const [athletes, setAthletes] = useState<User[]>([])
-  const [selectedAthleteId, setSelectedAthleteId] = useState('')
-  const [isAssigning, setIsAssigning] = useState(false)
-
   useEffect(() => {
     fetchRoutines()
   }, [])
@@ -108,37 +101,6 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
       setAvailableExercises(Array.isArray(data) ? data : data.results || [])
     } catch (error) {
       console.error('Error fetching exercises:', error)
-    }
-  }
-
-  const openAssignDialog = async (routine: WorkoutRoutine) => {
-    setAssignRoutine(routine)
-    setSelectedAthleteId('')
-    setAssignDialogOpen(true)
-    try {
-      const data = await api.get<PaginatedResponse<User>>("/api/auth/gym-members/", {
-        params: { role: 'athlete' }
-      })
-      setAthletes(Array.isArray(data) ? data : data.results || [])
-    } catch (error) {
-      console.error('Error fetching athletes:', error)
-    }
-  }
-
-  const handleAssignRoutine = async () => {
-    if (!assignRoutine || !selectedAthleteId) return
-    try {
-      setIsAssigning(true)
-      await api.post(`/api/workouts/routines/${assignRoutine.id}/assign_to_user/`, {
-        user_id: selectedAthleteId,
-      })
-      setAssignDialogOpen(false)
-      setAssignRoutine(null)
-      setSelectedAthleteId('')
-    } catch (error: any) {
-      showError(error, 'Error al asignar rutina')
-    } finally {
-      setIsAssigning(false)
     }
   }
 
@@ -628,15 +590,6 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openAssignDialog(routine)}
-                          className="h-10 px-3 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl"
-                          title="Asignar a atleta"
-                        >
-                          <UserPlus className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
                           onClick={() => handleDelete(routine)}
                           className="h-10 px-3 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
                           title="Eliminar rutina"
@@ -700,50 +653,6 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
         </div>
       )}
 
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-slate-900">Asignar Rutina</DialogTitle>
-            <DialogDescription>
-              Asigna &quot;{assignRoutine?.name}&quot; a un atleta.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-slate-700 font-bold text-xs uppercase tracking-wider">Atleta</Label>
-              <Select value={selectedAthleteId} onValueChange={setSelectedAthleteId}>
-                <SelectTrigger className="rounded-xl border-slate-200 h-11">
-                  <SelectValue placeholder="Seleccionar atleta..." />
-                </SelectTrigger>
-                <SelectContent className="rounded-2xl border-none shadow-xl bg-white p-2">
-                  {athletes.length === 0 ? (
-                    <div className="py-4 text-center text-sm text-slate-500">No hay atletas disponibles</div>
-                  ) : (
-                    athletes.map((a) => (
-                      <SelectItem key={a.id} value={a.id} className="rounded-xl py-3 cursor-pointer">
-                        {a.first_name} {a.last_name} ({a.email})
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)} className="rounded-xl">
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleAssignRoutine}
-              disabled={!selectedAthleteId || isAssigning}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
-            >
-              {isAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-              Asignar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -183,6 +183,62 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
         serializer = UserRoutineAssignmentSerializer(assignment, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["post"])
+    def swap_routine(self, request, pk=None):
+        """Reemplaza atómicamente la rutina activa de un atleta por esta."""
+        new_routine = self.get_object()
+        user = request.user
+        if user.role not in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
+            return Response({"detail": "No tienes permisos para cambiar rutinas."}, status=status.HTTP_403_FORBIDDEN)
+        if user.role != User.Role.SUPER_ADMIN and new_routine.gym_id is not None and new_routine.gym_id != user.gym_id:
+            return Response({"detail": "Esta rutina no pertenece a tu gimnasio."}, status=status.HTTP_403_FORBIDDEN)
+
+        athlete_id = request.data.get("user_id")
+        if not athlete_id:
+            return Response({"detail": "Debes especificar user_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            athlete = User.objects.get(id=athlete_id, gym_id=user.gym_id, role=User.Role.ATHLETE)
+        except User.DoesNotExist:
+            return Response({"detail": "Atleta no encontrado en tu gimnasio."}, status=status.HTTP_404_NOT_FOUND)
+
+        today = date.today()
+        with transaction.atomic():
+            # Completar todas las asignaciones activas del atleta
+            UserRoutineAssignment.objects.filter(
+                user=athlete,
+                status=UserRoutineAssignment.AssignmentStatus.ACTIVE,
+            ).update(status=UserRoutineAssignment.AssignmentStatus.COMPLETED, end_date=today)
+
+            # Si ya existe una asignación completada para esta misma rutina, crear una nueva activa
+            assignment = UserRoutineAssignment.objects.create(
+                user=athlete,
+                routine=new_routine,
+                assigned_by=user,
+                start_date=today,
+                status=UserRoutineAssignment.AssignmentStatus.ACTIVE,
+            )
+
+        try:
+            from gyms.views import create_notification
+            from gyms.models import Notification
+            gym = new_routine.gym
+            create_notification(
+                recipient=athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="Rutina actualizada",
+                message=f"Tu coach actualizó tu rutina a '{new_routine.name}'. Ya puedes verla en tu plan semanal.",
+                actor=user,
+                gym=gym,
+                link=f"/{gym.slug}/panel/mi-plan-semanal" if gym else None,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("swap_routine: notificación fallida", exc_info=True)
+
+        serializer = UserRoutineAssignmentSerializer(assignment, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
     def my_assigned(self, request):
         user = request.user
@@ -194,10 +250,14 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
         elif user.role in {User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.COACH}:
             if not user.gym_id:
                 return Response({"detail": "No perteneces a un gimnasio."}, status=status.HTTP_400_BAD_REQUEST)
-            assignments = UserRoutineAssignment.objects.filter(
+            qs = UserRoutineAssignment.objects.filter(
                 routine__gym_id=user.gym_id,
-                status=UserRoutineAssignment.AssignmentStatus.ACTIVE
+                status=UserRoutineAssignment.AssignmentStatus.ACTIVE,
             ).select_related('routine', 'routine__gym', 'user', 'assigned_by')
+            athlete_id = request.query_params.get("user_id")
+            if athlete_id:
+                qs = qs.filter(user_id=athlete_id)
+            assignments = qs
         else:
             return Response({"detail": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
         serializer = UserRoutineAssignmentSerializer(assignments, many=True, context={"request": request})
@@ -647,7 +707,6 @@ def approve_week(request, athlete_id):
         week_pts = 100  # fallback razonable
 
     # ── 6. Crear entrada de puntos y acreditar al atleta ─────────────────────
-    from django.db.models import F as DbF
     from gamification.views import _sync_user_progress
 
     with transaction.atomic():
@@ -666,9 +725,7 @@ def approve_week(request, athlete_id):
                 f"({sessions_completed}/{total_slots} sesiones)"
             ),
         )
-        User.objects.filter(pk=athlete.pk).update(puntos=DbF("puntos") + week_pts)
-
-    # Sincronizar XP / nivel fuera de la transacción (no es crítico para la integridad)
+    # Sincronizar nivel fuera de la transacción (no es crítico para la integridad)
     _sync_user_progress(athlete.pk, week_pts)
 
     # ── 7. Notificar al atleta ────────────────────────────────────────────────

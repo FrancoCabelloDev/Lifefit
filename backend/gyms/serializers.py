@@ -299,23 +299,43 @@ class NutritionistAssignmentSerializer(serializers.ModelSerializer):
 
 class GymSubscriptionSerializer(serializers.ModelSerializer):
     athlete_name = serializers.SerializerMethodField()
+    athlete_email = serializers.SerializerMethodField()
+    athlete_avatar = serializers.SerializerMethodField()
     plan_name = serializers.SerializerMethodField()
     plan_price = serializers.SerializerMethodField()
     plan_tier = serializers.SerializerMethodField()
+    plan_duration_days = serializers.SerializerMethodField()
     days_remaining = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = GymSubscription
         fields = [
-            "id", "athlete", "athlete_name", "gym", "plan", "plan_name",
-            "plan_price", "plan_tier", "status", "start_date", "end_date", "auto_renew",
+            "id", "athlete", "athlete_name", "athlete_email", "athlete_avatar",
+            "gym", "plan", "plan_name", "plan_price", "plan_tier", "plan_duration_days",
+            "status", "start_date", "end_date", "auto_renew",
+            "cancel_reason", "pause_reason",
             "days_remaining", "is_expired", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "athlete_name", "plan_name", "plan_price", "plan_tier", "days_remaining", "is_expired", "gym"]
+        read_only_fields = [
+            "id", "created_at", "updated_at",
+            "athlete_name", "athlete_email", "athlete_avatar",
+            "plan_name", "plan_price", "plan_tier", "plan_duration_days",
+            "days_remaining", "is_expired", "gym",
+        ]
 
     def get_athlete_name(self, obj):
         return f"{obj.athlete.first_name} {obj.athlete.last_name}".strip() or obj.athlete.email
+
+    def get_athlete_email(self, obj):
+        return obj.athlete.email
+
+    def get_athlete_avatar(self, obj):
+        request = self.context.get("request")
+        pic = getattr(obj.athlete, "profile_picture", None)
+        if pic and request:
+            return request.build_absolute_uri(pic.url) if hasattr(pic, 'url') else str(pic)
+        return None
 
     def get_plan_name(self, obj):
         return obj.plan.name if obj.plan else None
@@ -325,6 +345,9 @@ class GymSubscriptionSerializer(serializers.ModelSerializer):
 
     def get_plan_price(self, obj):
         return float(obj.plan.price) if obj.plan else None
+
+    def get_plan_duration_days(self, obj):
+        return obj.plan.duration_days if obj.plan else None
 
     def get_days_remaining(self, obj):
         if not obj.end_date:

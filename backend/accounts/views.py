@@ -86,15 +86,35 @@ class GymMemberViewSet(viewsets.ModelViewSet):
         return [IsGymAdmin()]
 
     def get_queryset(self):
+        from django.db.models import OuterRef, Subquery, IntegerField, Sum, Value
+        from django.db.models.functions import Coalesce
+        from gamification.models import UserPoints
+
         user = self.request.user
         if user.role not in self.STAFF_READ_ROLES:
             return User.objects.none()
-        queryset = User.objects.filter(gym=user.gym, gym__deleted_at__isnull=True).exclude(id=user.id).select_related("gym").prefetch_related("gym_subscriptions__plan")
-        
+
+        approved_points = (
+            UserPoints.objects
+            .filter(user=OuterRef("pk"), status=UserPoints.Status.APPROVED)
+            .values("user")
+            .annotate(total=Sum("points"))
+            .values("total")
+        )
+
+        queryset = (
+            User.objects
+            .filter(gym=user.gym, gym__deleted_at__isnull=True)
+            .exclude(id=user.id)
+            .select_related("gym")
+            .prefetch_related("gym_subscriptions__plan")
+            .annotate(puntos_real=Coalesce(Subquery(approved_points, output_field=IntegerField()), Value(0)))
+        )
+
         role = self.request.query_params.get('role')
         if role:
             queryset = queryset.filter(role=role)
-            
+
         return queryset.order_by('first_name', 'last_name')
 
     def perform_create(self, serializer):

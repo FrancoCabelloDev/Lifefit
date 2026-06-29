@@ -2,7 +2,8 @@ export const KEYS = {
   ACCESS: "lifefit_access_token",
   REFRESH: "lifefit_refresh_token",
   USER: "lifefit_user",
-  ADMIN_BACKUP: "lifefit_admin_backup",
+  ADMIN_BACKUP: "lifefit_admin_backup",   // legacy — mantenido para compatibilidad
+  SESSION_STACK: "lifefit_session_stack", // nuevo: pila de sesiones anidadas
 }
 
 export function getToken(): string | null {
@@ -42,28 +43,48 @@ export function dispatchAuthEvent(): void {
   }
 }
 
+// ── Session stack (soporta impersonation anidada ilimitada) ───────────────────
+
+type StackEntry = { access: string; refresh: string; user: Record<string, unknown> }
+
+function getStack(): StackEntry[] {
+  if (typeof window === "undefined") return []
+  const raw = localStorage.getItem(KEYS.SESSION_STACK)
+  return raw ? JSON.parse(raw) : []
+}
+
+function saveStack(stack: StackEntry[]): void {
+  localStorage.setItem(KEYS.SESSION_STACK, JSON.stringify(stack))
+}
+
+// Guarda la sesión activa en el stack antes de impersonar
 export function backupAdminTokens(): void {
   if (typeof window === "undefined") return
   const access = localStorage.getItem(KEYS.ACCESS)
   const refresh = localStorage.getItem(KEYS.REFRESH)
   const rawUser = localStorage.getItem(KEYS.USER)
-  if (access && refresh && rawUser) {
-    localStorage.setItem(KEYS.ADMIN_BACKUP, JSON.stringify({ access, refresh, user: JSON.parse(rawUser) }))
-  }
+  if (!access || !refresh || !rawUser) return
+  const stack = getStack()
+  stack.push({ access, refresh, user: JSON.parse(rawUser) })
+  saveStack(stack)
 }
 
-export function getAdminBackup(): { access: string; refresh: string; user: { role: string } } | null {
-  if (typeof window === "undefined") return null
-  const raw = localStorage.getItem(KEYS.ADMIN_BACKUP)
-  return raw ? JSON.parse(raw) : null
+// Devuelve la sesión anterior (tope del stack) sin removerla
+export function getAdminBackup(): { access: string; refresh: string; user: Record<string, unknown> } | null {
+  const stack = getStack()
+  return stack.length > 0 ? stack[stack.length - 1] : null
 }
 
+// Restaura la sesión anterior haciendo pop del stack
 export function restoreAdminTokens(): boolean {
-  const backup = getAdminBackup()
-  if (!backup) return false
-  localStorage.setItem(KEYS.ACCESS, backup.access)
-  localStorage.setItem(KEYS.REFRESH, backup.refresh)
-  localStorage.setItem(KEYS.USER, JSON.stringify(backup.user))
+  const stack = getStack()
+  if (stack.length === 0) return false
+  const prev = stack.pop()!
+  saveStack(stack)
+  localStorage.setItem(KEYS.ACCESS, prev.access)
+  localStorage.setItem(KEYS.REFRESH, prev.refresh)
+  localStorage.setItem(KEYS.USER, JSON.stringify(prev.user))
+  // Limpiar legacy key si existe
   localStorage.removeItem(KEYS.ADMIN_BACKUP)
   return true
 }

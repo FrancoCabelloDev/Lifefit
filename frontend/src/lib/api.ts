@@ -104,6 +104,35 @@ export async function request<T>(endpoint: string, opts: RequestOptions = {}): P
   return data as T
 }
 
+// Descarga un archivo autenticado y lo dispara como descarga en el browser
+export async function downloadFile(endpoint: string, filename: string): Promise<void> {
+  const { getToken } = await import("./auth")
+  const token = getToken()
+  const url = `${API_BASE}${endpoint}`
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  const blob = await res.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = objectUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(objectUrl)
+}
+
+// Convierte URLs relativas de media (ej: "media/gyms/logos/x.png") a absolutas
+// apuntando al backend. En producción con Cloudinary ya vienen absolutas (https://...)
+export function resolveMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (url.startsWith("http://") || url.startsWith("https://")) return url
+  const base = API_BASE.replace(/\/$/, "")
+  return `${base}/${url.replace(/^\//, "")}`
+}
+
 export const api = {
   get: <T>(url: string, opts?: RequestOptions) =>
     request<T>(url, { ...opts, method: "GET" }),

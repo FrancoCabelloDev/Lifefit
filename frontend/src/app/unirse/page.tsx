@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { api } from '@/lib/api'
+import { api, resolveMediaUrl } from '@/lib/api'
 import { GymMembershipPlan } from '@/lib/types'
 import {
   MapPin, Search, Users, ChevronRight, Dumbbell,
@@ -42,7 +42,7 @@ function GymAvatar({ gym, size = 'md' }: { gym: PublicGym; size?: 'sm' | 'md' | 
       style={{ backgroundColor: gym.brand_color || '#10b981' }}
     >
       {gym.logo
-        ? <img src={gym.logo} alt={gym.name} className="w-full h-full object-cover" />
+        ? <img src={resolveMediaUrl(gym.logo)!} alt={gym.name} className="w-full h-full object-cover" />
         : gym.name.charAt(0).toUpperCase()
       }
     </div>

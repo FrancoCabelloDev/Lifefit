@@ -15,8 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
 import { levelColors, levelLabels } from '@/lib/constants'
-import type { WorkoutRoutine, UserRoutineAssignment, PaginatedResponse } from '@/lib/types'
-import { useSubscriptionTier } from '@/lib/hooks'
+import type { WorkoutRoutine, PaginatedResponse } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
 import { useFeatureGuard } from '@/hooks/useFeatureGuard'
@@ -519,16 +518,11 @@ export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId:
   const { gymId }   = use(params)
   useRoleGuard(gymId, ['athlete'])
   useFeatureGuard(gymId, 'rutinas')
-  const { tier }    = useSubscriptionTier()
-  const isBasic     = tier !== 'premium'
-
-  const [slots, setSlots]             = useState<WeeklySlot[]>([])
-  const [routines, setRoutines]       = useState<WorkoutRoutine[]>([])
-  const [assignments, setAssignments] = useState<UserRoutineAssignment[]>([])
-  const [hasCoach, setHasCoach]       = useState(false)
-  const [isLoading, setIsLoading]     = useState(true)
-  const [dialogOpen, setDialogOpen]   = useState(false)
-  const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null)
+  const [slots, setSlots]       = useState<WeeklySlot[]>([])
+  const [routines, setRoutines] = useState<WorkoutRoutine[]>([])
+  const [hasCoach, setHasCoach] = useState(false)
+  const [isLoading, setIsLoading]   = useState(true)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   const todayDow  = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
   const [selectedDay, setSelectedDay] = useState<number>(todayDow)
@@ -544,16 +538,14 @@ export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId:
 
   const fetchAll = async () => {
     try {
-      const [planData, coachStatus, routinesData, assignedData] = await Promise.all([
+      const [planData, coachStatus, routinesData] = await Promise.all([
         api.get<{ results: WeeklySlot[] } | WeeklySlot[]>('/api/workouts/weekly-plan/'),
         api.get<{ has_coach: boolean }>('/api/workouts/my-coach-status/'),
         api.get<PaginatedResponse<WorkoutRoutine> | WorkoutRoutine[]>('/api/workouts/routines/'),
-        api.get<UserRoutineAssignment[]>('/api/workouts/routines/my_assigned/').catch(() => []),
       ])
       setSlots(Array.isArray(planData) ? planData : (planData as any).results || [])
       setHasCoach(coachStatus.has_coach)
       setRoutines(Array.isArray(routinesData) ? routinesData : (routinesData as any).results || [])
-      setAssignments(Array.isArray(assignedData) ? assignedData : [])
     } catch {
       setSlots([])
     } finally {
@@ -772,79 +764,6 @@ export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId:
             )
           })()}
         </div>
-      )}
-
-      {/* ── My Routines section (library tab replaced) ── */}
-      {assignments.length > 0 && (
-        <details className="group">
-          <summary className="flex items-center justify-between px-4 py-3 bg-white border border-slate-200 rounded-2xl cursor-pointer list-none select-none hover:bg-slate-50 transition-colors active:scale-[0.98]">
-            <span className="text-sm font-semibold text-slate-700">Todas mis rutinas</span>
-            <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180 duration-200" />
-          </summary>
-          <div className="mt-2 space-y-2">
-            {(isBasic ? routines : assignments.map(a => a.routine_detail).filter(Boolean) as WorkoutRoutine[]).map(routine => {
-              const isOpen = expandedRoutineId === routine.id
-              return (
-                <div key={routine.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                  <button
-                    onClick={() => setExpandedRoutineId(isOpen ? null : routine.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
-                      <Dumbbell className="w-4 h-4 text-slate-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800">{routine.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {routine.duration_minutes} min · {routine.routine_exercises?.length ?? 0} ejercicios
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={e => {
-                          e.stopPropagation()
-                          const syn: WeeklySlot = {
-                            id: `quick-${routine.id}`,
-                            routine: routine.id,
-                            routine_detail: routine,
-                            day_of_week: -1,
-                            day_label: '',
-                            suggested_time: null,
-                            notes: '',
-                            coach: null,
-                          }
-                          setEffortSlot({ slot: syn, logs: {} })
-                        }}
-                        className="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full hover:bg-emerald-100 transition-colors active:scale-[0.95]"
-                      >
-                        Iniciar
-                      </button>
-                      <ChevronDown className={cn(
-                        'w-4 h-4 text-slate-400 transition-transform duration-200',
-                        isOpen && 'rotate-180',
-                      )} />
-                    </div>
-                  </button>
-                  {isOpen && (routine.routine_exercises ?? []).length > 0 && (
-                    <div className="border-t border-slate-100 divide-y divide-slate-100/80">
-                      {(routine.routine_exercises ?? []).map((ex, i) => (
-                        <div key={ex.id} className="flex items-center justify-between px-4 py-2.5 bg-slate-50/50">
-                          <span className="text-sm text-slate-700">
-                            <span className="text-xs text-slate-400 mr-1.5">{i + 1}.</span>
-                            {ex.exercise_detail?.name ?? `Ejercicio ${i + 1}`}
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            {ex.sets}×{ex.reps}{ex.weight_kg ? ` · ${ex.weight_kg}kg` : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </details>
       )}
 
       {/* ── Effort modal ── */}

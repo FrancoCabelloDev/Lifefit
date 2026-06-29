@@ -128,13 +128,36 @@ class GlobalAnnouncementViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def active(self, request):
         from django.utils import timezone
+        user = request.user
+
+        # Mapa rol → audience code
+        ROLE_AUDIENCE = {
+            "gym_admin":    "gym_admins",
+            "athlete":      "athletes",
+            "coach":        "coaches",
+            "nutritionist": "nutritionists",
+            "receptionist": "receptionists",
+        }
+        user_audience = ROLE_AUDIENCE.get(user.role, None)
+
         qs = (
             GlobalAnnouncement.objects
             .filter(is_active=True)
             .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
-            .order_by("-created_at")
         )
-        serializer = self.get_serializer(qs, many=True)
+
+        # Filtrar por audiencia: "all" siempre se muestra, más el específico del rol
+        if user_audience:
+            qs = qs.filter(Q(target_audience="all") | Q(target_audience=user_audience))
+
+        # Filtrar por gimnasio: sin gym = global, con gym = solo ese gimnasio
+        user_gym_id = getattr(user, "gym_id", None)
+        if user_gym_id:
+            qs = qs.filter(Q(target_gym__isnull=True) | Q(target_gym_id=user_gym_id))
+        else:
+            qs = qs.filter(target_gym__isnull=True)
+
+        serializer = self.get_serializer(qs.order_by("-created_at"), many=True)
         return Response(serializer.data)
 
 

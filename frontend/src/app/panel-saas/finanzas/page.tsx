@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   TrendingUp, ArrowUpRight, ArrowDownRight, DollarSign,
-  CreditCard, Search, Building2, Calendar,
+  CreditCard, Search, Building2, Calendar, Download,
 } from 'lucide-react'
 import {
   Line, LineChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { api } from '@/lib/api'
+import { api, downloadFile } from '@/lib/api'
 import type { Payment, PaymentMetrics, RevenuePoint, PaginatedResponse } from '@/lib/types'
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
@@ -313,6 +313,7 @@ export default function FinancesPage() {
                         <th className="px-6 py-4 font-medium">Estado</th>
                         <th className="px-6 py-4 font-medium">Fecha</th>
                         <th className="px-6 py-4 font-medium">Proveedor</th>
+                        <th className="px-6 py-4 font-medium">Comprobante</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -332,6 +333,18 @@ export default function FinancesPage() {
                             })}
                           </td>
                           <td className="px-6 py-4 text-slate-500 capitalize">{payment.provider}</td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => downloadFile(
+                                `/api/subscriptions/payments/${payment.id}/invoice/`,
+                                `comprobante-lifefit-${payment.id.slice(0, 8)}.pdf`
+                              )}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 active:scale-[0.97] transition-all"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              PDF
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

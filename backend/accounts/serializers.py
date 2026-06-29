@@ -11,6 +11,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     gym_slug = serializers.CharField(source='gym.slug', read_only=True)
     active_membership = serializers.SerializerMethodField(read_only=True)
+    puntos = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
@@ -44,10 +45,23 @@ class UserSerializer(serializers.ModelSerializer):
             "weight_kg",
         ]
         read_only_fields = [
-            "id", "date_joined", "puntos", "nivel",
+            "id", "date_joined", "nivel",
             "is_google_account", "google_picture",
             "gym_slug", "active_membership",
         ]
+
+    def get_puntos(self, obj):
+        # Si el queryset anotó puntos_real (desde UserPoints aprobados), úsalo.
+        # Fallback al campo del modelo para contextos sin anotación (login, etc.).
+        if hasattr(obj, 'puntos_real'):
+            return obj.puntos_real
+        from gamification.models import UserPoints
+        from django.db.models import Sum
+        return (
+            UserPoints.objects
+            .filter(user=obj, status=UserPoints.Status.APPROVED)
+            .aggregate(total=Sum("points"))["total"] or 0
+        )
 
     def get_active_membership(self, obj):
         membership = obj.active_membership

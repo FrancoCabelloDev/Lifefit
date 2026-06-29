@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useRouter } from 'next/navigation'
 
-import { api } from '@/lib/api'
+import { api, resolveMediaUrl } from '@/lib/api'
 import { showError } from '@/lib/toast'
 import type { Gym, PaginatedResponse } from '@/lib/types'
 import { setTokens, setStoredUser, dispatchAuthEvent, backupAdminTokens } from '@/lib/auth'
@@ -294,7 +294,7 @@ export default function GymsPage() {
                     <tr key={gym.id} className="bg-white hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-slate-900 flex items-center gap-3">
                         {gym.logo ? (
-                          <img src={gym.logo} alt={gym.name} className="w-8 h-8 rounded-md object-cover border border-slate-200" />
+                          <img src={resolveMediaUrl(gym.logo)!} alt={gym.name} className="w-8 h-8 rounded-md object-cover border border-slate-200" />
                         ) : (
                           <div className="w-8 h-8 rounded-md flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: gym.brand_color || '#10b981' }}>
                             {gym.name.substring(0, 2).toUpperCase()}

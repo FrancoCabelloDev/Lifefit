@@ -6,7 +6,7 @@ import { Search, MapPin, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 
-import { api } from '@/lib/api'
+import { api, resolveMediaUrl } from '@/lib/api'
 import type { Gym, PaginatedResponse } from '@/lib/types'
 
 type GymSelectionProps = {
@@ -105,7 +105,7 @@ export default function GymSelection({ mode }: GymSelectionProps) {
                     <div className="absolute inset-0 flex items-center justify-center opacity-30 group-hover:opacity-60 transition-opacity duration-500 group-hover:scale-110">
                       {gym.logo ? (
                         <img 
-                          src={gym.logo} 
+                          src={resolveMediaUrl(gym.logo)!}
                           alt={gym.name} 
                           className="w-40 h-40 object-contain drop-shadow-2xl filter"
                         />

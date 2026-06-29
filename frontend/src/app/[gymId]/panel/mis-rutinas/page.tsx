@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, use } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   Dumbbell, ChevronDown, ChevronUp, CheckCircle2, Clock,
-  Flame, Trophy, CalendarDays, Loader2, ChevronRight,
+  Trophy, CalendarDays,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { getStoredUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-import type { User, UserRoutineAssignment, WorkoutRoutine } from '@/lib/types'
+import type { User, WorkoutRoutine } from '@/lib/types'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
 import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
@@ -187,114 +187,6 @@ function WeekDayCard({ day, slots }: { day: typeof DAYS[0]; slots: WeeklySlot[] 
   )
 }
 
-// ── RoutineCard (registro rápido) ─────────────────────────────────────────────
-
-function RoutineCard({ assignment, gymId }: { assignment: UserRoutineAssignment; gymId: string }) {
-  const queryClient = useQueryClient()
-  const [expanded, setExpanded] = useState(false)
-  const routine = assignment.routine_detail
-  if (!routine) return null
-
-  const sessionMutation = useMutation({
-    mutationFn: () => api.post('/api/workouts/sessions/', {
-      routine: routine.id,
-      performed_at: new Date().toISOString(),
-      duration_minutes: routine.duration_minutes,
-      status: 'completed',
-      completion_percentage: 100,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-routines', gymId] })
-      queryClient.invalidateQueries({ queryKey: ['my-weekly-plan', gymId] })
-    },
-  })
-
-  const completedToday = routine.completed_today
-
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <h3 className="text-sm font-semibold text-slate-900 truncate">{routine.name}</h3>
-              {routine.level && (
-                <Badge className={cn('text-[10px] border', LEVEL_COLORS[routine.level])}>
-                  {LEVEL_LABELS[routine.level] ?? routine.level}
-                </Badge>
-              )}
-              {completedToday && (
-                <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border-0 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Completada hoy
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4 flex-wrap">
-              {routine.duration_minutes > 0 && (
-                <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                  <Clock className="w-3 h-3" />
-                  {routine.duration_minutes} min
-                </span>
-              )}
-              {(routine.points_reward ?? 0) > 0 && (
-                <span className="flex items-center gap-1 text-[11px] text-amber-600 font-medium">
-                  <Trophy className="w-3 h-3" />
-                  {routine.points_reward} pts
-                </span>
-              )}
-              {(routine.routine_exercises?.length ?? 0) > 0 && (
-                <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                  <Dumbbell className="w-3 h-3" />
-                  {routine.routine_exercises!.length} ejercicios
-                </span>
-              )}
-            </div>
-          </div>
-
-          <button
-            onClick={() => { if (!completedToday) sessionMutation.mutate() }}
-            disabled={completedToday || sessionMutation.isPending}
-            className={cn(
-              'shrink-0 h-9 px-4 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5',
-              'active:scale-[0.97]',
-              completedToday
-                ? 'bg-emerald-50 text-emerald-600 cursor-default'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60'
-            )}
-            style={{ transition: 'transform 160ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
-          >
-            {completedToday ? (
-              <><CheckCircle2 className="w-3.5 h-3.5" />Completada</>
-            ) : sessionMutation.isPending ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" />Registrando...</>
-            ) : (
-              <><Flame className="w-3.5 h-3.5" />Marcar completada</>
-            )}
-          </button>
-        </div>
-
-        {(routine.routine_exercises?.length ?? 0) > 0 && (
-          <button
-            onClick={() => setExpanded(v => !v)}
-            className="mt-3 flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            {expanded ? 'Ocultar ejercicios' : 'Ver ejercicios'}
-          </button>
-        )}
-      </div>
-
-      {expanded && (routine.routine_exercises?.length ?? 0) > 0 && (
-        <div className="border-t border-slate-100 px-4 pb-3">
-          <ExerciseList routine={routine} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MisRutinasPage({ params }: { params: Promise<{ gymId: string }> }) {
@@ -312,15 +204,8 @@ export default function MisRutinasPage({ params }: { params: Promise<{ gymId: st
     enabled: !!user && user.role === 'athlete',
   })
 
-  const assignmentsQuery = useQuery({
-    queryKey: ['my-routines', gymId],
-    queryFn: () => api.get<UserRoutineAssignment[]>('/api/workouts/routines/my_assigned/'),
-    enabled: !!user && user.role === 'athlete',
-  })
-
-  const slots       = weeklyQuery.data ?? []
-  const assignments = assignmentsQuery.data ?? []
-  const isLoading   = weeklyQuery.isLoading || assignmentsQuery.isLoading
+  const slots     = weeklyQuery.data ?? []
+  const isLoading = weeklyQuery.isLoading
 
   // Agrupar slots por día (solo días con al menos un slot)
   const activeDays = DAYS.filter(d => slots.some(s => s.day_of_week === d.value))
@@ -329,7 +214,7 @@ export default function MisRutinasPage({ params }: { params: Promise<{ gymId: st
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mis Rutinas</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Plan semanal y rutinas asignadas por tu coach</p>
+        <p className="text-sm text-slate-500 mt-0.5">Plan semanal diseñado por tu coach</p>
       </div>
 
       {isLoading ? (
@@ -370,32 +255,6 @@ export default function MisRutinasPage({ params }: { params: Promise<{ gymId: st
             )}
           </section>
 
-          {/* ── Registro rápido ── */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Dumbbell className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-semibold text-slate-700">Registro rápido</h2>
-              <span className="text-[11px] text-slate-400 ml-1">Marca completadas de hoy</span>
-            </div>
-
-            {assignments.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-10 flex flex-col items-center gap-3 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-                  <Dumbbell className="w-6 h-6 text-slate-300" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Sin rutinas asignadas</p>
-                  <p className="text-xs text-slate-400 mt-1">Tu coach te asignará rutinas de entrenamiento</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {assignments.map(a => (
-                  <RoutineCard key={a.id} assignment={a} gymId={gymId} />
-                ))}
-              </div>
-            )}
-          </section>
         </>
       )}
     </div>

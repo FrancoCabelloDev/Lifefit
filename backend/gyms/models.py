@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.db import models
 
 try:
     from cloudinary.models import CloudinaryField as _CloudinaryField
-    _CLOUDINARY = True
+    _CLOUDINARY = bool(getattr(settings, "CLOUDINARY_CLOUD_NAME", ""))
 except ImportError:
     _CLOUDINARY = False
 
@@ -229,6 +230,7 @@ class GymSubscription(BaseModel):
         ACTIVE = "active", "Activa"
         EXPIRED = "expired", "Vencida"
         CANCELED = "canceled", "Cancelada"
+        PAUSED = "paused", "Pausada"
 
     athlete = models.ForeignKey(
         "accounts.User", on_delete=models.CASCADE, related_name="gym_subscriptions"
@@ -241,6 +243,8 @@ class GymSubscription(BaseModel):
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
     auto_renew = models.BooleanField(default=False)
+    cancel_reason = models.TextField(blank=True, default="")
+    pause_reason = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-start_date", "athlete__first_name"]

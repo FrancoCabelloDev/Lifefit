@@ -521,11 +521,17 @@ class UserProgressViewSet(viewsets.ModelViewSet):
             status="active",
         ).exists()
 
+        from gamification.models import UserPoints
+        from django.db.models import Sum as _Sum
+        total_points = (
+            UserPoints.objects
+            .filter(user=user, status=UserPoints.Status.APPROVED)
+            .aggregate(total=_Sum("points"))["total"] or 0
+        )
+
         return Response({
-            "total_points": progress.total_points,
+            "total_points": total_points,
             "level": progress.level,
-            "current_xp": progress.current_xp,
-            "next_level_xp": progress.next_level_xp,
             "active_challenges": active_participations,
             "badges_count": badges_count,
             "sessions_today": sessions_today,

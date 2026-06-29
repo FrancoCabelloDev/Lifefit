@@ -31,19 +31,31 @@ class GlobalAnnouncement(BaseModel):
         SUCCESS = "success", "Éxito"
 
     class Audience(models.TextChoices):
-        ALL = "all", "Todos"
-        GYM_ADMINS = "gym_admins", "Dueños de Gimnasio"
+        ALL = "all", "Todos los usuarios"
+        GYM_ADMINS = "gym_admins", "Administradores"
         ATHLETES = "athletes", "Atletas"
+        COACHES = "coaches", "Coaches"
+        NUTRITIONISTS = "nutritionists", "Nutricionistas"
+        RECEPTIONISTS = "receptionists", "Atención al Cliente"
 
     title = models.CharField(max_length=200)
     message = models.TextField()
     type = models.CharField(max_length=20, choices=Type.choices, default=Type.INFO)
     target_audience = models.CharField(max_length=20, choices=Audience.choices, default=Audience.ALL)
+    # null = aplica a todos los gimnasios; con valor = solo ese gimnasio
+    target_gym = models.ForeignKey(
+        "gyms.Gym",
+        null=True, blank=True,
+        on_delete=models.CASCADE,
+        related_name="announcements",
+        verbose_name="Gimnasio destino",
+    )
     is_active = models.BooleanField(default=True)
     expires_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return self.title
+        gym_label = f" → {self.target_gym.name}" if self.target_gym else " → Todos los gimnasios"
+        return f"{self.title}{gym_label}"
 
 
 

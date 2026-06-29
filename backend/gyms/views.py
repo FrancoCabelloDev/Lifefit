@@ -1536,6 +1536,145 @@ class GymSubscriptionViewSet(viewsets.ModelViewSet):
             return
         raise PermissionDenied("No puedes eliminar esta suscripción.")
 
+    def _assert_gym_admin(self, instance):
+        user = self.request.user
+        if user.role not in [User.Role.SUPER_ADMIN, User.Role.GYM_ADMIN, User.Role.RECEPTIONIST]:
+            raise PermissionDenied("No tienes permisos para gestionar suscripciones.")
+        if user.role != User.Role.SUPER_ADMIN and instance.gym_id != user.gym_id:
+            raise PermissionDenied("Esta suscripción no pertenece a tu gimnasio.")
+
+    @action(detail=True, methods=["post"])
+    def renew(self, request, pk=None):
+        """Renueva la suscripción extendiendo end_date según la duración del plan."""
+        sub = self.get_object()
+        self._assert_gym_admin(sub)
+
+        if not sub.plan:
+            return Response({"detail": "La suscripción no tiene un plan asignado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        today = date.today()
+        # Si está activa extendemos desde el end_date actual; si no, desde hoy
+        base = sub.end_date if sub.status == GymSubscription.Status.ACTIVE and sub.end_date and sub.end_date >= today else today
+        sub.end_date = base + timedelta(days=sub.plan.duration_days)
+        sub.status = GymSubscription.Status.ACTIVE
+        sub.cancel_reason = ""
+        sub.pause_reason = ""
+        sub.save(update_fields=["status", "end_date", "cancel_reason", "pause_reason"])
+
+        GymPayment.objects.create(
+            gym=sub.gym,
+            athlete=sub.athlete,
+            subscription=sub,
+            plan=sub.plan,
+            amount=sub.plan.price,
+            status="success",
+            payment_method=request.data.get("payment_method", "cash"),
+            paid_at=timezone.now(),
+        )
+
+        try:
+            create_notification(
+                recipient=sub.athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="Membresía renovada",
+                message=f"Tu membresía '{sub.plan.name}' fue renovada hasta el {sub.end_date.strftime('%d/%m/%Y')}.",
+                gym=sub.gym,
+            )
+        except Exception:
+            pass
+
+        return Response(GymSubscriptionSerializer(sub, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def pause(self, request, pk=None):
+        """Pausa la suscripción activa."""
+        sub = self.get_object()
+        self._assert_gym_admin(sub)
+
+        if sub.status != GymSubscription.Status.ACTIVE:
+            return Response({"detail": "Solo se puede pausar una suscripción activa."}, status=status.HTTP_400_BAD_REQUEST)
+
+        sub.status = GymSubscription.Status.PAUSED
+        sub.pause_reason = request.data.get("reason", "")
+        sub.save(update_fields=["status", "pause_reason"])
+
+        try:
+            create_notification(
+                recipient=sub.athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="Membresía pausada",
+                message=f"Tu membresía '{sub.plan.name if sub.plan else ''}' ha sido pausada temporalmente. Contacta con tu gimnasio para más información.",
+                gym=sub.gym,
+            )
+        except Exception:
+            pass
+
+        return Response(GymSubscriptionSerializer(sub, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Cancela la suscripción."""
+        sub = self.get_object()
+        self._assert_gym_admin(sub)
+
+        if sub.status == GymSubscription.Status.CANCELED:
+            return Response({"detail": "La suscripción ya está cancelada."}, status=status.HTTP_400_BAD_REQUEST)
+
+        sub.status = GymSubscription.Status.CANCELED
+        sub.cancel_reason = request.data.get("reason", "")
+        sub.end_date = date.today()
+        sub.save(update_fields=["status", "cancel_reason", "end_date"])
+
+        try:
+            create_notification(
+                recipient=sub.athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="Membresía cancelada",
+                message=f"Tu membresía '{sub.plan.name if sub.plan else ''}' ha sido cancelada. Si tienes dudas, contacta con tu gimnasio.",
+                gym=sub.gym,
+            )
+        except Exception:
+            pass
+
+        return Response(GymSubscriptionSerializer(sub, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def change_plan(self, request, pk=None):
+        """Cambia el plan de la suscripción y recalcula end_date desde hoy."""
+        sub = self.get_object()
+        self._assert_gym_admin(sub)
+
+        plan_id = request.data.get("plan_id")
+        if not plan_id:
+            return Response({"detail": "Debes especificar plan_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            new_plan = GymMembershipPlan.objects.get(id=plan_id, gym=sub.gym, is_active=True)
+        except GymMembershipPlan.DoesNotExist:
+            return Response({"detail": "Plan no encontrado en este gimnasio."}, status=status.HTTP_404_NOT_FOUND)
+
+        old_plan_name = sub.plan.name if sub.plan else "Sin plan"
+        sub.plan = new_plan
+        sub.start_date = date.today()
+        sub.end_date = date.today() + timedelta(days=new_plan.duration_days)
+        sub.status = GymSubscription.Status.ACTIVE
+        sub.cancel_reason = ""
+        sub.pause_reason = ""
+        sub.save(update_fields=["plan", "start_date", "end_date", "status", "cancel_reason", "pause_reason"])
+
+        try:
+            create_notification(
+                recipient=sub.athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="Plan actualizado",
+                message=f"Tu plan cambió de '{old_plan_name}' a '{new_plan.name}'. Vence el {sub.end_date.strftime('%d/%m/%Y')}.",
+                gym=sub.gym,
+            )
+        except Exception:
+            pass
+
+        return Response(GymSubscriptionSerializer(sub, context={"request": request}).data)
+
 
 class GymPaymentViewSet(viewsets.ModelViewSet):
     serializer_class = GymPaymentSerializer
@@ -1545,16 +1684,25 @@ class GymPaymentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = GymPayment.objects.select_related("athlete", "gym", "plan", "subscription").filter(
             gym__deleted_at__isnull=True
-        )
+        ).order_by("-paid_at", "-created_at")
 
         if user.role == User.Role.SUPER_ADMIN:
-            return qs
-
-        if user.gym_id:
+            pass
+        elif user.gym_id:
             qs = qs.filter(gym_id=user.gym_id)
-            return qs
+        else:
+            return qs.none()
 
-        return qs.none()
+        # Filtros opcionales
+        athlete_id = self.request.query_params.get("athlete")
+        if athlete_id:
+            qs = qs.filter(athlete_id=athlete_id)
+
+        subscription_id = self.request.query_params.get("subscription")
+        if subscription_id:
+            qs = qs.filter(subscription_id=subscription_id)
+
+        return qs
 
     def perform_create(self, serializer):
         user = self.request.user
