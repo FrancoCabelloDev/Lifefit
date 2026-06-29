@@ -50,10 +50,6 @@ class UserSerializer(serializers.ModelSerializer):
         ]
 
     def get_puntos(self, obj):
-        # Si el queryset anotó puntos_real (desde UserPoints aprobados), úsalo.
-        # Fallback al campo del modelo para contextos sin anotación (login, etc.).
-        if hasattr(obj, 'puntos_real'):
-            return obj.puntos_real
         from gamification.models import UserPoints
         from django.db.models import Sum
         return (

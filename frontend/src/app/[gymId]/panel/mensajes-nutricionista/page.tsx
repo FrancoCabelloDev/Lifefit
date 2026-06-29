@@ -10,8 +10,10 @@ import { getStoredUser } from '@/lib/auth'
 import type { User, NutritionistMessageThread, NutritionistMessage } from '@/lib/types'
 import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
-function formatRelative(dateStr: string) {
+function formatRelative(dateStr: string | null | undefined) {
+  if (!dateStr) return ''
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
   const now = new Date()
   const diffMs = now.getTime() - d.getTime()
   const diffMins = Math.floor(diffMs / 60000)
@@ -22,7 +24,8 @@ function formatRelative(dateStr: string) {
   return d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
 }
 
-function getInitials(name: string) {
+function getInitials(name: string | null | undefined) {
+  if (!name) return '??'
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 }
 

@@ -27,8 +27,12 @@ export function clearAuth(): void {
 
 export function getStoredUser<T = unknown>(): T | null {
   if (typeof window === "undefined") return null
-  const raw = localStorage.getItem(KEYS.USER)
-  return raw ? JSON.parse(raw) : null
+  try {
+    const raw = localStorage.getItem(KEYS.USER)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
 }
 
 export function setStoredUser(user: unknown): void {
@@ -49,8 +53,12 @@ type StackEntry = { access: string; refresh: string; user: Record<string, unknow
 
 function getStack(): StackEntry[] {
   if (typeof window === "undefined") return []
-  const raw = localStorage.getItem(KEYS.SESSION_STACK)
-  return raw ? JSON.parse(raw) : []
+  try {
+    const raw = localStorage.getItem(KEYS.SESSION_STACK)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
 }
 
 function saveStack(stack: StackEntry[]): void {
@@ -65,7 +73,11 @@ export function backupAdminTokens(): void {
   const rawUser = localStorage.getItem(KEYS.USER)
   if (!access || !refresh || !rawUser) return
   const stack = getStack()
-  stack.push({ access, refresh, user: JSON.parse(rawUser) })
+  try {
+    stack.push({ access, refresh, user: JSON.parse(rawUser) })
+  } catch {
+    stack.push({ access, refresh, user: {} })
+  }
   saveStack(stack)
 }
 

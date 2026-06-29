@@ -98,11 +98,15 @@ const FITNESS_GOAL_LABELS: Record<string, string> = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+function formatTime(dateStr: string | null | undefined) {
+  if (!dateStr) return '--'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '--'
+  return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
 }
 
-function getInitials(name: string) {
+function getInitials(name: string | null | undefined) {
+  if (!name) return '??'
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 }
 
@@ -810,7 +814,7 @@ function NewAppointmentForm({ gymId, nutritionistId, onClose, onSuccess }: NewAp
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1.5 max-h-[260px] overflow-y-auto pr-0.5">
-                      {slotsQuery.data!.map(slot => {
+                      {(slotsQuery.data ?? []).map(slot => {
                         const label = new Date(slot).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
                         const isSelected = selectedSlot === slot
                         return (

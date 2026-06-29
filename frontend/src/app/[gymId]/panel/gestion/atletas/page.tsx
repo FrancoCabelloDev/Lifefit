@@ -636,8 +636,8 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                   {filteredAthletes.map((athlete) => (
                     <tr
                       key={athlete.id}
-                      className={`hover:bg-slate-50/80 transition-all group ${selectedIds.has(athlete.id) ? 'bg-emerald-50/50' : ''} ${isNutritionist ? 'cursor-pointer' : ''}`}
-                      onClick={isNutritionist ? () => router.push(`/${gymId}/panel/gestion/atletas/${athlete.id}`) : undefined}
+                      className={`hover:bg-slate-50/80 transition-all group ${selectedIds.has(athlete.id) ? 'bg-emerald-50/50' : ''} cursor-pointer`}
+                      onClick={() => router.push(`/${gymId}/panel/gestion/atletas/${athlete.id}`)}
                     >
                       {canDeactivate && <td className="px-4 py-5">
                         <input

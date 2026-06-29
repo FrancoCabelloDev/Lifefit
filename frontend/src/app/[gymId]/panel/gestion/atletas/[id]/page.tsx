@@ -23,6 +23,7 @@ import { getStoredUser } from '@/lib/auth'
 import type { User } from '@/lib/types'
 import { ProfileSkeleton } from '@/components/ui/skeletons'
 import { showSuccess, showError } from '@/lib/toast'
+import WeeklyPlanTab from '@/components/coach/WeeklyPlanTab'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1389,7 +1390,7 @@ const MEAS_FIELDS: { key: keyof MeasForm; label: string; unit: string; placehold
   { key: 'visceral_fat',   label: 'Grasa visceral', unit: 'niv', placeholder: '8'    },
 ]
 
-function MeasurementsTab({ measurements, athleteId }: { measurements: any[]; athleteId: string }) {
+function MeasurementsTab({ measurements, athleteId, canEdit }: { measurements: any[]; athleteId: string; canEdit?: boolean }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<MeasForm>(MEAS_EMPTY)
@@ -1515,7 +1516,7 @@ function MeasurementsTab({ measurements, athleteId }: { measurements: any[]; ath
   if (!measurements || measurements.length === 0) {
     return (
       <>
-        {Modal}
+        {canEdit && Modal}
         <div className="bg-white rounded-2xl border border-slate-100 py-16 flex flex-col items-center gap-4 text-center px-6">
           <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center">
             <Ruler className="w-7 h-7 text-slate-300" />
@@ -1523,10 +1524,10 @@ function MeasurementsTab({ measurements, athleteId }: { measurements: any[]; ath
           <div className="space-y-1">
             <p className="text-sm font-semibold text-slate-700">Sin medidas registradas</p>
             <p className="text-xs text-slate-400 max-w-xs">
-              Registra las medidas de este atleta para hacer seguimiento de su composición corporal.
+              {canEdit ? 'Registra las medidas de este atleta para hacer seguimiento de su composición corporal.' : 'Aún no se han registrado medidas corporales.'}
             </p>
           </div>
-          {RegisterButton}
+          {canEdit && RegisterButton}
         </div>
       </>
     )
@@ -1547,11 +1548,11 @@ function MeasurementsTab({ measurements, athleteId }: { measurements: any[]; ath
 
   return (
     <>
-      {Modal}
+      {canEdit && Modal}
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-400">{measurements.length} registro{measurements.length !== 1 ? 's' : ''}</p>
-        {RegisterButton}
+        {canEdit && RegisterButton}
       </div>
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="border-b border-slate-100 pb-4">
@@ -1621,6 +1622,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
   const router = useRouter()
   const storedUser = getStoredUser<User>()
   const isNutritionist = storedUser?.role === 'nutritionist'
+  const isCoach = storedUser?.role === 'coach'
   const isAdmin = storedUser?.role === 'gym_admin' || storedUser?.role === 'super_admin'
 
   const { data, isLoading } = useQuery({
@@ -1750,7 +1752,7 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
 
           {/* Medidas */}
           <TabsContent value="medidas" className="mt-4">
-            <MeasurementsTab measurements={measurements || []} athleteId={id} />
+            <MeasurementsTab measurements={measurements || []} athleteId={id} canEdit />
           </TabsContent>
 
           {/* Plan de Alimentación */}
@@ -1804,6 +1806,11 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
             <TabsTrigger value="nutricion" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
               Nutrición
             </TabsTrigger>
+            {isCoach && (
+            <TabsTrigger value="entrenamiento" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              Entrenamiento
+            </TabsTrigger>
+            )}
             <TabsTrigger value="puntos" className="rounded-lg px-4 py-2 text-sm font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm">
               Puntos
             </TabsTrigger>
@@ -1883,8 +1890,14 @@ export default function AthleteProfilePage({ params }: { params: Promise<{ gymId
           </TabsContent>
 
           <TabsContent value="nutricion" className="mt-4">
-            <MeasurementsTab measurements={measurements || []} athleteId={id} />
+            <MeasurementsTab measurements={measurements || []} athleteId={id} canEdit={isNutritionist} />
           </TabsContent>
+
+          {isCoach && (
+          <TabsContent value="entrenamiento" className="mt-4">
+            <WeeklyPlanTab gymId={gymId} athleteId={id} />
+          </TabsContent>
+          )}
 
           <TabsContent value="puntos" className="mt-4">
             {points_history && points_history.length > 0 ? (

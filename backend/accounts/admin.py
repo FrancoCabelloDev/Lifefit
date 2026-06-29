@@ -24,7 +24,6 @@ class UserAdmin(BaseUserAdmin):
                 )
             },
         ),
-        ("Gamification", {"fields": ("puntos",)}),
         ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
     add_fieldsets = (

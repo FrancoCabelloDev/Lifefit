@@ -178,7 +178,7 @@ function getNavData(role: Role, gymId: string, pathname: string, activeFlags?: S
             { title: "Ejercicios", url: `/${gymId}/panel/entrenamiento/ejercicios`, icon: List },
             { title: "Rutinas", url: `/${gymId}/panel/entrenamiento/rutinas`, icon: ClipboardList },
             { title: "Adherencia", url: `/${gymId}/panel/entrenamiento/adherencia`, icon: TrendingUp },
-            { title: "Plan Semanal", url: `/${gymId}/panel/entrenamiento/plan-semanal`, icon: CalendarDays },
+
           ],
         },
         {

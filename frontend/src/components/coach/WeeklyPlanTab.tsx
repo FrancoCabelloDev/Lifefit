@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  Loader2, Plus, Trash2, CalendarDays, Target, Dumbbell,
-  Clock, Zap, ChevronDown,
+  Loader2, Plus, Trash2, CalendarDays, Dumbbell,
+  Clock, Zap, Target,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -15,10 +15,7 @@ import { api } from '@/lib/api'
 import { showSuccess, showError } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { levelColors, levelLabels } from '@/lib/constants'
-import type { User as UserType, WorkoutRoutine, PaginatedResponse } from '@/lib/types'
-import { useRoleGuard } from '@/hooks/useRoleGuard'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import type { WorkoutRoutine, PaginatedResponse } from '@/lib/types'
 
 interface WeeklySlot {
   id: string
@@ -30,8 +27,6 @@ interface WeeklySlot {
   notes: string
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 const DAYS = [
   { value: 0, label: 'Lunes',     short: 'Lun' },
   { value: 1, label: 'Martes',    short: 'Mar' },
@@ -42,41 +37,18 @@ const DAYS = [
   { value: 6, label: 'Domingo',   short: 'Dom' },
 ]
 
-const GOAL_LABELS: Record<string, string> = {
-  weight_loss:     'Pérdida de peso',
-  muscle_gain:     'Ganancia muscular',
-  endurance:       'Resistencia',
-  flexibility:     'Flexibilidad',
-  sport_perf:      'Rendimiento deportivo',
-  general_fitness: 'Fitness general',
-}
-
-const GOAL_ICONS: Record<string, string> = {
-  weight_loss: '🔥', muscle_gain: '💪', endurance: '🏃',
-  flexibility: '🧘', sport_perf: '🏅', general_fitness: '⭐',
-}
-
 const todayDow = (() => {
   const d = new Date().getDay()
   return d === 0 ? 6 : d - 1
 })()
 
-// ── Slot card ─────────────────────────────────────────────────────────────────
-
-function SlotCard({
-  slot,
-  onDelete,
-}: {
-  slot: WeeklySlot
-  onDelete: (id: string) => void
-}) {
-  const r        = slot.routine_detail
-  const exCount  = r?.routine_exercises?.length ?? 0
-  const time     = slot.suggested_time?.slice(0, 5)
+function SlotCard({ slot, onDelete }: { slot: WeeklySlot; onDelete: (id: string) => void }) {
+  const r = slot.routine_detail
+  const exCount = r?.routine_exercises?.length ?? 0
+  const time = slot.suggested_time?.slice(0, 5)
 
   return (
     <div className="group relative bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
-      {/* Accent strip */}
       <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-2xl bg-emerald-500" />
 
       <div className="flex items-start justify-between gap-1 mt-0.5">
@@ -96,7 +68,6 @@ function SlotCard({
         </button>
       </div>
 
-      {/* Meta chips */}
       <div className="mt-2 flex flex-wrap gap-1">
         {r?.duration_minutes && (
           <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-full">
@@ -115,7 +86,6 @@ function SlotCard({
         )}
       </div>
 
-      {/* Time + notes */}
       {(time || slot.notes) && (
         <div className="mt-2 space-y-0.5 pt-2 border-t border-slate-100">
           {time && (
@@ -132,14 +102,8 @@ function SlotCard({
   )
 }
 
-// ── Day column ────────────────────────────────────────────────────────────────
-
 function DayColumn({
-  day,
-  slots,
-  isToday,
-  onAddClick,
-  onDelete,
+  day, slots, isToday, onAddClick, onDelete,
 }: {
   day: { value: number; label: string; short: string }
   slots: WeeklySlot[]
@@ -147,12 +111,11 @@ function DayColumn({
   onAddClick: (dayValue: number) => void
   onDelete: (id: string) => void
 }) {
-  const hasSlots    = slots.length > 0
-  const totalMins   = slots.reduce((s, sl) => s + (sl.routine_detail?.duration_minutes ?? 0), 0)
+  const hasSlots = slots.length > 0
+  const totalMins = slots.reduce((s, sl) => s + (sl.routine_detail?.duration_minutes ?? 0), 0)
 
   return (
     <div className="flex flex-col gap-2 min-w-0">
-      {/* Day header */}
       <div className={cn(
         'rounded-xl px-2 py-2.5 text-center transition-colors',
         isToday
@@ -169,13 +132,11 @@ function DayColumn({
         )}
       </div>
 
-      {/* Slots */}
       <div className="flex flex-col gap-2 flex-1">
         {slots.map(slot => (
           <SlotCard key={slot.id} slot={slot} onDelete={onDelete} />
         ))}
 
-        {/* Add / rest zone */}
         <button
           onClick={() => onAddClick(day.value)}
           className={cn(
@@ -200,41 +161,18 @@ function DayColumn({
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
-export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gymId: string }> }) {
-  const { gymId } = use(params)
-  useRoleGuard(gymId, ['coach'])
-
-  const [athletes, setAthletes]               = useState<UserType[]>([])
-  const [selectedAthleteId, setSelectedAthleteId] = useState('')
-  const [selectedAthlete, setSelectedAthlete]     = useState<UserType | null>(null)
-  const [slots, setSlots]                     = useState<WeeklySlot[]>([])
-  const [routines, setRoutines]               = useState<WorkoutRoutine[]>([])
-  const [isLoading, setIsLoading]             = useState(false)
-  const [dialogOpen, setDialogOpen]           = useState(false)
-
-  const [formDay, setFormDay]       = useState('')
+export default function WeeklyPlanTab({ gymId, athleteId }: { gymId: string; athleteId: string }) {
+  const [slots, setSlots] = useState<WeeklySlot[]>([])
+  const [routines, setRoutines] = useState<WorkoutRoutine[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [formDay, setFormDay] = useState('')
   const [formRoutine, setFormRoutine] = useState('')
-  const [formTime, setFormTime]     = useState('')
-  const [formNotes, setFormNotes]   = useState('')
-  const [saving, setSaving]         = useState(false)
+  const [formTime, setFormTime] = useState('')
+  const [formNotes, setFormNotes] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    Promise.all([
-      api.get<PaginatedResponse<UserType>>('/api/auth/gym-members/', { params: { role: 'athlete' } })
-        .then(d => Array.isArray(d) ? d : d.results || [])
-        .catch(() => [] as UserType[]),
-      api.get<PaginatedResponse<WorkoutRoutine>>('/api/workouts/routines/')
-        .then(d => Array.isArray(d) ? d : d.results || [])
-        .catch(() => [] as WorkoutRoutine[]),
-    ]).then(([aths, ruts]) => {
-      setAthletes(aths)
-      setRoutines(ruts)
-    })
-  }, [gymId])
-
-  const fetchPlan = async (athleteId: string) => {
+  const fetchPlan = async () => {
     setIsLoading(true)
     try {
       const data = await api.get<{ results: WeeklySlot[] } | WeeklySlot[]>(
@@ -248,11 +186,15 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
     }
   }
 
-  const handleSelectAthlete = (id: string) => {
-    setSelectedAthleteId(id)
-    setSelectedAthlete(athletes.find(a => a.id === id) || null)
-    fetchPlan(id)
-  }
+  useEffect(() => {
+    api.get<PaginatedResponse<WorkoutRoutine>>('/api/workouts/routines/')
+      .then(d => { setRoutines(Array.isArray(d) ? d : d.results || []) })
+      .catch(() => {})
+  }, [gymId])
+
+  useEffect(() => {
+    if (athleteId) fetchPlan()
+  }, [athleteId])
 
   const openDialog = (dayValue?: number) => {
     if (dayValue !== undefined) setFormDay(String(dayValue))
@@ -260,20 +202,20 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
   }
 
   const handleAddSlot = async () => {
-    if (!formDay || !formRoutine || !selectedAthleteId) return
+    if (!formDay || !formRoutine) return
     setSaving(true)
     try {
       await api.post('/api/workouts/weekly-plan/', {
-        athlete:      selectedAthleteId,
-        routine:      formRoutine,
-        day_of_week:  parseInt(formDay),
+        athlete: athleteId,
+        routine: formRoutine,
+        day_of_week: parseInt(formDay),
         suggested_time: formTime || null,
-        notes:        formNotes,
+        notes: formNotes,
       })
       showSuccess('Rutina agregada al plan')
       setDialogOpen(false)
       setFormDay(''); setFormRoutine(''); setFormTime(''); setFormNotes('')
-      fetchPlan(selectedAthleteId)
+      fetchPlan()
     } catch (err) {
       showError(err, 'Error al agregar rutina')
     } finally {
@@ -285,132 +227,47 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
     try {
       await api.delete(`/api/workouts/weekly-plan/${slotId}/`)
       showSuccess('Rutina eliminada del plan')
-      fetchPlan(selectedAthleteId)
+      fetchPlan()
     } catch (err) {
       showError(err, 'Error al eliminar')
     }
   }
 
-  const goal      = (selectedAthlete as any)?.fitness_goal
-  const goalNotes = (selectedAthlete as any)?.goal_notes
   const activeDays = new Set(slots.map(s => s.day_of_week)).size
-  const totalMins  = slots.reduce((s, sl) => s + (sl.routine_detail?.duration_minutes ?? 0), 0)
+  const totalMins = slots.reduce((s, sl) => s + (sl.routine_detail?.duration_minutes ?? 0), 0)
 
   return (
-    <div className="space-y-5">
-
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Plan Semanal</h1>
-          <p className="text-slate-500 mt-0.5 text-sm">Diseña la semana de entrenamiento de tus atletas</p>
-        </div>
-
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Athlete selector — inline, no card wrapper */}
-          <div className="relative">
-            <Select value={selectedAthleteId} onValueChange={handleSelectAthlete}>
-              <SelectTrigger className="w-64 h-9 text-sm border-slate-200 rounded-xl pl-3 pr-2 bg-white shadow-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  {selectedAthlete ? (
-                    <>
-                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[9px] font-black shrink-0">
-                        {selectedAthlete.first_name?.[0]?.toUpperCase()}
-                      </div>
-                      <span className="truncate text-slate-800 font-medium">
-                        {selectedAthlete.first_name} {selectedAthlete.last_name}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">Selecciona un atleta…</span>
-                  )}
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                {athletes.map(a => (
-                  <SelectItem key={a.id} value={a.id} className="rounded-lg">
-                    <span className="font-medium">{a.first_name} {a.last_name}</span>
-                    <span className="text-slate-400 ml-1.5 text-xs">{a.email}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+    <div className="space-y-4">
+      {/* Stats + add button */}
+      <div className="flex items-center justify-between gap-4">
+        {slots.length > 0 ? (
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <p className="text-base font-black text-slate-900">{activeDays}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">días/sem</p>
+            </div>
+            <div className="text-center">
+              <p className="text-base font-black text-slate-900">{totalMins}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">min/sem</p>
+            </div>
+            <div className="text-center">
+              <p className="text-base font-black text-slate-900">{slots.length}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">sesiones</p>
+            </div>
           </div>
-
-          {selectedAthleteId && (
-            <Button
-              onClick={() => openDialog()}
-              className="bg-emerald-600 hover:bg-emerald-700 h-9 rounded-xl text-sm active:scale-[0.97] shadow-sm shadow-emerald-600/20"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1.5" /> Agregar rutina
-            </Button>
-          )}
-        </div>
+        ) : (
+          <p className="text-sm text-slate-400">Sin plan semanal asignado</p>
+        )}
+        <Button
+          onClick={() => openDialog()}
+          className="bg-emerald-600 hover:bg-emerald-700 h-9 rounded-xl text-sm active:scale-[0.97] shadow-sm shadow-emerald-600/20 shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5 mr-1.5" /> Agregar rutina
+        </Button>
       </div>
 
-      {/* ── Athlete info bar ── */}
-      {selectedAthlete && (
-        <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 flex-wrap">
-          {/* Avatar */}
-          <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 font-black text-sm flex items-center justify-center shrink-0">
-            {selectedAthlete.first_name?.[0]?.toUpperCase()}
-          </div>
-
-          {/* Name / email */}
-          <div className="min-w-0">
-            <p className="font-semibold text-slate-900 text-sm leading-tight">
-              {selectedAthlete.first_name} {selectedAthlete.last_name}
-            </p>
-            <p className="text-xs text-slate-400">{selectedAthlete.email}</p>
-          </div>
-
-          {/* Goal */}
-          {goal ? (
-            <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-              <span>{GOAL_ICONS[goal] ?? <Target className="w-3 h-3" />}</span>
-              {GOAL_LABELS[goal] ?? goal}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-400">Sin objetivo definido</span>
-          )}
-          {goalNotes && (
-            <p className="text-xs text-slate-500 italic flex-1 truncate">"{goalNotes}"</p>
-          )}
-
-          {/* Stats */}
-          {slots.length > 0 && (
-            <div className="ml-auto flex items-center gap-4 shrink-0">
-              <div className="text-center">
-                <p className="text-base font-black text-slate-900">{activeDays}</p>
-                <p className="text-[10px] text-slate-400">días/sem</p>
-              </div>
-              <div className="text-center">
-                <p className="text-base font-black text-slate-900">{totalMins}</p>
-                <p className="text-[10px] text-slate-400">min/sem</p>
-              </div>
-              <div className="text-center">
-                <p className="text-base font-black text-slate-900">{slots.length}</p>
-                <p className="text-[10px] text-slate-400">sesiones</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Weekly grid ── */}
-      {!selectedAthleteId ? (
-        /* Empty state */
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
-            <CalendarDays className="w-8 h-8 text-slate-300" />
-          </div>
-          <div className="text-center">
-            <p className="text-base font-semibold text-slate-600">Selecciona un atleta</p>
-            <p className="text-sm text-slate-400 mt-1">Elige un atleta arriba para diseñar su semana</p>
-          </div>
-        </div>
-      ) : isLoading ? (
+      {/* Weekly grid */}
+      {isLoading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
         </div>
@@ -429,20 +286,14 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
         </div>
       )}
 
-      {/* ── Dialog ── */}
-      <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false) } }}>
+      {/* Add dialog */}
+      <Dialog open={dialogOpen} onOpenChange={v => { if (!v) setDialogOpen(false) }}>
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base">Agregar rutina al plan</DialogTitle>
-            {selectedAthlete && (
-              <p className="text-sm text-slate-500 mt-0.5">
-                {selectedAthlete.first_name} {selectedAthlete.last_name}
-              </p>
-            )}
           </DialogHeader>
 
           <div className="space-y-4 py-1">
-            {/* Día + hora en misma fila */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-slate-700">Día</Label>
@@ -472,7 +323,6 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
               </div>
             </div>
 
-            {/* Rutina */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-700">Rutina</Label>
               <Select value={formRoutine} onValueChange={setFormRoutine}>
@@ -492,7 +342,6 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
               </Select>
             </div>
 
-            {/* Rutina preview cuando está seleccionada */}
             {formRoutine && (() => {
               const r = routines.find(r => r.id === formRoutine)
               if (!r) return null
@@ -517,7 +366,6 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
               )
             })()}
 
-            {/* Notas */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-700">
                 Nota para el atleta <span className="font-normal text-slate-400">(opcional)</span>
@@ -547,7 +395,7 @@ export default function PlanSemanalCoachPage({ params }: { params: Promise<{ gym
             >
               {saving
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                : <Plus    className="w-3.5 h-3.5 mr-1.5" />
+                : <Plus className="w-3.5 h-3.5 mr-1.5" />
               }
               Agregar
             </Button>

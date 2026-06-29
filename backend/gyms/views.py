@@ -20,6 +20,19 @@ from core.constants import DASHBOARD_CACHE_TTL
 from core.permissions import IsGymAdmin, IsSuperAdmin
 
 
+def _points_annotation():
+    """Retorna una annotación ``puntos`` que suma los UserPoints aprobados.
+    Úsala con ``.annotate(puntos=_points_annotation())`` en querysets de User.
+    """
+    from django.db.models import OuterRef, Subquery, Sum, Value, IntegerField
+    from django.db.models.functions import Coalesce
+    from gamification.models import UserPoints
+    subq = UserPoints.objects.filter(
+        user=OuterRef("pk"), status=UserPoints.Status.APPROVED
+    ).values("user").annotate(total=Sum("points")).values("total")
+    return Coalesce(Subquery(subq, output_field=IntegerField()), Value(0))
+
+
 def _revoke_gym_sessions(gym) -> int:
     """
     Blacklist all outstanding JWT tokens for every user belonging to this gym.
@@ -697,7 +710,9 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         athletes_page = athletes_qs[offset:offset + page_size]
 
         athlete_ids_page = [str(a.id) for a in athletes_page]
-        athletes_values = athletes_qs.filter(id__in=[a.id for a in athletes_page]).values(
+        athletes_values = athletes_qs.filter(id__in=[a.id for a in athletes_page]).annotate(
+            puntos=_points_annotation()
+        ).values(
             "id", "first_name", "last_name", "email", "puntos", "is_active", "date_joined"
         )
         athlete_map = {str(a["id"]): a for a in athletes_values}
@@ -817,7 +832,8 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         at_risk_count = len(at_risk_ids)
 
         at_risk_athletes = []
-        for u in User.objects.filter(id__in=at_risk_ids[:5]).values("id", "first_name", "last_name", "email", "puntos"):
+        at_risk_qs = User.objects.filter(id__in=at_risk_ids[:5]).annotate(puntos=_points_annotation())
+        for u in at_risk_qs.values("id", "first_name", "last_name", "email", "puntos"):
             last_session = WorkoutSession.objects.filter(
                 user_id=u["id"], status="completed"
             ).order_by("-performed_at").first()
@@ -831,7 +847,7 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
             })
 
         top_athletes = list(
-            User.objects.filter(id__in=athlete_ids).order_by("-puntos").values(
+            User.objects.filter(id__in=athlete_ids).annotate(puntos=_points_annotation()).order_by("-puntos").values(
                 "id", "first_name", "last_name", "puntos"
             )[:5]
         )
@@ -897,7 +913,8 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         writer = csv.writer(response)
         writer.writerow(["Nombre", "Email", "Puntos", "Rutina Activa", "Plan Nutricional", "Sesiones (7d)", "Activo"])
 
-        for a in athletes:
+        athletes_with_points = athletes.annotate(puntos=_points_annotation())
+        for a in athletes_with_points:
             routine = routines_map.get(a.id)
             plan = plans_map.get(a.id)
             writer.writerow([
@@ -1104,7 +1121,9 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         athletes_page = athletes_qs[offset:offset + page_size]
 
         athlete_ids_filter = [a.id for a in athletes_page]
-        athletes_values = athletes_qs.filter(id__in=athlete_ids_filter).values(
+        athletes_values = athletes_qs.filter(id__in=athlete_ids_filter).annotate(
+            puntos=_points_annotation()
+        ).values(
             "id", "first_name", "last_name", "email", "puntos", "is_active", "date_joined"
         )
         athlete_map = {str(a["id"]): a for a in athletes_values}
@@ -1265,7 +1284,8 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
         writer = csv.writer(response)
         writer.writerow(["Nombre", "Email", "Nivel", "Puntos", "Plan Activo", "Cumplimiento %", "Comidas Hoy", "Completadas / Total"])
 
-        for a in athletes:
+        athletes_with_points = athletes.annotate(puntos=_points_annotation())
+        for a in athletes_with_points:
             plan = plans_map.get(a.id)
             compliance = plan.compliance_percentage if plan else 0
             writer.writerow([
@@ -2887,7 +2907,7 @@ def athlete_profile(request, athlete_id):
             "first_name": athlete.first_name,
             "last_name": athlete.last_name,
             "email": athlete.email,
-            "puntos": athlete.puntos,
+            "puntos": total_points_earned,
             "phone": athlete.phone,
             "dni": athlete.dni,
             "date_joined": athlete.date_joined.isoformat() if athlete.date_joined else None,
@@ -2933,7 +2953,7 @@ def athlete_profile(request, athlete_id):
             "completed_plans": completed_plans,
             "active_challenges": active_challenges,
             "badges_earned": badges_earned,
-            "total_points_earned": total_points_earned + athlete.puntos,
+            "total_points_earned": total_points_earned,
             "checkins_month": checkins_month,
             "checkins_total": checkins_total,
         },

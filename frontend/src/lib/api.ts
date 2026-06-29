@@ -60,23 +60,33 @@ export async function request<T>(endpoint: string, opts: RequestOptions = {}): P
     }
   }
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+
   let response = await fetch(url.toString(), {
     method,
     headers,
     body: formData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
     cache: "no-store",
+    signal: controller.signal,
   })
+
+  clearTimeout(timeoutId)
 
   if (response.status === 401 && authenticated) {
     const refreshed = await tryRefreshToken()
     if (refreshed) {
       headers["Authorization"] = `Bearer ${getToken()}`
+      const retryController = new AbortController()
+      const retryTimeoutId = setTimeout(() => retryController.abort(), 15000)
       response = await fetch(url.toString(), {
         method,
         headers,
         body: formData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
         cache: "no-store",
+        signal: retryController.signal,
       })
+      clearTimeout(retryTimeoutId)
     } else {
       clearAuth()
       dispatchAuthEvent()
@@ -91,11 +101,16 @@ export async function request<T>(endpoint: string, opts: RequestOptions = {}): P
     return undefined as T
   }
 
-  const data = await response.json()
+  let data: unknown
+  try {
+    data = await response.json()
+  } catch {
+    data = null
+  }
 
   if (!response.ok) {
     throw new ApiError(
-      data?.detail ?? data?.message ?? `Error ${response.status}`,
+      (data as any)?.detail ?? (data as any)?.message ?? `Error ${response.status}`,
       response.status,
       data,
     )

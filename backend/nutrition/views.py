@@ -47,8 +47,8 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             return queryset
         if user.role in {User.Role.GYM_ADMIN, User.Role.NUTRITIONIST}:
             base = queryset.filter(global_or_user_gym_filter(user)) if user.gym_id else queryset.filter(gym__isnull=True)
-            # Library actions show only template plans; write actions (update/destroy) also see personal plans
-            if self.action in ('update', 'partial_update', 'destroy', 'retrieve'):
+            # Library actions show only template plans; write/action endpoints also see personal plans
+            if self.action in ('update', 'partial_update', 'destroy', 'retrieve', 'add_day', 'remove_day', 'assign_to_user', 'start_plan'):
                 return base
             return base.filter(created_for__isnull=True)
         if user.role == User.Role.ATHLETE:

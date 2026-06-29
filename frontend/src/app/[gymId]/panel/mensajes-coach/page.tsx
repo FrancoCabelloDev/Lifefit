@@ -32,8 +32,10 @@ type CoachThread = {
   total: number
 }
 
-function formatRelative(dateStr: string) {
+function formatRelative(dateStr: string | null | undefined) {
+  if (!dateStr) return ''
   const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
   const now = new Date()
   const diffMins = Math.floor((now.getTime() - d.getTime()) / 60000)
   if (diffMins < 1) return 'Ahora'

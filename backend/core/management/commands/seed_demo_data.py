@@ -523,9 +523,6 @@ class Command(BaseCommand):
         # 17. PUNTOS Y BADGES
         # ============================================================
         for i, athlete in enumerate(athletes):
-            athlete.puntos = (i + 1) * 500
-            athlete.save()
-
             # Dar badges a los primeros atletas
             if i < len(badges):
                 UserBadge.objects.get_or_create(user=athlete, badge=badges[i])

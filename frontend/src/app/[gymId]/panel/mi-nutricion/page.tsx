@@ -380,7 +380,7 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
   const maybeCheckDayCompletion = (currentLogs: MealLogEntry[]) => {
     const currentPlan = planRef.current
     if (!currentPlan) return
-    const todayMealIds: string[] = Object.values((currentPlan as any).meals_by_day ?? {})
+    const todayMealIds: string[] = Object.values(((currentPlan as any)?.meals_by_day ?? {}))
       .flat()
       .map((m: any) => m.id)
     if (todayMealIds.length === 0) return

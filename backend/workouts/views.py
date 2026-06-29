@@ -1024,11 +1024,16 @@ def coach_athlete_detail(request, athlete_id):
         week_points = 100
 
     # ── 6. Resumen del atleta ─────────────────────────────────────────────────
+    from gamification.models import UserPoints
+    from django.db.models import Sum
+    athlete_points = UserPoints.objects.filter(
+        user=athlete, status=UserPoints.Status.APPROVED
+    ).aggregate(total=Sum("points"))["total"] or 0
     athlete_summary = {
         "id":           str(athlete.id),
         "full_name":    athlete.get_full_name() or athlete.email,
         "email":        athlete.email,
-        "puntos":       athlete.puntos,
+        "puntos":       athlete_points,
         "member_since": athlete.date_joined.date().isoformat(),
     }
 
