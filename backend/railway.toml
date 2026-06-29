@@ -3,7 +3,7 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "bash build.sh"
-healthcheckPath = "/api/system/feature-flags/"
-healthcheckTimeout = 30
+healthcheckPath = "/api/health/"
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
