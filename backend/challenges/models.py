@@ -124,6 +124,10 @@ class ChallengeParticipation(BaseModel):
         blank=True,
         help_text="Motivo del rechazo comunicado al atleta.",
     )
+    is_winner = models.BooleanField(
+        default=False,
+        help_text="True si el staff declaró a este atleta ganador del reto.",
+    )
 
     class Meta:
         unique_together = ("challenge", "user")

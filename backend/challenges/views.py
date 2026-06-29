@@ -15,6 +15,8 @@ from .serializers import (
 )
 from .services import (
     approve_participation,
+    declare_challenge_winner,
+    notify_gym_athletes_new_challenge,
     reject_participation,
     submit_evidence,
     sync_all_active_participations,
@@ -65,16 +67,15 @@ class ChallengeViewSet(viewsets.ModelViewSet):
         return queryset.filter(gym__isnull=True, status=Challenge.Status.ACTIVE)
 
     def perform_create(self, serializer):
+        # Save primero (lógica original)
         user = self.request.user
         if user.role == User.Role.SUPER_ADMIN:
             responsible = serializer.validated_data.get("responsible") or user
-            serializer.save(responsible=responsible)
-            return
-        if user.role in STAFF_ROLES and user.gym_id:
+            instance = serializer.save(responsible=responsible)
+        elif user.role in STAFF_ROLES and user.gym_id:
             responsible = serializer.validated_data.get("responsible") or user
             if hasattr(responsible, "gym_id") and responsible.gym_id != user.gym_id:
                 responsible = user
-            # Inferir verification_type desde el tipo de reto si no fue enviado
             vtype = serializer.validated_data.get("verification_type")
             if not vtype:
                 reto_type = serializer.validated_data.get("type", "")
@@ -83,9 +84,19 @@ class ChallengeViewSet(viewsets.ModelViewSet):
                     if reto_type in Challenge.AUTO_VERIFIABLE_TYPES
                     else Challenge.VerificationType.MANUAL
                 )
-            serializer.save(gym=user.gym, responsible=responsible, verification_type=vtype)
-            return
-        raise PermissionDenied("No tienes permisos para crear retos.")
+            instance = serializer.save(gym=user.gym, responsible=responsible, verification_type=vtype)
+        else:
+            raise PermissionDenied("No tienes permisos para crear retos.")
+
+        # Notificar atletas solo cuando el reto se crea como activo
+        if instance.status == Challenge.Status.ACTIVE:
+            try:
+                notify_gym_athletes_new_challenge(instance)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "No se pudo notificar a atletas sobre reto %s", instance.pk, exc_info=True
+                )
 
     def _is_manageable_by(self, user, instance):
         if user.role == User.Role.SUPER_ADMIN:
@@ -106,7 +117,17 @@ class ChallengeViewSet(viewsets.ModelViewSet):
         if responsible and hasattr(responsible, "gym_id") and user.gym_id and responsible.gym_id != user.gym_id:
             responsible = user
         gym = instance.gym or (user.gym if user.role != User.Role.SUPER_ADMIN else None)
-        serializer.save(gym=gym, responsible=responsible)
+        prev_status = instance.status
+        updated = serializer.save(gym=gym, responsible=responsible)
+        # Notificar si el reto acaba de activarse (draft → active)
+        if prev_status != Challenge.Status.ACTIVE and updated.status == Challenge.Status.ACTIVE:
+            try:
+                notify_gym_athletes_new_challenge(updated)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "No se pudo notificar a atletas sobre reto activado %s", updated.pk, exc_info=True
+                )
 
     def perform_destroy(self, instance):
         user = self.request.user
@@ -202,6 +223,89 @@ class ChallengeViewSet(viewsets.ModelViewSet):
 
         serializer = ChallengeParticipationSerializer(participation, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"])
+    def leaderboard(self, request, pk=None):
+        """
+        Ranking de participantes de un reto ordenado por progreso descendente.
+        Accesible para staff y atletas del gym.
+        """
+        challenge = self.get_object()
+        user = request.user
+
+        if user.gym_id and challenge.gym_id and challenge.gym_id != user.gym_id:
+            raise PermissionDenied("No tienes acceso a este reto.")
+
+        participations = (
+            ChallengeParticipation.objects
+            .filter(
+                challenge=challenge,
+                status__in=[
+                    ChallengeParticipation.ParticipationStatus.JOINED,
+                    ChallengeParticipation.ParticipationStatus.PENDING_REVIEW,
+                    ChallengeParticipation.ParticipationStatus.COMPLETED,
+                ]
+            )
+            .select_related("user")
+            .order_by("-is_winner", "-progress", "-points_earned")[:20]
+        )
+
+        data = [
+            {
+                "participation_id": str(p.pk),
+                "user_id": str(p.user_id),
+                "full_name": f"{p.user.first_name} {p.user.last_name}".strip() or p.user.email,
+                "progress": p.progress,
+                "progress_pct": min(100, round(p.progress * 100 / challenge.goal_value)) if challenge.goal_value else 0,
+                "points_earned": p.points_earned,
+                "status": p.status,
+                "is_winner": p.is_winner,
+            }
+            for p in participations
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=["post"], url_path="declare-winner")
+    def declare_winner(self, request, pk=None):
+        """
+        Staff declara al ganador del reto.
+        Body: { "participation_id": "<uuid>", "bonus_points": 0 }
+
+        - Marca is_winner = True en la participación.
+        - Completa la participación si no estaba completada.
+        - Otorga bonus_points adicionales.
+        - Notifica al ganador y a todos los atletas del gym.
+        """
+        challenge = self.get_object()
+        user = request.user
+
+        if user.role not in STAFF_ROLES | {User.Role.SUPER_ADMIN}:
+            raise PermissionDenied("Solo staff puede declarar ganadores.")
+
+        if challenge.gym_id and user.gym_id and challenge.gym_id != user.gym_id:
+            raise PermissionDenied("No tienes acceso a este reto.")
+
+        participation_id = request.data.get("participation_id")
+        bonus_points = int(request.data.get("bonus_points", 0))
+
+        if not participation_id:
+            raise ValidationError({"participation_id": "Este campo es requerido."})
+
+        try:
+            participation = ChallengeParticipation.objects.select_related(
+                "user", "challenge"
+            ).get(pk=participation_id, challenge=challenge)
+        except ChallengeParticipation.DoesNotExist:
+            raise ValidationError({"participation_id": "Participación no encontrada en este reto."})
+
+        winner = declare_challenge_winner(
+            participation,
+            declared_by_id=user.id,
+            bonus_points=max(0, bonus_points),
+        )
+        return Response(
+            ChallengeParticipationSerializer(winner, context={"request": request}).data
+        )
 
 
 class ChallengeParticipationViewSet(viewsets.ModelViewSet):

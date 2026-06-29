@@ -99,6 +99,7 @@ class ChallengeParticipationSerializer(serializers.ModelSerializer):
             "status",
             "points_earned",
             "last_update",
+            "is_winner",
             # Verificación
             "evidence_note",
             "verified_by",
@@ -112,7 +113,7 @@ class ChallengeParticipationSerializer(serializers.ModelSerializer):
             "id", "last_update", "created_at", "updated_at",
             "user_detail", "challenge_detail", "verified_by_name",
             "progress_percentage", "verified_by", "verified_at",
-            "points_earned",
+            "points_earned", "is_winner",
         ]
 
     def get_user_detail(self, obj):
@@ -144,7 +145,3 @@ class UserBadgeSerializer(serializers.ModelSerializer):
         fields = ["id", "user", "badge", "badge_detail", "awarded_at"]
         read_only_fields = ["id", "awarded_at", "badge_detail"]
 
-
-
-    def get_user_detail(self, obj):
-        return {"id": obj.user_id, "email": obj.user.email, "first_name": obj.user.first_name, "last_name": obj.user.last_name}

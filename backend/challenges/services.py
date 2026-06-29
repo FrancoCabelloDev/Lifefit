@@ -375,3 +375,124 @@ def sync_all_active_participations() -> dict:
             errors += 1
 
     return {"updated": updated, "completed": completed, "errors": errors}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Notificaciones de reto
+# ─────────────────────────────────────────────────────────────────────────────
+
+def notify_gym_athletes_new_challenge(challenge) -> int:
+    """
+    Envía una notificación a todos los atletas activos del gimnasio cuando
+    se crea un nuevo reto. Devuelve la cantidad de notificaciones enviadas.
+    No interrumpe el flujo si falla alguna notificación individual.
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    if not challenge.gym_id:
+        return 0
+
+    target_roles = []
+    if challenge.target_role == "all":
+        target_roles = ["athlete", "coach", "nutritionist"]
+    else:
+        target_roles = [challenge.target_role]
+
+    athletes = User.objects.filter(
+        gym_id=challenge.gym_id,
+        is_active=True,
+        role__in=target_roles,
+    ).exclude(id=challenge.responsible_id)
+
+    end_str = challenge.end_date.strftime("%d/%m/%Y") if challenge.end_date else "—"
+    sent = 0
+    for athlete in athletes:
+        _notify(
+            recipient_id=athlete.pk,
+            notification_type="challenge",
+            title=f"Nuevo reto: {challenge.name}",
+            message=(
+                f"El reto '{challenge.name}' ya está disponible. "
+                f"Premio: {challenge.reward_points} pts. Hasta el {end_str}."
+            ),
+        )
+        sent += 1
+    return sent
+
+
+def declare_challenge_winner(
+    participation,
+    declared_by_id: int,
+    bonus_points: int = 0,
+) -> "ChallengeParticipation":
+    """
+    Declara al atleta de la participación como ganador del reto.
+    - Marca is_winner = True en la participación.
+    - Si el atleta aún no completó el reto, lo completa primero.
+    - Otorga bonus_points adicionales si se especifican.
+    - Notifica al ganador y a todos los atletas del gimnasio.
+    Idempotente: si ya es winner, solo actualiza bonus si cambia.
+    """
+    from .models import ChallengeParticipation
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    challenge = participation.challenge
+
+    with transaction.atomic():
+        locked = (
+            ChallengeParticipation.objects
+            .select_for_update()
+            .select_related("user", "challenge")
+            .get(pk=participation.pk)
+        )
+
+        # Completar si no estaba completada
+        if locked.status != ChallengeParticipation.ParticipationStatus.COMPLETED:
+            locked.status = ChallengeParticipation.ParticipationStatus.COMPLETED
+            locked.points_earned = challenge.reward_points
+            locked.verified_by_id = declared_by_id
+            locked.verified_at = timezone.now()
+            _award_points(locked.user_id, challenge.reward_points, source="challenge")
+
+        locked.is_winner = True
+        locked.save(update_fields=["status", "points_earned", "is_winner", "verified_by", "verified_at"])
+
+    # Bonus points por ganar
+    if bonus_points > 0:
+        _award_points(locked.user_id, bonus_points, source="challenge_winner")
+
+    winner_name = f"{locked.user.first_name} {locked.user.last_name}".strip() or locked.user.email
+    total_pts = challenge.reward_points + bonus_points
+
+    # Notificar al ganador
+    _notify(
+        recipient_id=locked.user_id,
+        notification_type="challenge",
+        title=f"🥇 ¡Ganaste el reto '{challenge.name}'!",
+        message=(
+            f"Felicitaciones {locked.user.first_name}, eres el ganador. "
+            f"Recibiste {total_pts} puntos en total."
+        ),
+    )
+
+    # Notificar a todos los atletas del gym
+    if challenge.gym_id:
+        athletes = User.objects.filter(
+            gym_id=challenge.gym_id,
+            is_active=True,
+        ).exclude(pk=locked.user_id)
+        for athlete in athletes:
+            _notify(
+                recipient_id=athlete.pk,
+                notification_type="challenge",
+                title=f"🏆 Ganador del reto '{challenge.name}'",
+                message=(
+                    f"{winner_name} ganó el reto '{challenge.name}' "
+                    f"con {total_pts} puntos. ¡Participa en el próximo!"
+                ),
+            )
+
+    locked.refresh_from_db()
+    return locked
