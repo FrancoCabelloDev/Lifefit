@@ -25,7 +25,7 @@ import { api } from '@/lib/api'
 import { getStoredUser, clearAuth } from '@/lib/auth'
 import { showError, showSuccess } from '@/lib/toast'
 import { ProfileSkeleton } from '@/components/ui/skeletons'
-import type { User as UserType, UserBadge, UserProgress } from '@/lib/types'
+import type { User as UserType, UserBadge } from '@/lib/types'
 import { ROLE_LABELS } from '@/lib/types'
 
 const STAFF_ROLES = ['coach', 'nutritionist']
@@ -38,7 +38,6 @@ export default function PerfilPage() {
 
   const [user, setUser] = useState<UserType | null>(null)
   const [badges, setBadges] = useState<UserBadge[]>([])
-  const [progress, setProgress] = useState<UserProgress | null>(null)
   const [totalPoints, setTotalPoints]     = useState<number>(0)
   const [pendingPoints, setPendingPoints] = useState<number>(0)
   const [recentPoints, setRecentPoints]   = useState<{
@@ -126,7 +125,6 @@ export default function PerfilPage() {
       setMaxClients(userRes.max_clients != null ? String(userRes.max_clients) : '20')
       if (isAthlete) {
         setBadges(Array.isArray(badgesRes) ? badgesRes : badgesRes?.results || [])
-        setProgress(progressRes)
         setTotalPoints(statsRes?.total_points ?? 0)
         setPendingPoints(statsRes?.pending_points ?? 0)
         setRecentPoints(statsRes?.recent_points ?? [])

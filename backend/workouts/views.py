@@ -9,7 +9,6 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from core.constants import XP_PER_LEVEL
 from core.filters import global_or_user_gym_filter
 from .models import Exercise, RoutineExercise, SessionExerciseLog, UserRoutineAssignment, WorkoutRoutine, WorkoutSession, WeeklyRoutinePlan
 from .serializers import (
@@ -310,20 +309,6 @@ class RoutineExerciseViewSet(viewsets.ModelViewSet):
 import logging
 logger = logging.getLogger(__name__)
 
-
-def _sync_user_progress(user_id, delta_points: int):
-    """Actualiza UserProgress cuando se confirman puntos."""
-    if not delta_points:
-        return
-    from challenges.models import UserProgress
-    progress, _ = UserProgress.objects.get_or_create(user_id=user_id)
-    progress.total_points = max(0, progress.total_points + delta_points)
-    progress.current_xp   = max(0, progress.current_xp + delta_points)
-    while progress.current_xp >= XP_PER_LEVEL:
-        progress.current_xp  -= XP_PER_LEVEL
-        progress.level       += 1
-        progress.next_level_xp = XP_PER_LEVEL
-    progress.save(update_fields=["total_points", "current_xp", "level", "next_level_xp"])
 
 
 class WorkoutSessionViewSet(viewsets.ModelViewSet):
@@ -707,7 +692,6 @@ def approve_week(request, athlete_id):
         week_pts = 100  # fallback razonable
 
     # ── 6. Crear entrada de puntos y acreditar al atleta ─────────────────────
-    from gamification.views import _sync_user_progress
 
     with transaction.atomic():
         entry = UserPoints.objects.create(
@@ -725,8 +709,6 @@ def approve_week(request, athlete_id):
                 f"({sessions_completed}/{total_slots} sesiones)"
             ),
         )
-    # Sincronizar nivel fuera de la transacción (no es crítico para la integridad)
-    _sync_user_progress(athlete.pk, week_pts)
 
     # ── 7. Notificar al atleta ────────────────────────────────────────────────
     _notify_week_approved(entry, approved_by=coach, week_end=week_end)
@@ -1046,7 +1028,6 @@ def coach_athlete_detail(request, athlete_id):
         "id":           str(athlete.id),
         "full_name":    athlete.get_full_name() or athlete.email,
         "email":        athlete.email,
-        "nivel":        athlete.nivel,
         "puntos":       athlete.puntos,
         "member_since": athlete.date_joined.date().isoformat(),
     }

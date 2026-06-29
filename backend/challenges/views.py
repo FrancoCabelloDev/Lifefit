@@ -1,17 +1,17 @@
 from django.contrib.auth import get_user_model
 from rest_framework import filters, permissions, status, viewsets
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from core.filters import global_or_user_gym_filter
-from .models import Badge, Challenge, ChallengeParticipation, UserBadge, UserProgress
+from .models import Badge, Challenge, ChallengeParticipation, UserBadge
 from .serializers import (
     BadgeSerializer,
     ChallengeParticipationSerializer,
     ChallengeSerializer,
     UserBadgeSerializer,
-    UserProgressSerializer,
 )
 from .services import (
     approve_participation,
@@ -467,84 +467,47 @@ class UserBadgeViewSet(viewsets.ModelViewSet):
         raise PermissionDenied("No puedes asignar insignias.")
 
 
-class UserProgressViewSet(viewsets.ModelViewSet):
-    serializer_class = UserProgressSerializer
+
+
+class AthleteDashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        user = self.request.user
-        queryset = UserProgress.objects.select_related("user")
-        if user.role == User.Role.SUPER_ADMIN:
-            return queryset
-        if user.role in STAFF_ROLES and user.gym_id:
-            return queryset.filter(user__gym_id=user.gym_id)
-        if user.role == User.Role.ATHLETE:
-            return queryset.filter(user=user)
-        return queryset.none()
-
-    @action(detail=False, methods=["get"])
-    def my_dashboard(self, request):
+    def get(self, request):
         from datetime import date
-        from workouts.models import WorkoutSession, UserRoutineAssignment
+        from workouts.models import WorkoutSession
         from nutrition.models import UserMealLog, UserNutritionPlan
+        from gamification.models import UserPoints
+        from django.db.models import Sum
 
         user = request.user
-        progress, _ = UserProgress.objects.get_or_create(user=user)
 
-        # FIX: usar ParticipationStatus.JOINED en lugar de 'active' (bug anterior)
-        active_participations = ChallengeParticipation.objects.filter(
+        total_points = (
+            UserPoints.objects
+            .filter(user=user, status=UserPoints.Status.APPROVED)
+            .aggregate(total=Sum("points"))["total"] or 0
+        )
+        active_challenges = ChallengeParticipation.objects.filter(
             user=user,
             status=ChallengeParticipation.ParticipationStatus.JOINED,
         ).count()
-
         badges_count = UserBadge.objects.filter(user=user).count()
-
         sessions_today = WorkoutSession.objects.filter(
             user=user,
             status=WorkoutSession.Status.COMPLETED,
             performed_at__date=date.today(),
         ).count()
-
         meals_today = UserMealLog.objects.filter(
-            user=user,
-            date=date.today(),
-            status="completed",
+            user=user, date=date.today(), status="completed",
         ).count()
-
-        has_active_routine = UserRoutineAssignment.objects.filter(
-            user=user,
-            status=UserRoutineAssignment.AssignmentStatus.ACTIVE,
-        ).exists()
-
         has_active_plan = UserNutritionPlan.objects.filter(
-            user=user,
-            status="active",
+            user=user, status="active",
         ).exists()
-
-        from gamification.models import UserPoints
-        from django.db.models import Sum as _Sum
-        total_points = (
-            UserPoints.objects
-            .filter(user=user, status=UserPoints.Status.APPROVED)
-            .aggregate(total=_Sum("points"))["total"] or 0
-        )
 
         return Response({
-            "total_points": total_points,
-            "level": progress.level,
-            "active_challenges": active_participations,
-            "badges_count": badges_count,
-            "sessions_today": sessions_today,
-            "meals_today": meals_today,
-            "has_active_routine": has_active_routine,
+            "total_points":    total_points,
+            "active_challenges": active_challenges,
+            "badges_count":    badges_count,
+            "sessions_today":  sessions_today,
+            "meals_today":     meals_today,
             "has_active_plan": has_active_plan,
         })
-
-    @action(detail=False, methods=["get"])
-    def leaderboard(self, request):
-        user = request.user
-        queryset = self.get_queryset().filter(
-            user__role=User.Role.ATHLETE
-        ).order_by("-total_points")[:20]
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)

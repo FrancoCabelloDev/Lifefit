@@ -90,7 +90,6 @@ interface AthleteDetail {
     id:           string
     full_name:    string
     email:        string
-    nivel:        number
     puntos:       number
     member_since: string
   }

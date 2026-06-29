@@ -175,15 +175,3 @@ class UserBadge(BaseModel):
         return f"{self.user.email} - {self.badge.name}"
 
 
-class UserProgress(BaseModel):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, related_name="progress", on_delete=models.CASCADE)
-    level = models.PositiveIntegerField(default=1)
-    total_points = models.PositiveIntegerField(default=0)
-    current_xp = models.PositiveIntegerField(default=0)
-    next_level_xp = models.PositiveIntegerField(default=1000)
-
-    class Meta:
-        ordering = ["-total_points"]
-
-    def __str__(self) -> str:
-        return f"{self.user.email} progress"

@@ -1,0 +1,94 @@
+// MÓDULO 5 - AGENDA NUTRICIONISTA
+
+Table accounts_user {
+  id uuid [pk]
+  email varchar
+  role varchar
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+}
+
+Table gyms_nutritionistassignment {
+  id uuid [pk]
+  nutritionist_id uuid
+  athlete_id uuid
+  gym_id uuid
+  is_active boolean
+  assigned_at timestamp
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_nutritionistappointment {
+  id uuid [pk]
+  nutritionist_id uuid
+  athlete_id uuid
+  gym_id uuid
+  scheduled_at timestamp
+  duration_minutes int
+  appointment_type varchar
+  status varchar
+  notes text
+  clinical_notes text
+  reschedule_note text
+  cancelled_by varchar
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_nutritionistavailability {
+  id uuid [pk]
+  nutritionist_id uuid
+  gym_id uuid
+  day_of_week int
+  start_time time
+  end_time time
+  slot_duration_minutes int
+  is_active boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_availabilityoverride {
+  id uuid [pk]
+  nutritionist_id uuid
+  gym_id uuid
+  date date
+  reason varchar
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_nutritionistmessage {
+  id uuid [pk]
+  nutritionist_id uuid
+  athlete_id uuid
+  gym_id uuid
+  sender_is_nutritionist boolean
+  body text
+  is_read boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: gyms_nutritionistassignment.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistassignment.athlete_id > accounts_user.id
+Ref: gyms_nutritionistassignment.gym_id > gyms_gym.id
+Ref: gyms_nutritionistappointment.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistappointment.athlete_id > accounts_user.id
+Ref: gyms_nutritionistappointment.gym_id > gyms_gym.id
+Ref: gyms_nutritionistavailability.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistavailability.gym_id > gyms_gym.id
+Ref: gyms_availabilityoverride.nutritionist_id > accounts_user.id
+Ref: gyms_availabilityoverride.gym_id > gyms_gym.id
+Ref: gyms_nutritionistmessage.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistmessage.athlete_id > accounts_user.id
+Ref: gyms_nutritionistmessage.gym_id > gyms_gym.id

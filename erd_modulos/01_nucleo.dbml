@@ -1,0 +1,95 @@
+// MÓDULO 1 - NÚCLEO
+// gyms_gym, gyms_branch, accounts_user, core_featureflag, gyms_gymfeatureflag
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+  slug varchar [unique]
+  description text
+  location varchar
+  status varchar
+  logo varchar [null]
+  ruc varchar
+  brand_color varchar
+  website varchar
+  contact_email varchar
+  metrics jsonb
+  max_athletes int
+  max_coaches int
+  max_nutritionists int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_branch {
+  id uuid [pk]
+  gym_id uuid
+  name varchar
+  slug varchar
+  address varchar
+  city varchar
+  state varchar
+  country varchar
+  zipcode varchar
+  status varchar
+  phone varchar
+  latitude decimal [null]
+  longitude decimal [null]
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table accounts_user {
+  id uuid [pk]
+  gym_id uuid [null]
+  email varchar [unique]
+  first_name varchar
+  last_name varchar
+  role varchar
+  dni varchar [null]
+  phone varchar [null]
+  is_active boolean
+  puntos int
+  nivel int
+  profile_picture varchar [null]
+  bio text
+  specialty varchar
+  years_experience smallint [null]
+  max_clients smallint
+  height_cm decimal [null]
+  weight_kg decimal [null]
+  fitness_goal varchar
+  goal_notes text
+  is_google_account boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table core_featureflag {
+  id uuid [pk]
+  name varchar
+  code varchar [unique]
+  description text
+  is_active_globally boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_gymfeatureflag {
+  id uuid [pk]
+  gym_id uuid
+  feature_flag_id uuid
+  is_active boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: accounts_user.gym_id > gyms_gym.id
+Ref: gyms_branch.gym_id > gyms_gym.id
+Ref: gyms_gymfeatureflag.gym_id > gyms_gym.id
+Ref: gyms_gymfeatureflag.feature_flag_id > core_featureflag.id

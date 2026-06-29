@@ -118,24 +118,6 @@ def ranking(request):
 # via POST /api/workouts/approve-week/<athlete_id>/ from the adherencia view.
 
 
-def _sync_user_progress(user_id, delta_points: int) -> None:
-    """Actualiza XP y nivel en UserProgress al confirmar puntos."""
-    if not delta_points:
-        return
-    try:
-        from core.constants import XP_PER_LEVEL
-        from challenges.models import UserProgress
-        progress, _ = UserProgress.objects.get_or_create(user_id=user_id)
-        progress.total_points = max(0, progress.total_points + delta_points)
-        progress.current_xp   = max(0, progress.current_xp + delta_points)
-        while progress.current_xp >= XP_PER_LEVEL:
-            progress.current_xp  -= XP_PER_LEVEL
-            progress.level       += 1
-            progress.next_level_xp = XP_PER_LEVEL
-        progress.save(update_fields=["total_points", "current_xp", "level", "next_level_xp"])
-    except Exception:
-        logger.warning("_sync_user_progress: error sincronizando progreso", exc_info=True)
-
 
 # ── GymPointsConfig ───────────────────────────────────────────────────────────
 

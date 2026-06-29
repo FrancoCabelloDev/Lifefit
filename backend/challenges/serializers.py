@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Badge, Challenge, ChallengeParticipation, UserBadge, UserProgress
+from .models import Badge, Challenge, ChallengeParticipation, UserBadge
 
 User = get_user_model()
 
@@ -145,23 +145,6 @@ class UserBadgeSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "awarded_at", "badge_detail"]
 
 
-class UserProgressSerializer(serializers.ModelSerializer):
-    user_detail = serializers.SerializerMethodField()
-
-    class Meta:
-        model = UserProgress
-        fields = [
-            "id",
-            "user",
-            "user_detail",
-            "level",
-            "total_points",
-            "current_xp",
-            "next_level_xp",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["id", "created_at", "updated_at", "user_detail"]
 
     def get_user_detail(self, obj):
         return {"id": obj.user_id, "email": obj.user.email, "first_name": obj.user.first_name, "last_name": obj.user.last_name}

@@ -34,7 +34,6 @@ interface AthleteProfile {
     fitness_goal: string
     goal_notes: string
     puntos: number
-    nivel: string
   }
   goal: {
     target_weight_kg: string | null

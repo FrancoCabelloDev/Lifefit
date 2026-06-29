@@ -155,10 +155,7 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-3.5">
                         <span className="font-semibold text-emerald-600 text-xs">
-                          Lvl {u.nivel ?? '—'}
-                        </span>
-                        <span className="text-slate-400 text-xs ml-1">
-                          ({u.puntos ?? 0} pts)
+                          {u.puntos ?? 0} pts
                         </span>
                       </td>
                     </tr>

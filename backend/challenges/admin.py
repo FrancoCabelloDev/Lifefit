@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Badge, Challenge, ChallengeParticipation, UserBadge, UserProgress
+from .models import Badge, Challenge, ChallengeParticipation, UserBadge
 
 
 @admin.register(Challenge)
@@ -27,9 +27,3 @@ class BadgeAdmin(admin.ModelAdmin):
 class UserBadgeAdmin(admin.ModelAdmin):
     list_display = ("user", "badge", "awarded_at")
     search_fields = ("user__email", "badge__name")
-
-
-@admin.register(UserProgress)
-class UserProgressAdmin(admin.ModelAdmin):
-    list_display = ("user", "level", "total_points", "current_xp", "next_level_xp")
-    search_fields = ("user__email",)

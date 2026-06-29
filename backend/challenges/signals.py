@@ -92,23 +92,6 @@ def on_participation_save(sender, instance, **kwargs):
         check_and_award_badges(user)
 
 
-@receiver(post_save, sender="challenges.UserProgress")
-def on_progress_save(sender, instance, **kwargs):
-    """Otorga badges basados en nivel cuando cambia el progreso."""
-    if not instance.user_id:
-        return
-
-    try:
-        user = instance.user
-    except Exception:
-        logger.warning("on_progress_save: fallo acceso a instance.user (pk=%s), usando DB", instance.user_id)
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        user = User.objects.filter(pk=instance.user_id).first()
-
-    if user:
-        check_and_award_badges(user)
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Nuevas señales — verificación automática

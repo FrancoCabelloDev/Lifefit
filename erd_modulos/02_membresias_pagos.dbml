@@ -1,0 +1,95 @@
+// MÓDULO 2 - MEMBRESÍAS Y PAGOS
+
+Table accounts_user {
+  id uuid [pk]
+  email varchar
+  role varchar
+  gym_id uuid [null]
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+  slug varchar
+}
+
+Table gyms_gymmembershipplan {
+  id uuid [pk]
+  gym_id uuid
+  name varchar
+  description text
+  price decimal
+  duration_days int
+  tier varchar
+  features jsonb
+  is_active boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_gymsubscription {
+  id uuid [pk]
+  athlete_id uuid
+  gym_id uuid
+  plan_id uuid [null]
+  status varchar
+  start_date date
+  end_date date [null]
+  auto_renew boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_gympayment {
+  id uuid [pk]
+  gym_id uuid
+  subscription_id uuid [null]
+  athlete_id uuid [null]
+  plan_id uuid [null]
+  amount decimal
+  currency varchar
+  status varchar
+  paid_at timestamp
+  due_date date [null]
+  payment_method varchar
+  reference varchar
+  notes text
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_checkin {
+  id uuid [pk]
+  user_id uuid
+  gym_id uuid
+  branch_id uuid [null]
+  method varchar
+  timestamp timestamp
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_branch {
+  id uuid [pk]
+  gym_id uuid
+  name varchar
+  address varchar
+  city varchar
+}
+
+Ref: gyms_gymmembershipplan.gym_id > gyms_gym.id
+Ref: gyms_gymsubscription.athlete_id > accounts_user.id
+Ref: gyms_gymsubscription.gym_id > gyms_gym.id
+Ref: gyms_gymsubscription.plan_id > gyms_gymmembershipplan.id
+Ref: gyms_gympayment.gym_id > gyms_gym.id
+Ref: gyms_gympayment.athlete_id > accounts_user.id
+Ref: gyms_gympayment.plan_id > gyms_gymmembershipplan.id
+Ref: gyms_gympayment.subscription_id > gyms_gymsubscription.id
+Ref: gyms_checkin.user_id > accounts_user.id
+Ref: gyms_checkin.gym_id > gyms_gym.id
+Ref: gyms_checkin.branch_id > gyms_branch.id
+Ref: gyms_branch.gym_id > gyms_gym.id

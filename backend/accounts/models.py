@@ -74,7 +74,6 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         related_name="users",
     )
     puntos = models.IntegerField(default=0)
-    nivel = models.IntegerField(default=1)
     google_id = models.CharField(max_length=255, blank=True, null=True)
     google_picture = models.URLField(blank=True, null=True)
     is_google_account = models.BooleanField(default=False)

@@ -1,0 +1,130 @@
+// MÓDULO 3 - WORKOUTS
+
+Table accounts_user {
+  id uuid [pk]
+  email varchar
+  role varchar
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+}
+
+Table workouts_exercise {
+  id uuid [pk]
+  gym_id uuid [null]
+  name varchar
+  category varchar
+  equipment varchar
+  muscle_group varchar
+  description text
+  media_url varchar
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_workoutroutine {
+  id uuid [pk]
+  gym_id uuid [null]
+  created_by_id uuid [null]
+  name varchar
+  objective text
+  level varchar
+  duration_minutes int
+  status varchar
+  points_reward int
+  is_public boolean
+  notes text
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_routineexercise {
+  id uuid [pk]
+  routine_id uuid
+  exercise_id uuid
+  order int
+  sets int
+  reps int
+  rest_seconds int
+  tempo varchar
+  weight_kg decimal [null]
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_workoutsession {
+  id uuid [pk]
+  user_id uuid
+  gym_id uuid [null]
+  routine_id uuid [null]
+  performed_at timestamp
+  duration_minutes int
+  perceived_exertion int
+  completion_percentage decimal
+  notes text
+  status varchar
+  points_awarded int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_sessionexerciselog {
+  id uuid [pk]
+  session_id uuid
+  routine_exercise_id uuid
+  sets_completed int
+  completed boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_userroutineassignment {
+  id uuid [pk]
+  user_id uuid
+  routine_id uuid
+  assigned_by_id uuid [null]
+  start_date date
+  end_date date [null]
+  status varchar
+  compliance_percentage decimal
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_weeklyroutineplan {
+  id uuid [pk]
+  athlete_id uuid
+  coach_id uuid [null]
+  routine_id uuid
+  day_of_week int
+  suggested_time time [null]
+  notes text
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: workouts_exercise.gym_id > gyms_gym.id
+Ref: workouts_workoutroutine.gym_id > gyms_gym.id
+Ref: workouts_workoutroutine.created_by_id > accounts_user.id
+Ref: workouts_routineexercise.routine_id > workouts_workoutroutine.id
+Ref: workouts_routineexercise.exercise_id > workouts_exercise.id
+Ref: workouts_workoutsession.user_id > accounts_user.id
+Ref: workouts_workoutsession.gym_id > gyms_gym.id
+Ref: workouts_workoutsession.routine_id > workouts_workoutroutine.id
+Ref: workouts_sessionexerciselog.session_id > workouts_workoutsession.id
+Ref: workouts_sessionexerciselog.routine_exercise_id > workouts_routineexercise.id
+Ref: workouts_userroutineassignment.user_id > accounts_user.id
+Ref: workouts_userroutineassignment.routine_id > workouts_workoutroutine.id
+Ref: workouts_userroutineassignment.assigned_by_id > accounts_user.id
+Ref: workouts_weeklyroutineplan.athlete_id > accounts_user.id
+Ref: workouts_weeklyroutineplan.coach_id > accounts_user.id
+Ref: workouts_weeklyroutineplan.routine_id > workouts_workoutroutine.id

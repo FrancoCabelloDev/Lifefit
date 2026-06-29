@@ -25,7 +25,7 @@ from workouts.models import (
     WorkoutSession,
     UserRoutineAssignment,
 )
-from challenges.models import Badge, Challenge, ChallengeParticipation, UserBadge, UserProgress
+from challenges.models import Badge, Challenge, ChallengeParticipation, UserBadge
 
 
 class Command(BaseCommand):
@@ -520,27 +520,17 @@ class Command(BaseCommand):
         self.stdout.write(f"[OK] Participaciones en retos creadas")
 
         # ============================================================
-        # 17. PROGRESO (UserProgress + puntos/nivel)
+        # 17. PUNTOS Y BADGES
         # ============================================================
         for i, athlete in enumerate(athletes):
-            UserProgress.objects.get_or_create(
-                user=athlete,
-                defaults={
-                    "level": (i + 1) * 2,
-                    "total_points": (i + 1) * 500,
-                    "current_xp": (i + 1) * 100,
-                    "next_level_xp": 1000,
-                },
-            )
             athlete.puntos = (i + 1) * 500
-            athlete.nivel = (i + 1) * 2
             athlete.save()
 
             # Dar badges a los primeros atletas
             if i < len(badges):
                 UserBadge.objects.get_or_create(user=athlete, badge=badges[i])
 
-        self.stdout.write(f"[OK] Progreso y badges asignados a atletas")
+        self.stdout.write(f"[OK] Puntos y badges asignados a atletas")
 
         # ============================================================
         # 18. NOTIFICACIONES DE EJEMPLO

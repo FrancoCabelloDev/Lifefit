@@ -1,0 +1,212 @@
+// FLUJO PRINCIPAL - Ciclo de vida del atleta en Lifefit
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+  slug varchar [unique]
+  status varchar
+  ruc varchar
+  contact_email varchar
+  max_athletes int
+  max_coaches int
+  max_nutritionists int
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table accounts_user {
+  id uuid [pk]
+  gym_id uuid [null]
+  email varchar [unique]
+  first_name varchar
+  last_name varchar
+  role varchar // SUPER_ADMIN, GYM_ADMIN, COACH, NUTRITIONIST, ATHLETE, RECEPTIONIST
+  is_active boolean
+  puntos int
+  nivel int
+  fitness_goal varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_gymmembershipplan {
+  id uuid [pk]
+  gym_id uuid
+  name varchar
+  description text
+  price decimal
+  duration_days int
+  tier varchar
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_gymsubscription {
+  id uuid [pk]
+  athlete_id uuid
+  gym_id uuid
+  plan_id uuid [null]
+  status varchar // active, expired, cancelled
+  start_date date
+  end_date date [null]
+  auto_renew boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_checkin {
+  id uuid [pk]
+  user_id uuid
+  gym_id uuid
+  method varchar // qr, manual
+  timestamp timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_workoutroutine {
+  id uuid [pk]
+  gym_id uuid [null]
+  created_by_id uuid [null]
+  name varchar
+  level varchar
+  duration_minutes int
+  status varchar
+  points_reward int
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table workouts_workoutsession {
+  id uuid [pk]
+  user_id uuid
+  gym_id uuid [null]
+  routine_id uuid [null]
+  performed_at timestamp
+  duration_minutes int
+  completion_percentage decimal
+  status varchar
+  points_awarded int
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_nutritionplan {
+  id uuid [pk]
+  gym_id uuid [null]
+  created_for_id uuid [null]
+  name varchar
+  calories_per_day int
+  protein_g int
+  carbs_g int
+  fats_g int
+  status varchar
+  points_reward int
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_usernutritionplan {
+  id uuid [pk]
+  user_id uuid
+  plan_id uuid
+  assigned_by_id uuid [null]
+  start_date date
+  end_date date [null]
+  status varchar
+  compliance_percentage decimal
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_userpoints {
+  id uuid [pk]
+  user_id uuid
+  points int
+  source varchar // workout, nutrition, challenge
+  description text
+  status varchar
+  week_start date [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table challenges_userprogress {
+  id uuid [pk]
+  user_id uuid [unique]
+  level int
+  total_points int
+  current_xp int
+  next_level_xp int
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_reward {
+  id uuid [pk]
+  gym_id uuid
+  name varchar
+  points_cost int
+  stock int [null]
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_rewardredemption {
+  id uuid [pk]
+  athlete_id uuid
+  reward_id uuid
+  status varchar // pending, approved, rejected
+  created_at timestamp
+  updated_at timestamp
+}
+
+// --- RELACIONES ---
+
+// El atleta pertenece a un gym
+Ref: accounts_user.gym_id > gyms_gym.id
+
+// El gym tiene planes de membresía
+Ref: gyms_gymmembershipplan.gym_id > gyms_gym.id
+
+// El atleta se suscribe a un plan
+Ref: gyms_gymsubscription.athlete_id > accounts_user.id
+Ref: gyms_gymsubscription.gym_id > gyms_gym.id
+Ref: gyms_gymsubscription.plan_id > gyms_gymmembershipplan.id
+
+// El atleta hace check-in
+Ref: gyms_checkin.user_id > accounts_user.id
+Ref: gyms_checkin.gym_id > gyms_gym.id
+
+// El coach crea rutinas para el gym
+Ref: workouts_workoutroutine.gym_id > gyms_gym.id
+Ref: workouts_workoutroutine.created_by_id > accounts_user.id
+
+// El atleta realiza sesiones de workout
+Ref: workouts_workoutsession.user_id > accounts_user.id
+Ref: workouts_workoutsession.gym_id > gyms_gym.id
+Ref: workouts_workoutsession.routine_id > workouts_workoutroutine.id
+
+// El nutricionista crea planes para el atleta
+Ref: nutrition_nutritionplan.gym_id > gyms_gym.id
+Ref: nutrition_nutritionplan.created_for_id > accounts_user.id
+
+// El atleta recibe un plan de nutrición
+Ref: nutrition_usernutritionplan.user_id > accounts_user.id
+Ref: nutrition_usernutritionplan.plan_id > nutrition_nutritionplan.id
+Ref: nutrition_usernutritionplan.assigned_by_id > accounts_user.id
+
+// El atleta acumula puntos
+Ref: gamification_userpoints.user_id > accounts_user.id
+
+// El atleta sube de nivel
+Ref: challenges_userprogress.user_id - accounts_user.id
+
+// El gym ofrece recompensas
+Ref: gamification_reward.gym_id > gyms_gym.id
+
+// El atleta canjea recompensas
+Ref: gamification_rewardredemption.athlete_id > accounts_user.id
+Ref: gamification_rewardredemption.reward_id > gamification_reward.id

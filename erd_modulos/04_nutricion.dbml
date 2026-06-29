@@ -1,0 +1,154 @@
+// MÓDULO 4 - NUTRICIÓN
+
+Table accounts_user {
+  id uuid [pk]
+  email varchar
+  role varchar
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+}
+
+Table nutrition_food {
+  id uuid [pk]
+  gym_id uuid [null]
+  created_by_id uuid [null]
+  name varchar
+  food_group varchar
+  source varchar
+  calories_per_100g decimal
+  protein_per_100g decimal
+  carbs_per_100g decimal
+  fats_per_100g decimal
+  fiber_per_100g decimal
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_nutritionplan {
+  id uuid [pk]
+  gym_id uuid [null]
+  created_for_id uuid [null]
+  name varchar
+  description text
+  calories_per_day int
+  protein_g int
+  carbs_g int
+  fats_g int
+  duration_days int
+  status varchar
+  points_reward int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_mealtemplate {
+  id uuid [pk]
+  plan_id uuid
+  day_number int [null]
+  weekday varchar [null]
+  meal_type varchar
+  name varchar
+  description text
+  calories int
+  protein_g int
+  carbs_g int
+  fats_g int
+  ingredients text
+  instructions text
+  order int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_mealfooditem {
+  id uuid [pk]
+  meal_id uuid
+  food_id uuid
+  quantity_g decimal
+  order smallint
+  calories decimal
+  protein_g decimal
+  carbs_g decimal
+  fats_g decimal
+  fiber_g decimal
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_usermeallog {
+  id uuid [pk]
+  user_id uuid
+  meal_template_id uuid
+  date date
+  status varchar
+  alternative_food_text text
+  notes text
+  photo varchar [null]
+  nutritionist_approved boolean [null]
+  nutritionist_notes text
+  reviewed_by_id uuid [null]
+  reviewed_at timestamp [null]
+  xp_awarded boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table nutrition_usernutritionplan {
+  id uuid [pk]
+  user_id uuid
+  plan_id uuid
+  assigned_by_id uuid [null]
+  start_date date
+  end_date date [null]
+  status varchar
+  compliance_percentage decimal
+  review_requested_at timestamp [null]
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gyms_bodymeasurement {
+  id uuid [pk]
+  athlete_id uuid
+  nutritionist_id uuid [null]
+  gym_id uuid
+  measured_at date
+  weight_kg decimal [null]
+  height_cm decimal [null]
+  body_fat_pct decimal [null]
+  muscle_mass_kg decimal [null]
+  waist_cm decimal [null]
+  hip_cm decimal [null]
+  arm_cm decimal [null]
+  visceral_fat smallint [null]
+  notes text
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: nutrition_food.gym_id > gyms_gym.id
+Ref: nutrition_food.created_by_id > accounts_user.id
+Ref: nutrition_nutritionplan.gym_id > gyms_gym.id
+Ref: nutrition_nutritionplan.created_for_id > accounts_user.id
+Ref: nutrition_mealtemplate.plan_id > nutrition_nutritionplan.id
+Ref: nutrition_mealfooditem.meal_id > nutrition_mealtemplate.id
+Ref: nutrition_mealfooditem.food_id > nutrition_food.id
+Ref: nutrition_usermeallog.user_id > accounts_user.id
+Ref: nutrition_usermeallog.meal_template_id > nutrition_mealtemplate.id
+Ref: nutrition_usermeallog.reviewed_by_id > accounts_user.id
+Ref: nutrition_usernutritionplan.user_id > accounts_user.id
+Ref: nutrition_usernutritionplan.plan_id > nutrition_nutritionplan.id
+Ref: nutrition_usernutritionplan.assigned_by_id > accounts_user.id
+Ref: gyms_bodymeasurement.athlete_id > accounts_user.id
+Ref: gyms_bodymeasurement.nutritionist_id > accounts_user.id
+Ref: gyms_bodymeasurement.gym_id > gyms_gym.id

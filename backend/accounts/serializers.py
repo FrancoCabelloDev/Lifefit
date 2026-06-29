@@ -27,7 +27,6 @@ class UserSerializer(serializers.ModelSerializer):
             "gym_slug",
             "active_membership",
             "puntos",
-            "nivel",
             "date_joined",
             "is_google_account",
             "google_picture",
@@ -45,7 +44,7 @@ class UserSerializer(serializers.ModelSerializer):
             "weight_kg",
         ]
         read_only_fields = [
-            "id", "date_joined", "nivel",
+            "id", "date_joined",
             "is_google_account", "google_picture",
             "gym_slug", "active_membership",
         ]

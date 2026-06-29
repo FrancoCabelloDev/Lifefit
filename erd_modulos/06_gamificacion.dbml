@@ -1,0 +1,158 @@
+// MÓDULO 6 - GAMIFICACIÓN Y RETOS
+
+Table accounts_user {
+  id uuid [pk]
+  email varchar
+  role varchar
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+}
+
+Table challenges_challenge {
+  id uuid [pk]
+  gym_id uuid [null]
+  responsible_id uuid [null]
+  name varchar
+  description text
+  type varchar
+  start_date date
+  start_time time [null]
+  end_date date
+  reward_points int
+  goal_value int
+  status varchar
+  verification_type varchar
+  max_participants int [null]
+  target_role varchar
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table challenges_challengeparticipation {
+  id uuid [pk]
+  challenge_id uuid
+  user_id uuid
+  progress int
+  status varchar
+  points_earned int
+  last_update timestamp
+  evidence_note text
+  verified_by_id uuid [null]
+  verified_at timestamp [null]
+  rejection_note text
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table challenges_badge {
+  id uuid [pk]
+  gym_id uuid [null]
+  name varchar
+  description text
+  icon varchar
+  condition varchar
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table challenges_userbadge {
+  id uuid [pk]
+  user_id uuid
+  badge_id uuid
+  awarded_at timestamp
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table challenges_userprogress {
+  id uuid [pk]
+  user_id uuid [unique]
+  level int
+  total_points int
+  current_xp int
+  next_level_xp int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_gympointsconfig {
+  id uuid [pk]
+  gym_id uuid [unique]
+  nutrition_week_points int
+  workout_week_points int
+  challenge_points int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_reward {
+  id uuid [pk]
+  gym_id uuid
+  name varchar
+  description text
+  image varchar [null]
+  points_cost int
+  stock int [null]
+  is_active boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_rewardredemption {
+  id uuid [pk]
+  athlete_id uuid
+  reward_id uuid
+  status varchar
+  notes text
+  reviewed_by_id uuid [null]
+  reviewed_at timestamp [null]
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table gamification_userpoints {
+  id uuid [pk]
+  user_id uuid
+  points int
+  pending_points int
+  status varchar
+  source varchar
+  description text
+  week_start date [null]
+  reviewed_by_id uuid [null]
+  reviewed_at timestamp [null]
+  related_session_id uuid [null]
+  related_challenge_id uuid [null]
+  related_nutrition_plan_id uuid [null]
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: challenges_challenge.gym_id > gyms_gym.id
+Ref: challenges_challenge.responsible_id > accounts_user.id
+Ref: challenges_challengeparticipation.challenge_id > challenges_challenge.id
+Ref: challenges_challengeparticipation.user_id > accounts_user.id
+Ref: challenges_challengeparticipation.verified_by_id > accounts_user.id
+Ref: challenges_badge.gym_id > gyms_gym.id
+Ref: challenges_userbadge.user_id > accounts_user.id
+Ref: challenges_userbadge.badge_id > challenges_badge.id
+Ref: challenges_userprogress.user_id - accounts_user.id
+Ref: gamification_gympointsconfig.gym_id - gyms_gym.id
+Ref: gamification_reward.gym_id > gyms_gym.id
+Ref: gamification_rewardredemption.athlete_id > accounts_user.id
+Ref: gamification_rewardredemption.reward_id > gamification_reward.id
+Ref: gamification_rewardredemption.reviewed_by_id > accounts_user.id
+Ref: gamification_userpoints.user_id > accounts_user.id
+Ref: gamification_userpoints.reviewed_by_id > accounts_user.id

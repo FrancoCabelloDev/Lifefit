@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from core.constants import XP_PER_LEVEL
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -104,26 +103,7 @@ def compute_auto_progress(participation: "ChallengeParticipation") -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _award_points(user_id: int, points: int, source: str = "challenge") -> None:
-    """
-    Suma puntos al progreso del usuario de forma atómica.
-    Crea el registro de UserProgress si no existe.
-    """
-    from .models import UserProgress
-
-    with transaction.atomic():
-        progress, _ = UserProgress.objects.select_for_update().get_or_create(
-            user_id=user_id
-        )
-        progress.total_points += points
-        progress.current_xp += points
-
-        while progress.current_xp >= XP_PER_LEVEL:
-            progress.current_xp -= XP_PER_LEVEL
-            progress.level += 1
-
-        progress.next_level_xp = XP_PER_LEVEL - progress.current_xp
-        progress.save(update_fields=["total_points", "current_xp", "next_level_xp", "level"])
-
+    """Registra puntos ganados por completar un reto."""
     try:
         from gamification.models import PointsLog
         PointsLog.objects.create(

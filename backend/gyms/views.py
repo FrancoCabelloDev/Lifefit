@@ -698,7 +698,7 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
 
         athlete_ids_page = [str(a.id) for a in athletes_page]
         athletes_values = athletes_qs.filter(id__in=[a.id for a in athletes_page]).values(
-            "id", "first_name", "last_name", "email", "nivel", "puntos", "is_active", "date_joined"
+            "id", "first_name", "last_name", "email", "puntos", "is_active", "date_joined"
         )
         athlete_map = {str(a["id"]): a for a in athletes_values}
         assignment_map = {}
@@ -747,7 +747,6 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
                 "first_name": athlete_info.get("first_name", ""),
                 "last_name": athlete_info.get("last_name", ""),
                 "email": athlete_info.get("email", ""),
-                "nivel": athlete_info.get("nivel", 0),
                 "puntos": athlete_info.get("puntos", 0),
                 "date_joined": athlete_info.get("date_joined"),
                 "has_active_routine": routine is not None,
@@ -818,7 +817,7 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         at_risk_count = len(at_risk_ids)
 
         at_risk_athletes = []
-        for u in User.objects.filter(id__in=at_risk_ids[:5]).values("id", "first_name", "last_name", "email", "nivel", "puntos"):
+        for u in User.objects.filter(id__in=at_risk_ids[:5]).values("id", "first_name", "last_name", "email", "puntos"):
             last_session = WorkoutSession.objects.filter(
                 user_id=u["id"], status="completed"
             ).order_by("-performed_at").first()
@@ -827,14 +826,13 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
                 "first_name": u["first_name"],
                 "last_name": u["last_name"],
                 "email": u["email"],
-                "nivel": u["nivel"],
                 "puntos": u["puntos"],
                 "last_session": last_session.performed_at.isoformat() if last_session else None,
             })
 
         top_athletes = list(
             User.objects.filter(id__in=athlete_ids).order_by("-puntos").values(
-                "id", "first_name", "last_name", "puntos", "nivel"
+                "id", "first_name", "last_name", "puntos"
             )[:5]
         )
         for a in top_athletes:
@@ -897,13 +895,13 @@ class CoachAssignmentViewSet(viewsets.ModelViewSet):
         response.write("﻿")
 
         writer = csv.writer(response)
-        writer.writerow(["Nombre", "Email", "Nivel", "Puntos", "Rutina Activa", "Plan Nutricional", "Sesiones (7d)", "Activo"])
+        writer.writerow(["Nombre", "Email", "Puntos", "Rutina Activa", "Plan Nutricional", "Sesiones (7d)", "Activo"])
 
         for a in athletes:
             routine = routines_map.get(a.id)
             plan = plans_map.get(a.id)
             writer.writerow([
-                f"{a.first_name} {a.last_name}", a.email, a.nivel, a.puntos,
+                f"{a.first_name} {a.last_name}", a.email, a.puntos,
                 routine.routine.name if routine else "",
                 plan.plan.name if plan else "",
                 sessions_map.get(a.id, 0),
@@ -1107,7 +1105,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
 
         athlete_ids_filter = [a.id for a in athletes_page]
         athletes_values = athletes_qs.filter(id__in=athlete_ids_filter).values(
-            "id", "first_name", "last_name", "email", "nivel", "puntos", "is_active", "date_joined"
+            "id", "first_name", "last_name", "email", "puntos", "is_active", "date_joined"
         )
         athlete_map = {str(a["id"]): a for a in athletes_values}
 
@@ -1136,7 +1134,6 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
                 "first_name": athlete_info.get("first_name", ""),
                 "last_name": athlete_info.get("last_name", ""),
                 "email": athlete_info.get("email", ""),
-                "nivel": athlete_info.get("nivel", 0),
                 "puntos": athlete_info.get("puntos", 0),
                 "date_joined": athlete_info.get("date_joined"),
                 "has_active_plan": plan is not None,
@@ -1272,7 +1269,7 @@ class NutritionistAssignmentViewSet(viewsets.ModelViewSet):
             plan = plans_map.get(a.id)
             compliance = plan.compliance_percentage if plan else 0
             writer.writerow([
-                f"{a.first_name} {a.last_name}", a.email, a.nivel, a.puntos,
+                f"{a.first_name} {a.last_name}", a.email, a.puntos,
                 plan.plan.name if plan else "",
                 compliance,
                 meals_map.get(a.id, 0),
@@ -2890,7 +2887,6 @@ def athlete_profile(request, athlete_id):
             "first_name": athlete.first_name,
             "last_name": athlete.last_name,
             "email": athlete.email,
-            "nivel": athlete.nivel,
             "puntos": athlete.puntos,
             "phone": athlete.phone,
             "dni": athlete.dni,

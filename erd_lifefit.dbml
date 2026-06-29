@@ -1,0 +1,774 @@
+Table core_globalannouncement {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  title varchar
+  message text
+  type varchar
+  target_audience varchar
+  is_active boolean
+  expires_at timestamp [null]
+}
+
+Table core_featureflag {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  name varchar
+  code varchar
+  description text
+  is_active_globally boolean
+}
+
+Table core_auditlog {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid [null]
+  action varchar
+  target_object_id varchar [null]
+  target_object_repr varchar [null]
+  details jsonb
+  ip_address inet [null]
+}
+
+Table accounts_user {
+  password varchar
+  last_login timestamp [null]
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  email varchar
+  first_name varchar
+  last_name varchar
+  role varchar
+  dni varchar [null]
+  phone varchar [null]
+  is_active boolean
+  is_staff boolean
+  is_superuser boolean
+  date_joined timestamp
+  gym_id uuid [null]
+  puntos int
+  nivel int
+  google_id varchar [null]
+  google_picture varchar [null]
+  is_google_account boolean
+  profile_picture varchar [null]
+  bio text
+  specialty varchar
+  years_experience smallint [null]
+  max_clients smallint
+  height_cm decimal [null]
+  weight_kg decimal [null]
+  fitness_goal varchar
+  goal_notes text
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  name varchar
+  slug varchar
+  description text
+  location varchar
+  status varchar
+  logo varchar [null]
+  ruc varchar
+  brand_color varchar
+  website varchar
+  contact_email varchar
+  metrics jsonb
+  max_athletes int
+  max_coaches int
+  max_nutritionists int
+}
+
+Table gyms_branch {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid
+  name varchar
+  slug varchar
+  address varchar
+  city varchar
+  state varchar
+  country varchar
+  zipcode varchar
+  status varchar
+  phone varchar
+  latitude decimal [null]
+  longitude decimal [null]
+}
+
+Table gyms_gymmembershipplan {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid
+  name varchar
+  description text
+  price decimal
+  duration_days int
+  features jsonb
+  is_active boolean
+  tier varchar
+}
+
+Table gyms_gymfeatureflag {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid
+  feature_flag_id uuid
+  is_active boolean
+}
+
+Table gyms_checkin {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  gym_id uuid
+  branch_id uuid [null]
+  method varchar
+  timestamp timestamp
+}
+
+Table gyms_nutritionistassignment {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  nutritionist_id uuid
+  athlete_id uuid
+  gym_id uuid
+  is_active boolean
+  assigned_at timestamp
+}
+
+Table gyms_notification {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  recipient_id uuid
+  actor_id uuid [null]
+  notification_type varchar
+  title varchar
+  message text
+  gym_id uuid [null]
+  is_read boolean
+  link varchar
+}
+
+Table gyms_coachassignment {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  coach_id uuid
+  athlete_id uuid
+  gym_id uuid
+  is_active boolean
+  assigned_at timestamp
+}
+
+Table gyms_gymsubscription {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  athlete_id uuid
+  gym_id uuid
+  plan_id uuid [null]
+  status varchar
+  start_date date
+  end_date date [null]
+  auto_renew boolean
+}
+
+Table gyms_gympayment {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid
+  subscription_id uuid [null]
+  athlete_id uuid [null]
+  plan_id uuid [null]
+  amount decimal
+  currency varchar
+  status varchar
+  paid_at timestamp
+  due_date date [null]
+  payment_method varchar
+  reference varchar
+  notes text
+}
+
+Table gyms_nutritionistappointment {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  nutritionist_id uuid
+  athlete_id uuid
+  gym_id uuid
+  scheduled_at timestamp
+  duration_minutes int
+  appointment_type varchar
+  status varchar
+  notes text
+  clinical_notes text
+  reschedule_note text
+  cancelled_by varchar
+}
+
+Table gyms_nutritionistavailability {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  nutritionist_id uuid
+  gym_id uuid
+  day_of_week int
+  start_time time
+  end_time time
+  slot_duration_minutes int
+  is_active boolean
+}
+
+Table gyms_availabilityoverride {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  nutritionist_id uuid
+  gym_id uuid
+  date date
+  reason varchar
+}
+
+Table gyms_bodymeasurement {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  nutritionist_id uuid [null]
+  athlete_id uuid
+  gym_id uuid
+  measured_at date
+  weight_kg decimal [null]
+  height_cm decimal [null]
+  body_fat_pct decimal [null]
+  muscle_mass_kg decimal [null]
+  waist_cm decimal [null]
+  hip_cm decimal [null]
+  arm_cm decimal [null]
+  visceral_fat smallint [null]
+  notes text
+}
+
+Table gyms_athletegoal {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  athlete_id uuid
+  gym_id uuid
+  target_weight_kg decimal [null]
+  target_body_fat_pct decimal [null]
+  target_date date [null]
+  notes text
+}
+
+Table gyms_nutritionistmessage {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  nutritionist_id uuid
+  athlete_id uuid
+  gym_id uuid
+  sender_is_nutritionist boolean
+  body text
+  is_read boolean
+}
+
+Table gyms_coachmessage {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  coach_id uuid
+  athlete_id uuid
+  gym_id uuid
+  sender_is_coach boolean
+  body text
+  is_read boolean
+}
+
+Table workouts_exercise {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid [null]
+  name varchar
+  category varchar
+  equipment varchar
+  muscle_group varchar
+  description text
+  media_url varchar
+}
+
+Table workouts_workoutroutine {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid [null]
+  name varchar
+  objective text
+  level varchar
+  duration_minutes int
+  status varchar
+  points_reward int
+  created_by_id uuid [null]
+  is_public boolean
+  notes text
+}
+
+Table workouts_routineexercise {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  routine_id uuid
+  exercise_id uuid
+  order int
+  sets int
+  reps int
+  rest_seconds int
+  tempo varchar
+  weight_kg decimal [null]
+}
+
+Table workouts_workoutsession {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  gym_id uuid [null]
+  routine_id uuid [null]
+  performed_at timestamp
+  duration_minutes int
+  perceived_exertion int
+  completion_percentage decimal
+  notes text
+  status varchar
+  points_awarded int
+}
+
+Table workouts_userroutineassignment {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  routine_id uuid
+  assigned_by_id uuid [null]
+  start_date date
+  end_date date [null]
+  status varchar
+  compliance_percentage decimal
+}
+
+Table workouts_sessionexerciselog {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  session_id uuid
+  routine_exercise_id uuid
+  sets_completed int
+  completed boolean
+}
+
+Table workouts_weeklyroutineplan {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  athlete_id uuid
+  coach_id uuid [null]
+  routine_id uuid
+  day_of_week int
+  suggested_time time [null]
+  notes text
+}
+
+Table challenges_challenge {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid [null]
+  name varchar
+  description text
+  type varchar
+  start_date date
+  start_time time [null]
+  end_date date
+  responsible_id uuid [null]
+  reward_points int
+  goal_value int
+  status varchar
+  verification_type varchar
+  max_participants int [null]
+  target_role varchar
+}
+
+Table challenges_challengeparticipation {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  challenge_id uuid
+  user_id uuid
+  progress int
+  status varchar
+  points_earned int
+  last_update timestamp
+  evidence_note text
+  verified_by_id uuid [null]
+  verified_at timestamp [null]
+  rejection_note text
+}
+
+Table challenges_badge {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid [null]
+  name varchar
+  description text
+  icon varchar
+  condition varchar
+}
+
+Table challenges_userbadge {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  badge_id uuid
+  awarded_at timestamp
+}
+
+Table challenges_userprogress {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  level int
+  total_points int
+  current_xp int
+  next_level_xp int
+}
+
+Table nutrition_food {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid [null]
+  created_by_id uuid [null]
+  name varchar
+  food_group varchar
+  source varchar
+  calories_per_100g decimal
+  protein_per_100g decimal
+  carbs_per_100g decimal
+  fats_per_100g decimal
+  fiber_per_100g decimal
+}
+
+Table nutrition_nutritionplan {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid [null]
+  name varchar
+  description text
+  calories_per_day int
+  protein_g int
+  carbs_g int
+  fats_g int
+  duration_days int
+  status varchar
+  points_reward int
+  created_for_id uuid [null]
+}
+
+Table nutrition_mealtemplate {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  plan_id uuid
+  day_number int [null]
+  weekday varchar [null]
+  meal_type varchar
+  name varchar
+  description text
+  calories int
+  protein_g int
+  carbs_g int
+  fats_g int
+  ingredients text
+  instructions text
+  order int
+}
+
+Table nutrition_mealfooditem {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  meal_id uuid
+  food_id uuid
+  quantity_g decimal
+  order smallint
+  calories decimal
+  protein_g decimal
+  carbs_g decimal
+  fats_g decimal
+  fiber_g decimal
+}
+
+Table nutrition_usermeallog {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  meal_template_id uuid
+  date date
+  status varchar
+  alternative_food_text text
+  notes text
+  photo varchar [null]
+  nutritionist_approved boolean [null]
+  nutritionist_notes text
+  reviewed_by_id uuid [null]
+  reviewed_at timestamp [null]
+  xp_awarded boolean
+}
+
+Table nutrition_nutritionmeal {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  plan_id uuid
+  order int
+  name varchar
+  meal_time varchar
+  notes text
+}
+
+Table nutrition_nutritionitem {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  meal_id uuid
+  food varchar
+  portion varchar
+  macros jsonb
+}
+
+Table nutrition_usernutritionplan {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  plan_id uuid
+  assigned_by_id uuid [null]
+  start_date date
+  end_date date [null]
+  status varchar
+  compliance_percentage decimal
+  review_requested_at timestamp [null]
+}
+
+Table gamification_gympointsconfig {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid
+  nutrition_week_points int
+  workout_week_points int
+  challenge_points int
+}
+
+Table gamification_reward {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  gym_id uuid
+  name varchar
+  description text
+  image varchar [null]
+  points_cost int
+  stock int [null]
+  is_active boolean
+}
+
+Table gamification_rewardredemption {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  athlete_id uuid
+  reward_id uuid
+  status varchar
+  notes text
+  reviewed_by_id uuid [null]
+  reviewed_at timestamp [null]
+}
+
+Table gamification_userpoints {
+  id uuid [pk]
+  created_at timestamp
+  updated_at timestamp
+  deleted_at timestamp [null]
+  user_id uuid
+  points int
+  pending_points int
+  status varchar
+  source varchar
+  description text
+  week_start date [null]
+  reviewed_by_id uuid [null]
+  reviewed_at timestamp [null]
+  related_session_id uuid [null]
+  related_challenge_id uuid [null]
+  related_nutrition_plan_id uuid [null]
+}
+
+// --- RELATIONSHIPS ---
+Ref: core_auditlog.user_id > accounts_user.id
+Ref: accounts_user.gym_id > gyms_gym.id
+Ref: gyms_branch.gym_id > gyms_gym.id
+Ref: gyms_gymmembershipplan.gym_id > gyms_gym.id
+Ref: gyms_gymfeatureflag.gym_id > gyms_gym.id
+Ref: gyms_gymfeatureflag.feature_flag_id > core_featureflag.id
+Ref: gyms_checkin.user_id > accounts_user.id
+Ref: gyms_checkin.gym_id > gyms_gym.id
+Ref: gyms_checkin.branch_id > gyms_branch.id
+Ref: gyms_nutritionistassignment.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistassignment.athlete_id > accounts_user.id
+Ref: gyms_nutritionistassignment.gym_id > gyms_gym.id
+Ref: gyms_notification.recipient_id > accounts_user.id
+Ref: gyms_notification.actor_id > accounts_user.id
+Ref: gyms_notification.gym_id > gyms_gym.id
+Ref: gyms_coachassignment.coach_id > accounts_user.id
+Ref: gyms_coachassignment.athlete_id > accounts_user.id
+Ref: gyms_coachassignment.gym_id > gyms_gym.id
+Ref: gyms_gymsubscription.athlete_id > accounts_user.id
+Ref: gyms_gymsubscription.gym_id > gyms_gym.id
+Ref: gyms_gymsubscription.plan_id > gyms_gymmembershipplan.id
+Ref: gyms_gympayment.gym_id > gyms_gym.id
+Ref: gyms_gympayment.subscription_id > gyms_gymsubscription.id
+Ref: gyms_gympayment.athlete_id > accounts_user.id
+Ref: gyms_gympayment.plan_id > gyms_gymmembershipplan.id
+Ref: gyms_nutritionistappointment.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistappointment.athlete_id > accounts_user.id
+Ref: gyms_nutritionistappointment.gym_id > gyms_gym.id
+Ref: gyms_nutritionistavailability.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistavailability.gym_id > gyms_gym.id
+Ref: gyms_availabilityoverride.nutritionist_id > accounts_user.id
+Ref: gyms_availabilityoverride.gym_id > gyms_gym.id
+Ref: gyms_bodymeasurement.nutritionist_id > accounts_user.id
+Ref: gyms_bodymeasurement.athlete_id > accounts_user.id
+Ref: gyms_bodymeasurement.gym_id > gyms_gym.id
+Ref: gyms_athletegoal.athlete_id - accounts_user.id
+Ref: gyms_athletegoal.gym_id > gyms_gym.id
+Ref: gyms_nutritionistmessage.nutritionist_id > accounts_user.id
+Ref: gyms_nutritionistmessage.athlete_id > accounts_user.id
+Ref: gyms_nutritionistmessage.gym_id > gyms_gym.id
+Ref: gyms_coachmessage.coach_id > accounts_user.id
+Ref: gyms_coachmessage.athlete_id > accounts_user.id
+Ref: gyms_coachmessage.gym_id > gyms_gym.id
+Ref: workouts_exercise.gym_id > gyms_gym.id
+Ref: workouts_workoutroutine.gym_id > gyms_gym.id
+Ref: workouts_workoutroutine.created_by_id > accounts_user.id
+Ref: workouts_routineexercise.routine_id > workouts_workoutroutine.id
+Ref: workouts_routineexercise.exercise_id > workouts_exercise.id
+Ref: workouts_workoutsession.user_id > accounts_user.id
+Ref: workouts_workoutsession.gym_id > gyms_gym.id
+Ref: workouts_workoutsession.routine_id > workouts_workoutroutine.id
+Ref: workouts_userroutineassignment.user_id > accounts_user.id
+Ref: workouts_userroutineassignment.routine_id > workouts_workoutroutine.id
+Ref: workouts_userroutineassignment.assigned_by_id > accounts_user.id
+Ref: workouts_sessionexerciselog.session_id > workouts_workoutsession.id
+Ref: workouts_sessionexerciselog.routine_exercise_id > workouts_routineexercise.id
+Ref: workouts_weeklyroutineplan.athlete_id > accounts_user.id
+Ref: workouts_weeklyroutineplan.coach_id > accounts_user.id
+Ref: workouts_weeklyroutineplan.routine_id > workouts_workoutroutine.id
+Ref: challenges_challenge.gym_id > gyms_gym.id
+Ref: challenges_challenge.responsible_id > accounts_user.id
+Ref: challenges_challengeparticipation.challenge_id > challenges_challenge.id
+Ref: challenges_challengeparticipation.user_id > accounts_user.id
+Ref: challenges_challengeparticipation.verified_by_id > accounts_user.id
+Ref: challenges_badge.gym_id > gyms_gym.id
+Ref: challenges_userbadge.user_id > accounts_user.id
+Ref: challenges_userbadge.badge_id > challenges_badge.id
+Ref: challenges_userprogress.user_id - accounts_user.id
+Ref: nutrition_food.gym_id > gyms_gym.id
+Ref: nutrition_food.created_by_id > accounts_user.id
+Ref: nutrition_nutritionplan.gym_id > gyms_gym.id
+Ref: nutrition_nutritionplan.created_for_id > accounts_user.id
+Ref: nutrition_mealtemplate.plan_id > nutrition_nutritionplan.id
+Ref: nutrition_mealfooditem.meal_id > nutrition_mealtemplate.id
+Ref: nutrition_mealfooditem.food_id > nutrition_food.id
+Ref: nutrition_usermeallog.user_id > accounts_user.id
+Ref: nutrition_usermeallog.meal_template_id > nutrition_mealtemplate.id
+Ref: nutrition_usermeallog.reviewed_by_id > accounts_user.id
+Ref: nutrition_nutritionmeal.plan_id > nutrition_nutritionplan.id
+Ref: nutrition_nutritionitem.meal_id > nutrition_nutritionmeal.id
+Ref: nutrition_usernutritionplan.user_id > accounts_user.id
+Ref: nutrition_usernutritionplan.plan_id > nutrition_nutritionplan.id
+Ref: nutrition_usernutritionplan.assigned_by_id > accounts_user.id
+Ref: gamification_gympointsconfig.gym_id - gyms_gym.id
+Ref: gamification_reward.gym_id > gyms_gym.id
+Ref: gamification_rewardredemption.athlete_id > accounts_user.id
+Ref: gamification_rewardredemption.reward_id > gamification_reward.id
+Ref: gamification_rewardredemption.reviewed_by_id > accounts_user.id
+Ref: gamification_userpoints.user_id > accounts_user.id
+Ref: gamification_userpoints.reviewed_by_id > accounts_user.id
+Ref: gamification_userpoints.related_session_id > workouts_workoutsession.id
+Ref: gamification_userpoints.related_challenge_id > challenges_challenge.id
+Ref: gamification_userpoints.related_nutrition_plan_id > nutrition_nutritionplan.id

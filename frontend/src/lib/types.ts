@@ -45,7 +45,6 @@ export type User = {
   last_name: string
   role: Role
   puntos: number
-  nivel: number
   gym?: string | number | null
   is_google_account?: boolean
   phone?: string | null
@@ -316,7 +315,6 @@ export type CoachAthlete = {
   first_name: string
   last_name: string
   email: string
-  nivel: number
   puntos: number
   has_active_routine: boolean
   routine_name: string | null
@@ -333,7 +331,6 @@ export type NutritionistAthlete = {
   first_name: string
   last_name: string
   email: string
-  nivel: number
   puntos: number
   has_active_plan: boolean
   plan_name: string | null
@@ -347,7 +344,6 @@ export type CoachAtRisk = {
   first_name: string
   last_name: string
   email: string
-  nivel: number
   puntos: number
   last_session: string | null
 }
@@ -361,7 +357,7 @@ export type CoachDashboard = {
   active_challenges: number
   at_risk_count: number
   at_risk_athletes: CoachAtRisk[]
-  top_athletes: { id: string; first_name: string; last_name: string; puntos: number; nivel: number }[]
+  top_athletes: { id: string; first_name: string; last_name: string; puntos: number }[]
 }
 
 export type NutritionistDashboard = {
@@ -596,17 +592,6 @@ export type UserNutritionPlan = {
   updated_at: string
 }
 
-export type UserProgress = {
-  id: string
-  user: string
-  user_detail: { id: string; email: string; first_name?: string; last_name?: string } | null
-  level: number
-  total_points: number
-  current_xp: number
-  next_level_xp: number
-  created_at: string
-  updated_at: string
-}
 
 export type NutritionistAppointment = {
   id: string

@@ -3,7 +3,6 @@
 Badge.condition format: "<key>:<threshold>"
 Supported keys:
   workouts_completed   — total completed WorkoutSessions
-  level                — UserProgress.level
   challenges_completed — completed ChallengeParticipations
   checkins             — total CheckIns
 """
@@ -41,11 +40,6 @@ def _meets_condition(user, condition: str) -> bool:
             WorkoutSession.objects.filter(user=user, status="completed").count()
             >= threshold
         )
-
-    if key == "level":
-        from .models import UserProgress
-        progress = UserProgress.objects.filter(user=user).first()
-        return bool(progress and progress.level >= threshold)
 
     if key == "challenges_completed":
         return (

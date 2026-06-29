@@ -1,0 +1,66 @@
+// MÓDULO 7 - SAAS (Suscripciones de Gimnasios a Lifefit)
+
+Table accounts_user {
+  id uuid [pk]
+  email varchar
+  role varchar
+}
+
+Table gyms_gym {
+  id uuid [pk]
+  name varchar
+  slug varchar
+}
+
+Table subscriptions_subscriptionplan {
+  id uuid [pk]
+  name varchar
+  description text
+  price decimal
+  currency varchar
+  billing_cycle varchar
+  user_limit int [null]
+  features jsonb
+  is_active boolean
+  max_athletes int
+  max_coaches int
+  max_nutritionists int
+  display_order int
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table subscriptions_subscription {
+  id uuid [pk]
+  plan_id uuid
+  owner_gym_id uuid [null]
+  owner_user_id uuid [null]
+  status varchar
+  start_date date
+  end_date date [null]
+  next_billing_date date [null]
+  cancel_at_period_end boolean
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table subscriptions_payment {
+  id uuid [pk]
+  subscription_id uuid
+  amount decimal
+  currency varchar
+  status varchar
+  paid_at timestamp
+  provider varchar
+  external_id varchar
+  deleted_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Ref: subscriptions_subscription.plan_id > subscriptions_subscriptionplan.id
+Ref: subscriptions_subscription.owner_gym_id > gyms_gym.id
+Ref: subscriptions_subscription.owner_user_id > accounts_user.id
+Ref: subscriptions_payment.subscription_id > subscriptions_subscription.id

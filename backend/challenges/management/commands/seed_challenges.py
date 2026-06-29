@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from django.core.management.base import BaseCommand
 
 from accounts.models import User
-from challenges.models import Challenge, ChallengeParticipation, UserProgress
+from challenges.models import Challenge, ChallengeParticipation
 from gyms.models import Gym
 
 
@@ -33,13 +33,9 @@ class Command(BaseCommand):
 
         athlete = User.objects.filter(role=User.Role.ATHLETE, gym=gym).first()
         if athlete:
-            participation, _ = ChallengeParticipation.objects.get_or_create(
+            ChallengeParticipation.objects.get_or_create(
                 challenge=challenge,
                 user=athlete,
                 defaults={"progress": 60, "points_earned": 120},
-            )
-            UserProgress.objects.get_or_create(
-                user=athlete,
-                defaults={"level": 2, "total_points": 500, "current_xp": 200, "next_level_xp": 1000},
             )
         self.stdout.write(self.style.SUCCESS("Reto demo creado/actualizado."))
