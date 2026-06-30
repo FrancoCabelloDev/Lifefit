@@ -389,11 +389,11 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
     setIsSubmitting(true)
     try {
       if (editingRoutine) {
-        await api.patch(`/api/workouts/routines/${editingRoutine.id}/`, { ...formData, gym: gymId })
+        await api.patch(`/api/workouts/routines/${editingRoutine.id}/`, { ...formData })
         showSuccess('Rutina actualizada')
         setIsModalOpen(false); resetForm(); fetchRoutines()
       } else {
-        const created: any = await api.post('/api/workouts/routines/', { ...formData, gym: gymId })
+        const created: any = await api.post('/api/workouts/routines/', { ...formData })
         setCreatedRoutineId(created.id); setStep('exercises'); fetchExercises()
       }
     } catch (e: any) {
