@@ -192,101 +192,127 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       )
     }
 
+    const myRank = rankingQuery.data?.my_rank ?? null
+    const totalRanking = rankingQuery.data?.count ?? null
+
     return (
-      <div className="space-y-8">
+      <div className="space-y-5">
         <OnboardingModal gymId={gymId} />
 
+        {/* Greeting */}
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Hola, {adminName} 👋
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">{gymName}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Hola, {adminName}
           </h1>
-          <p className="text-slate-500 mt-2 text-lg">
-            Este es tu progreso en <span className="font-semibold text-emerald-700">{gymName}</span>.
-          </p>
         </div>
 
+        {/* Points + ranking block */}
         {!isBasic && (
-          <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-emerald-100 text-sm font-medium uppercase tracking-wide">Tus puntos</p>
-                <p className="text-4xl font-bold mt-1">{ad.total_points ?? 0} pts</p>
-                {rankingQuery.data?.my_rank && (
-                  <p className="text-emerald-200 text-sm mt-1.5">
-                    Posición <span className="font-bold text-white">#{rankingQuery.data.my_rank}</span> en el ranking
+          <div
+            className="rounded-2xl border border-slate-200 bg-white overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+            onClick={() => router.push(`/${gymId}/panel/ranking`)}
+            style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1)' }}
+          >
+            <div className="flex items-stretch">
+              {/* Left: points */}
+              <div className="flex-1 p-5">
+                <p className="text-xs text-slate-400 font-medium mb-2">Puntos acumulados</p>
+                <div className="flex items-end gap-2 leading-none">
+                  <span className="text-5xl font-black text-emerald-700 tabular-nums">{(ad.total_points ?? 0).toLocaleString()}</span>
+                  <span className="text-base font-semibold text-emerald-600 mb-1">pts</span>
+                </div>
+                {myRank && (
+                  <p className="text-xs text-slate-500 mt-2.5 flex items-center gap-1.5">
+                    <Medal className="w-3.5 h-3.5 text-amber-400" />
+                    Posición <span className="font-bold text-slate-700">#{myRank}</span>
+                    {totalRanking ? <span className="text-slate-400"> de {totalRanking}</span> : null}
+                    <span className="text-slate-300">·</span>
+                    <span className="text-emerald-600 font-medium">Ver ranking →</span>
                   </p>
                 )}
               </div>
-              <div className="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center">
-                <Trophy className="h-8 w-8 text-yellow-300" />
+              {/* Right: trophy accent */}
+              <div className="w-16 bg-emerald-50 flex items-center justify-center border-l border-slate-100">
+                <Trophy className="w-7 h-7 text-emerald-400" />
               </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/20">
-              <button
-                onClick={() => router.push(`/${gymId}/panel/ranking`)}
-                className="text-xs text-emerald-100 hover:text-white transition-colors font-medium"
-              >
-                Ver ranking completo →
-              </button>
             </div>
           </div>
         )}
 
-        <div className={`grid gap-6 ${isBasic ? 'md:grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-4'}`}>
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Rutinas Hoy</p>
-                <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                  <Dumbbell className="h-5 w-5 text-emerald-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{ad.sessions_today}</h2>
-              <p className="text-xs text-slate-500 mt-1">Entrenamientos completados hoy</p>
-            </CardContent>
-          </Card>
+        {/* Activity strip */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Entrenamientos */}
+          <button
+            onClick={() => router.push(`/${gymId}/panel/mis-rutinas`)}
+            className="flex flex-col gap-3 p-4 rounded-2xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 transition-all text-left active:scale-[0.98]"
+            style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
+          >
+            <div className="flex items-center justify-between">
+              <Dumbbell className="w-4 h-4 text-emerald-600" />
+              {ad.sessions_today > 0 && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              )}
+            </div>
+            <div>
+              <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.sessions_today}</p>
+              <p className="text-xs text-slate-500 mt-0.5">Sesiones hoy</p>
+            </div>
+          </button>
 
-          <Card className="border-slate-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between pb-2">
-                <p className="text-sm font-medium text-slate-600">Comidas Hoy</p>
-                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                  <Activity className="h-5 w-5 text-amber-600" />
-                </div>
-              </div>
-              <h2 className="text-3xl font-bold text-slate-900">{ad.meals_today}</h2>
-              <p className="text-xs text-slate-500 mt-1">{ad.has_active_plan ? 'Plan activo' : 'Sin plan activo'}</p>
-            </CardContent>
-          </Card>
+          {/* Nutrición */}
+          <button
+            onClick={() => router.push(`/${gymId}/panel/mi-nutricion`)}
+            className="flex flex-col gap-3 p-4 rounded-2xl border border-slate-200 bg-white hover:border-amber-300 hover:bg-amber-50/30 transition-all text-left active:scale-[0.98]"
+            style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
+          >
+            <div className="flex items-center justify-between">
+              <Activity className="w-4 h-4 text-amber-500" />
+              {ad.meals_today > 0 && (
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+              )}
+            </div>
+            <div>
+              <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.meals_today}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {ad.has_active_plan ? 'Comidas registradas' : 'Sin plan activo'}
+              </p>
+            </div>
+          </button>
 
           {!isBasic && (
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between pb-2">
-                  <p className="text-sm font-medium text-slate-600">Retos Activos</p>
-                  <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                    <Target className="h-5 w-5 text-indigo-600" />
-                  </div>
-                </div>
-                <h2 className="text-3xl font-bold text-slate-900">{ad.active_challenges}</h2>
-                <p className="text-xs text-slate-500 mt-1">Retos en progreso</p>
-              </CardContent>
-            </Card>
+            <button
+              onClick={() => router.push(`/${gymId}/panel/mis-retos`)}
+              className="flex flex-col gap-3 p-4 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/30 transition-all text-left active:scale-[0.98]"
+              style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
+            >
+              <div className="flex items-center justify-between">
+                <Target className="w-4 h-4 text-indigo-500" />
+                {ad.active_challenges > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                )}
+              </div>
+              <div>
+                <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.active_challenges}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Retos activos</p>
+              </div>
+            </button>
           )}
 
           {!isBasic && (
-            <Card className="border-slate-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between pb-2">
-                  <p className="text-sm font-medium text-slate-600">Logros</p>
-                  <div className="w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
-                    <Award className="h-5 w-5 text-rose-600" />
-                  </div>
-                </div>
-                <h2 className="text-3xl font-bold text-slate-900">{ad.badges_count}</h2>
-                <p className="text-xs text-slate-500 mt-1">Insignias ganadas</p>
-              </CardContent>
-            </Card>
+            <button
+              onClick={() => router.push(`/${gymId}/panel/recompensas`)}
+              className="flex flex-col gap-3 p-4 rounded-2xl border border-slate-200 bg-white hover:border-rose-300 hover:bg-rose-50/20 transition-all text-left active:scale-[0.98]"
+              style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
+            >
+              <div className="flex items-center justify-between">
+                <Award className="w-4 h-4 text-rose-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.badges_count}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Insignias</p>
+              </div>
+            </button>
           )}
         </div>
 
@@ -377,41 +403,6 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
           </CardContent>
         </Card>}
 
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <CardTitle className="text-lg font-semibold text-slate-800">Acceso Rápido</CardTitle>
-            <CardDescription>Tu progreso y actividades</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 grid gap-4 md:grid-cols-3">
-            <button onClick={() => router.push(`/${gymId}/panel/mis-rutinas`)} className="flex items-center gap-4 p-4 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                <Dumbbell className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Mis Rutinas</p>
-                <p className="text-xs text-slate-500">Ver y registrar entrenamientos</p>
-              </div>
-            </button>
-            <button onClick={() => router.push(`/${gymId}/panel/mi-nutricion`)} className="flex items-center gap-4 p-4 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                <Activity className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Mi Nutrición</p>
-                <p className="text-xs text-slate-500">Plan y registro de comidas</p>
-              </div>
-            </button>
-            <button onClick={() => router.push(`/${gymId}/panel/mis-retos`)} className="flex items-center gap-4 p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all text-left">
-              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                <Target className="w-6 h-6 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Mis Retos</p>
-                <p className="text-xs text-slate-500">Desafíos y competencias</p>
-              </div>
-            </button>
-          </CardContent>
-        </Card>
       </div>
     )
   }
