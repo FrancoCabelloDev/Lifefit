@@ -1,7 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { use, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Loader2, Dumbbell, Clock, Zap, ChevronDown, ChevronUp,
@@ -12,7 +11,7 @@ import { es } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { getStoredUser } from '@/lib/auth'
+import { useRoleGuard } from '@/hooks/useRoleGuard'
 import { useFeatureGuard } from '@/hooks/useFeatureGuard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -190,18 +189,10 @@ function SessionCard({ session }: { session: SessionSummary }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MisSesionesPage({ params }: { params: Promise<{ gymId: string }> }) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { gymId }       = use(params)
+  useRoleGuard(gymId, ['athlete'])
   useFeatureGuard(gymId, 'rutinas')
-  const router          = useRouter()
   const [page, setPage] = useState(1)
-
-  useEffect(() => {
-    const user = getStoredUser<{ role: string }>()
-    if (user && user.role !== 'athlete') {
-      router.replace(`/${gymId}/panel`)
-    }
-  }, [gymId, router])
 
   const { data, isLoading } = useQuery<HistoryPage>({
     queryKey: ['workout-history', page],

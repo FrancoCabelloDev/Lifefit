@@ -331,6 +331,8 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
       }
     } catch {
       setAssignment(null)
+      setPlan(null)
+      setHistoryChain([])
     } finally {
       setIsLoading(false)
     }

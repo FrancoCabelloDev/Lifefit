@@ -27,14 +27,8 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
   const router = useRouter()
 
   const storedUser = getStoredUser<User>()
-  if (!storedUser) {
-    router.push('/tugimnasio')
-    return null
-  }
 
-  const user = storedUser
-  const adminName = storedUser.first_name || 'Usuario'
-
+  // All hooks must be called unconditionally before any early return (Rules of Hooks)
   const gymQuery = useQuery({
     queryKey: ['gym', gymId],
     queryFn: async () => {
@@ -43,25 +37,26 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       return g?.name || 'tu Gimnasio'
     },
     staleTime: 60000,
+    enabled: !!storedUser,
   })
   const gymName = gymQuery.data || 'tu Gimnasio'
 
   const statsQuery = useQuery({
     queryKey: ['gym-stats', gymId],
     queryFn: () => api.get<DashboardStats>("/api/gyms/dashboard/stats/"),
-    enabled: user.role !== 'athlete',
+    enabled: !!storedUser && storedUser.role !== 'athlete',
   })
 
   const athleteDashboardQuery = useQuery({
     queryKey: ['athlete-dashboard', gymId],
     queryFn: () => api.get<any>("/api/challenges/progress/my_dashboard/"),
-    enabled: user.role === 'athlete',
+    enabled: !!storedUser && storedUser.role === 'athlete',
   })
 
   const rankingQuery = useQuery({
     queryKey: ['ranking', gymId],
     queryFn: () => api.get<any>('/api/gamification/ranking/', { params: { gym_slug: gymId } }),
-    enabled: user.role === 'athlete',
+    enabled: !!storedUser && storedUser.role === 'athlete',
   })
 
   const myTeamQuery = useQuery({
@@ -81,14 +76,14 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       const myNutri = activeNutri ? nutris.find((n: any) => n.id === activeNutri.nutritionist) ?? null : null
       return { myCoach, myNutri }
     },
-    enabled: user.role === 'athlete',
+    enabled: !!storedUser && storedUser.role === 'athlete',
     staleTime: 30000,
   })
 
   const coachDashQuery = useQuery({
     queryKey: ['coach-dashboard', gymId],
     queryFn: () => api.get<CoachDashboard>("/api/gyms/coach-assignments/dashboard/"),
-    enabled: user.role === 'coach',
+    enabled: !!storedUser && storedUser.role === 'coach',
   })
 
   const [coachSearch, setCoachSearch] = useState('')
@@ -102,7 +97,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       })
       return { athletes: (data.results || []) as CoachAthlete[], total: data.total || 0, total_pages: data.total_pages || 1 }
     },
-    enabled: user.role === 'coach',
+    enabled: !!storedUser && storedUser.role === 'coach',
   })
   const coachAthletes = coachAthletesQuery.data?.athletes || []
   const coachTotalPages = coachAthletesQuery.data?.total_pages || 1
@@ -110,7 +105,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
   const nutriDashQuery = useQuery({
     queryKey: ['nutritionist-dashboard', gymId],
     queryFn: () => api.get<NutritionistDashboard>("/api/gyms/nutritionist-assignments/dashboard/"),
-    enabled: user.role === 'nutritionist',
+    enabled: !!storedUser && storedUser.role === 'nutritionist',
   })
 
   const complianceChartQuery = useQuery({
@@ -119,7 +114,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       const data = await api.get<any>("/api/gyms/nutritionist-assignments/compliance_chart/", { params: { days: '7' } })
       return (data?.daily || []) as { date: string; compliance: number; completed: number; total: number }[]
     },
-    enabled: user.role === 'nutritionist',
+    enabled: !!storedUser && storedUser.role === 'nutritionist',
     staleTime: 60000,
   })
 
@@ -134,20 +129,28 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
       })
       return { athletes: (data.results || []) as NutritionistAthlete[], total: data.total || 0, total_pages: data.total_pages || 1 }
     },
-    enabled: user.role === 'nutritionist',
+    enabled: !!storedUser && storedUser.role === 'nutritionist',
   })
   const nutriAthletes = nutriAthletesQuery.data?.athletes || []
   const nutriTotalPages = nutriAthletesQuery.data?.total_pages || 1
 
-  // ⚠️ Todos los hooks deben llamarse antes de cualquier return condicional (Rules of Hooks)
   const { tier: athleteTier } = useSubscriptionTier()
-  const isBasic = user?.role === 'athlete' && athleteTier !== 'premium'
+  const isBasic = storedUser?.role === 'athlete' && athleteTier !== 'premium'
 
-  if (user?.role === 'coach') {
+  // Redirect after all hooks — safe to do here
+  if (!storedUser) {
+    router.push('/tugimnasio')
+    return null
+  }
+
+  const user = storedUser
+  const adminName = storedUser.first_name || 'Usuario'
+
+  if (user.role === 'coach') {
     return <CoachDashboardView gymId={gymId} user={user} />
   }
 
-  if (user?.role === 'nutritionist') {
+  if (user.role === 'nutritionist') {
     return <NutritionistDashboardView gymId={gymId} user={user} />
   }
 
