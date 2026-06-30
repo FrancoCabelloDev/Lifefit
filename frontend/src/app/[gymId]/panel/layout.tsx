@@ -444,9 +444,16 @@ export default function GymPanelLayout({
         if (myGym) {
           setGymName(myGym.name)
           if (myGym.logo) {
-            const logoUrl = myGym.logo.startsWith('http')
-              ? myGym.logo
-              : `${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'}${myGym.logo}`
+            const raw = myGym.logo
+            let logoUrl: string
+            if (raw.startsWith('http://') || raw.startsWith('https://')) {
+              logoUrl = raw
+            } else if (raw.startsWith('image/upload/') || raw.startsWith('/image/upload/')) {
+              const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dhxgkei6z'
+              logoUrl = `https://res.cloudinary.com/${cloudName}/${raw.replace(/^\//, '')}`
+            } else {
+              logoUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'}/${raw.replace(/^\//, '')}`
+            }
             setGymLogo(logoUrl)
           }
           setGymColor(myGym.brand_color || '#10b981')
