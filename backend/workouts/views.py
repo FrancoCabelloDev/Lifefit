@@ -128,7 +128,10 @@ class WorkoutRoutineViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if user.role == User.Role.SUPER_ADMIN or (user.role in {User.Role.GYM_ADMIN} and instance.gym_id == user.gym_id):
+        if user.role == User.Role.SUPER_ADMIN:
+            instance.delete()
+            return
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and (instance.gym_id is None or instance.gym_id == user.gym_id):
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar esta rutina.")
