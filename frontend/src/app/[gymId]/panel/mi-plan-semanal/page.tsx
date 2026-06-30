@@ -708,20 +708,17 @@ export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId:
             >
               <MessageCircle className="w-4 h-4 mr-1.5" /> Escribir al coach
             </Button>
-          ) : canEdit ? (
+          ) : (
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2">
                 <UserPlus className="w-3.5 h-3.5 shrink-0" />
                 Aún no tienes un coach asignado
               </div>
-              <Button
-                onClick={() => setDialogOpen(true)}
-                className="bg-slate-900 hover:bg-slate-800 rounded-xl active:scale-[0.97]"
-              >
-                <Plus className="w-4 h-4 mr-1.5" /> Agregar primera rutina
-              </Button>
+              <p className="text-xs text-slate-400 text-center max-w-[220px] leading-relaxed">
+                Tu coach configurará tu plan semanal cuando te sea asignado
+              </p>
             </div>
-          ) : null}
+          )}
         </div>
       ) : (
         <div className="space-y-3">
