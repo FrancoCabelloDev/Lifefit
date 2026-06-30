@@ -508,6 +508,8 @@ export default function GymPanelLayout({
     router.push('/tugimnasio')
   }
 
+  const isMobile = useIsMobile()
+
   if (!isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 font-inter">
@@ -516,7 +518,6 @@ export default function GymPanelLayout({
     )
   }
 
-  const isMobile = useIsMobile()
   const navData = getNavData(userRole, gymId, pathname, featureFlags, subscriptionTier)
   const roleLabel = ROLE_LABELS[userRole]
   const roleHeader = ROLE_HEADERS[userRole]
