@@ -276,12 +276,17 @@ class RoutineExerciseViewSet(viewsets.ModelViewSet):
             return queryset.filter(routine__gym_id=user.gym_id)
         return queryset.none()
 
+    def _coach_can_edit_routine(self, user, routine):
+        if user.role == User.Role.SUPER_ADMIN:
+            return True
+        if user.role in {User.Role.GYM_ADMIN, User.Role.COACH}:
+            return routine.gym_id is None or routine.gym_id == user.gym_id
+        return False
+
     def perform_create(self, serializer):
         user = self.request.user
         routine = serializer.validated_data["routine"]
-        if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and routine.gym_id == user.gym_id
-        ):
+        if self._coach_can_edit_routine(user, routine):
             serializer.save()
             return
         raise PermissionDenied("No tienes permisos para agregar ejercicios a esta rutina.")
@@ -289,18 +294,14 @@ class RoutineExerciseViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user
         instance = self.get_object()
-        if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.routine.gym_id == user.gym_id
-        ):
+        if self._coach_can_edit_routine(user, instance.routine):
             serializer.save()
             return
         raise PermissionDenied("No puedes modificar este bloque de rutina.")
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if user.role == User.Role.SUPER_ADMIN or (
-            user.role in {User.Role.GYM_ADMIN, User.Role.COACH} and instance.routine.gym_id == user.gym_id
-        ):
+        if self._coach_can_edit_routine(user, instance.routine):
             instance.delete()
             return
         raise PermissionDenied("No puedes eliminar este bloque de rutina.")
