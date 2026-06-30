@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use, useRef } from 'react'
+import { useEffect, useState, use, useRef, useSyncExternalStore } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
@@ -71,6 +71,19 @@ import { getToken, getStoredUser, clearAuth, restoreAdminTokens, getAdminBackup,
 import type { User, Gym, PaginatedResponse, Role, Notification } from '@/lib/types'
 import GlobalBanner from '@/components/GlobalBanner'
 import { ROLE_LABELS, ROLE_HEADERS } from '@/lib/types'
+import { MobileNav } from '@/components/nav/MobileNav'
+
+function useIsMobile() {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia('(max-width: 767px)')
+      mq.addEventListener('change', cb)
+      return () => mq.removeEventListener('change', cb)
+    },
+    () => window.matchMedia('(max-width: 767px)').matches,
+    () => false,
+  )
+}
 
 const AUTHORIZED_ROLES: Role[] = ['gym_admin', 'coach', 'nutritionist', 'receptionist', 'athlete']
 
@@ -503,10 +516,111 @@ export default function GymPanelLayout({
     )
   }
 
+  const isMobile = useIsMobile()
   const navData = getNavData(userRole, gymId, pathname, featureFlags, subscriptionTier)
   const roleLabel = ROLE_LABELS[userRole]
   const roleHeader = ROLE_HEADERS[userRole]
 
+  // ── Mobile layout ─────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <TooltipProvider>
+        <div className="flex flex-col min-h-screen w-full bg-[#f2f2f7] font-inter">
+          <GlobalBanner />
+
+          {/* Mobile top bar */}
+          <header className="h-14 bg-white border-b border-slate-100 flex items-center justify-between px-4 sticky top-0 z-30">
+            <div className="flex items-center gap-3 min-w-0">
+              {gymLogo ? (
+                <img src={gymLogo} alt="" className="h-8 w-8 rounded-xl object-contain border border-slate-100 shrink-0" />
+              ) : (
+                <div
+                  className="h-8 w-8 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0"
+                  style={{ background: gymColor }}
+                >
+                  {gymName[0]?.toUpperCase()}
+                </div>
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-bold text-slate-900 leading-tight truncate font-lexend">{gymName}</span>
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider leading-tight">{roleHeader}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {isImpersonating && (
+                <button
+                  onClick={handleRestoreAdmin}
+                  className="h-8 px-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Admin
+                </button>
+              )}
+              <div className="relative">
+                <button
+                  onClick={() => { setShowNotif(prev => !prev); notifQuery.refetch() }}
+                  className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 relative"
+                >
+                  <Bell className="w-[18px] h-[18px]" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+                {showNotif && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
+                    <div className="absolute right-0 top-11 z-50 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+                      <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900 text-sm">Notificaciones</h3>
+                        {unreadCount > 0 && (
+                          <button onClick={() => markReadMutation.mutate()} className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                            <CheckCheck className="w-3.5 h-3.5" /> Marcar leídas
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {notifications.length > 0 ? notifications.map(n => (
+                          <div key={n.id} className={`p-3 border-b border-slate-50 ${!n.is_read ? 'bg-emerald-50/50' : ''}`}
+                            onClick={() => { if (n.link) router.push(n.link); setShowNotif(false) }}>
+                            <div className="flex items-start gap-2">
+                              <div className={`min-w-2 h-2 rounded-full mt-1.5 ${!n.is_read ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">{n.title}</p>
+                                {n.message && <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="py-10 text-center text-slate-400">
+                            <Bell className="w-7 h-7 mx-auto text-slate-300 mb-2" />
+                            <p className="text-sm font-medium">Sin notificaciones</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </header>
+
+          {/* Page content */}
+          <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom))' }}>
+            <div className="p-4 animate-in fade-in duration-300">
+              {children}
+            </div>
+          </main>
+
+          <MobileNav gymId={gymId} role={userRole} unreadCount={unreadCount} />
+        </div>
+      </TooltipProvider>
+    )
+  }
+
+  // ── Desktop layout (unchanged) ────────────────────────────────────────────
   return (
     <TooltipProvider>
       <SidebarProvider>
