@@ -35,6 +35,17 @@ class GymPointsConfigSerializer(serializers.ModelSerializer):
 class RewardSerializer(serializers.ModelSerializer):
     available_stock = serializers.ReadOnlyField()
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if instance.image:
+            try:
+                rep['image'] = instance.image.url
+            except Exception:
+                rep['image'] = None
+        else:
+            rep['image'] = None
+        return rep
+
     class Meta:
         model = Reward
         fields = [
