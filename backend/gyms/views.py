@@ -624,6 +624,61 @@ class CheckInViewSet(viewsets.ModelViewSet):
             "date": today.isoformat(),
         })
 
+    @action(detail=False, methods=["get"])
+    def my_athletes_today(self, request):
+        """
+        GET /api/gyms/checkins/my_athletes_today/
+        Devuelve los atletas asignados al coach con su estado de check-in de hoy.
+        Solo accesible por coaches y gym_admins.
+        """
+        user = request.user
+        allowed = {User.Role.COACH, User.Role.GYM_ADMIN, User.Role.SUPER_ADMIN}
+        if user.role not in allowed:
+            return Response({"detail": "Sin permisos."}, status=403)
+
+        today = date.today()
+
+        # Atletas asignados al coach (si es gym_admin ve todos los atletas del gym)
+        if user.role == User.Role.COACH:
+            athlete_ids = CoachAssignment.objects.filter(
+                coach=user, is_active=True
+            ).values_list("athlete_id", flat=True)
+            athletes = User.objects.filter(
+                id__in=athlete_ids, role=User.Role.ATHLETE
+            ).only("id", "first_name", "last_name", "email")
+        else:
+            athletes = User.objects.filter(
+                gym_id=user.gym_id, role=User.Role.ATHLETE
+            ).only("id", "first_name", "last_name", "email")
+
+        # Check-ins de hoy en un set para lookup O(1)
+        checked_in_ids = set(
+            CheckIn.objects.filter(
+                gym_id=user.gym_id,
+                timestamp__date=today,
+                user__in=athletes,
+            ).values_list("user_id", flat=True)
+        )
+
+        result = [
+            {
+                "athlete_id":   str(a.id),
+                "athlete_name": a.get_full_name() or a.email,
+                "checked_in":   a.id in checked_in_ids,
+            }
+            for a in athletes
+        ]
+
+        # Primero los que ya llegaron, luego por nombre
+        result.sort(key=lambda x: (not x["checked_in"], x["athlete_name"]))
+
+        return Response({
+            "date":     today.isoformat(),
+            "athletes": result,
+            "present":  sum(1 for a in result if a["checked_in"]),
+            "total":    len(result),
+        })
+
 
 class CoachAssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = CoachAssignmentSerializer
