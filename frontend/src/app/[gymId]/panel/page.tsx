@@ -207,38 +207,9 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
           </h1>
         </div>
 
-        {/* Points + ranking block */}
-        {!isBasic && (
-          <div
-            className="rounded-2xl bg-emerald-700 overflow-hidden cursor-pointer active:scale-[0.99] p-5 flex items-center justify-between gap-4"
-            onClick={() => router.push(`/${gymId}/panel/ranking`)}
-            style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1)' }}
-          >
-            <div>
-              <p className="text-emerald-300 text-xs font-medium mb-1">Tus puntos</p>
-              <div className="flex items-end gap-2 leading-none">
-                <span className="text-4xl font-black text-white tabular-nums">{(ad.total_points ?? 0).toLocaleString()}</span>
-                <span className="text-sm font-semibold text-emerald-300 mb-0.5">pts</span>
-              </div>
-              {myRank && (
-                <p className="text-emerald-200 text-xs mt-2 flex items-center gap-1.5">
-                  <Medal className="w-3 h-3 text-yellow-300" />
-                  Posición <span className="font-bold text-white">#{myRank}</span>
-                  {totalRanking ? <span className="text-emerald-300"> de {totalRanking}</span> : null}
-                  <span className="text-emerald-500 mx-0.5">·</span>
-                  <span className="text-emerald-200">Ver ranking →</span>
-                </p>
-              )}
-            </div>
-            <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-              <Trophy className="w-7 h-7 text-yellow-300" />
-            </div>
-          </div>
-        )}
-
-        {/* Activity strip */}
+        {/* Activity grid 2x2 */}
         <div className="grid grid-cols-2 gap-3">
-          {/* Entrenamientos */}
+          {/* Sesiones */}
           <button
             onClick={() => router.push(`/${gymId}/panel/mis-rutinas`)}
             className="flex flex-col gap-3 p-4 rounded-2xl border border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 transition-all text-left active:scale-[0.98]"
@@ -246,9 +217,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
           >
             <div className="flex items-center justify-between">
               <Dumbbell className="w-4 h-4 text-emerald-600" />
-              {ad.sessions_today > 0 && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              )}
+              {ad.sessions_today > 0 && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
             </div>
             <div>
               <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.sessions_today}</p>
@@ -264,9 +233,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
           >
             <div className="flex items-center justify-between">
               <Activity className="w-4 h-4 text-amber-500" />
-              {ad.meals_today > 0 && (
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-              )}
+              {ad.meals_today > 0 && <span className="w-2 h-2 rounded-full bg-amber-400" />}
             </div>
             <div>
               <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.meals_today}</p>
@@ -276,6 +243,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
             </div>
           </button>
 
+          {/* Retos */}
           {!isBasic && (
             <button
               onClick={() => router.push(`/${gymId}/panel/mis-retos`)}
@@ -284,9 +252,7 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
             >
               <div className="flex items-center justify-between">
                 <Target className="w-4 h-4 text-indigo-500" />
-                {ad.active_challenges > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                )}
+                {ad.active_challenges > 0 && <span className="w-2 h-2 rounded-full bg-indigo-400" />}
               </div>
               <div>
                 <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.active_challenges}</p>
@@ -295,18 +261,20 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
             </button>
           )}
 
+          {/* Puntos — reemplaza Insignias */}
           {!isBasic && (
             <button
-              onClick={() => router.push(`/${gymId}/panel/recompensas`)}
-              className="flex flex-col gap-3 p-4 rounded-2xl border border-slate-200 bg-white hover:border-rose-300 hover:bg-rose-50/20 transition-all text-left active:scale-[0.98]"
+              onClick={() => router.push(`/${gymId}/panel/ranking`)}
+              className="flex flex-col gap-3 p-4 rounded-2xl bg-emerald-700 hover:bg-emerald-800 transition-all text-left active:scale-[0.98]"
               style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1), background-color 150ms' }}
             >
               <div className="flex items-center justify-between">
-                <Award className="w-4 h-4 text-rose-400" />
+                <Trophy className="w-4 h-4 text-yellow-300" />
+                {myRank && <span className="text-[10px] font-bold text-emerald-300">#{myRank}</span>}
               </div>
               <div>
-                <p className="text-2xl font-black text-slate-900 tabular-nums">{ad.badges_count}</p>
-                <p className="text-xs text-slate-500 mt-0.5">Insignias</p>
+                <p className="text-2xl font-black text-white tabular-nums">{(ad.total_points ?? 0).toLocaleString()}</p>
+                <p className="text-xs text-emerald-300 mt-0.5">Puntos totales</p>
               </div>
             </button>
           )}
