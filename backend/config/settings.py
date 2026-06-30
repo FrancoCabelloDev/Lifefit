@@ -191,6 +191,12 @@ MEDIA_ROOT = BASE_DIR / 'media'
 CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME", default="")
 
 if CLOUDINARY_CLOUD_NAME:
+    import cloudinary
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=env("CLOUDINARY_API_KEY", default=""),
+        api_secret=env("CLOUDINARY_API_SECRET", default=""),
+    )
     CLOUDINARY_STORAGE = {
         "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
         "API_KEY":    env("CLOUDINARY_API_KEY",    default=""),
