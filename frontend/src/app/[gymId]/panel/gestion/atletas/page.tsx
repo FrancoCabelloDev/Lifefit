@@ -747,7 +747,7 @@ export default function AthletesPage({ params }: { params: Promise<{ gymId: stri
                           {athlete.date_joined ? new Date(athlete.date_joined).toLocaleDateString() : '-'}
                         </div>
                       </td>
-                      <td className="px-8 py-5 text-right">
+                      <td className="px-8 py-5 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           {canDeactivate && (
                             <Button
