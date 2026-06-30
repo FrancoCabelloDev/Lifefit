@@ -19,6 +19,8 @@ import type { WorkoutRoutine, PaginatedResponse } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
 import { useFeatureGuard } from '@/hooks/useFeatureGuard'
+import { useRouter } from 'next/navigation'
+import { MessageCircle, UserPlus } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -516,6 +518,7 @@ function RestDay({
 
 export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId: string }> }) {
   const { gymId }   = use(params)
+  const router      = useRouter()
   useRoleGuard(gymId, ['athlete'])
   useFeatureGuard(gymId, 'rutinas')
   const [slots, setSlots]       = useState<WeeklySlot[]>([])
@@ -698,14 +701,27 @@ export default function MiPlanSemanalPage({ params }: { params: Promise<{ gymId:
                 : 'Agrega rutinas a los días de la semana'}
             </p>
           </div>
-          {canEdit && (
+          {hasCoach ? (
             <Button
-              onClick={() => setDialogOpen(true)}
-              className="bg-slate-900 hover:bg-slate-800 rounded-xl active:scale-[0.97]"
+              onClick={() => router.push(`/${gymId}/panel/mensajes-coach`)}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl active:scale-[0.97]"
             >
-              <Plus className="w-4 h-4 mr-1.5" /> Agregar primera rutina
+              <MessageCircle className="w-4 h-4 mr-1.5" /> Escribir al coach
             </Button>
-          )}
+          ) : canEdit ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2">
+                <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                Aún no tienes un coach asignado
+              </div>
+              <Button
+                onClick={() => setDialogOpen(true)}
+                className="bg-slate-900 hover:bg-slate-800 rounded-xl active:scale-[0.97]"
+              >
+                <Plus className="w-4 h-4 mr-1.5" /> Agregar primera rutina
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-3">
