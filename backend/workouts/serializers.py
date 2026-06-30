@@ -73,6 +73,9 @@ class WorkoutRoutineSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "routine_exercises", "created_by", "completed_by_me", "completed_today"]
+        extra_kwargs = {
+            "gym": {"required": False, "allow_null": True},
+        }
 
     def create(self, validated_data):
         request = self.context.get("request")
