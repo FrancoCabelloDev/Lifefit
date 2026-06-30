@@ -115,7 +115,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if env("DB_NAME", default=None):
+if env("DATABASE_URL", default=None):
+    DATABASES = {
+        'default': env.db("DATABASE_URL")
+    }
+    DATABASES['default']['CONN_MAX_AGE'] = env.int('CONN_MAX_AGE', default=60)
+elif env("DB_NAME", default=None):
     DATABASES = {
         'default': {
             'ENGINE': env('DB_ENGINE', default='django.db.backends.postgresql'),
