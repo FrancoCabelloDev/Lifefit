@@ -801,19 +801,24 @@ export default function AdherenciaPage({ params }: { params: Promise<{ gymId: st
         {/* Today check-ins */}
         <TodayCheckins />
 
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Activos',          value: active,       color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'Con alerta',        value: alerts,       color: 'text-rose-500',    bg: 'bg-rose-50'    },
-            { label: 'Adherencia media',  value: `${avgPct}%`, color: 'text-slate-900',   bg: 'bg-slate-50'   },
-          ].map(s => (
-            <div key={s.label} className={cn('rounded-2xl border border-slate-200 p-4', s.bg)}>
-              <p className={cn('text-2xl font-black', s.color)}>{s.value}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </div>
+        {/* Context bar — reemplaza el grid de métricas */}
+        {data.length > 0 && (
+          <div className="flex items-center gap-3 text-sm text-slate-500">
+            {alerts > 0 ? (
+              <span className="flex items-center gap-1.5 text-rose-500 font-medium">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {alerts} {alerts === 1 ? 'atleta necesita atención' : 'atletas necesitan atención'}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Todos al día
+              </span>
+            )}
+            <span className="text-slate-200">·</span>
+            <span>{data.length} atletas asignados</span>
+          </div>
+        )}
 
         {/* Athlete list */}
         {data.length === 0 ? (
@@ -827,14 +832,22 @@ export default function AdherenciaPage({ params }: { params: Promise<{ gymId: st
           <div className="space-y-2">
             {data.map(athlete => {
               const isSelected = selectedId === athlete.athlete_id
+
+              // Estado legible en lugar de número
+              const statusPill = athlete.alert
+                ? { label: 'Inactivo', cls: 'bg-rose-50 text-rose-600 border-rose-200' }
+                : athlete.avg_adherence_pct >= 70
+                  ? { label: 'Al día', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                  : { label: 'Bajo seguimiento', cls: 'bg-amber-50 text-amber-700 border-amber-200' }
+
               return (
                 <button
                   key={athlete.athlete_id}
                   onClick={() => setSelectedId(isSelected ? null : athlete.athlete_id)}
                   className={cn(
-                    'w-full flex items-center gap-4 p-4 rounded-2xl border text-left transition-all duration-150',
+                    'w-full flex items-center gap-4 p-4 rounded-2xl border text-left',
                     athlete.alert
-                      ? 'border-rose-200 bg-rose-50/30 hover:bg-rose-50/60'
+                      ? 'border-rose-200 bg-rose-50/20 hover:bg-rose-50/50'
                       : 'border-slate-200 bg-white hover:bg-slate-50/60',
                     isSelected && 'ring-2 ring-emerald-400 ring-offset-1',
                   )}
@@ -845,63 +858,33 @@ export default function AdherenciaPage({ params }: { params: Promise<{ gymId: st
                 >
                   {/* Avatar */}
                   <div className={cn(
-                    'w-10 h-10 rounded-full flex items-center justify-center text-sm font-black shrink-0',
-                    athlete.alert ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-700',
+                    'w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
+                    athlete.alert ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600',
                   )}>
                     {athlete.athlete_name.charAt(0).toUpperCase()}
                   </div>
 
                   {/* Info */}
-                  <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-slate-800">{athlete.athlete_name}</p>
-                      {athlete.alert && <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />}
                       {athlete.pending_approval && (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">
                           <Zap className="w-2.5 h-2.5" /> Aprobar semana
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <InactivityLabel days={athlete.days_inactive} />
-                      <span className="text-slate-200 text-xs">·</span>
-                      <span className="text-xs text-slate-400">{athlete.total_sessions_30d} ses./30d</span>
-                    </div>
-                    {athlete.routines.length > 0 && (
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
-                        {athlete.routines.map(r => (
-                          <div key={r.routine_id} className="flex items-center gap-1.5">
-                            <div className="w-14 h-1 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  r.adherence_pct >= 75 ? 'bg-emerald-500'
-                                  : r.adherence_pct >= 40 ? 'bg-amber-400'
-                                  : 'bg-rose-400',
-                                )}
-                                style={{ width: `${r.adherence_pct}%` }}
-                              />
-                            </div>
-                            <span className="text-[10px] text-slate-400">{r.adherence_pct}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <InactivityLabel days={athlete.days_inactive} />
                   </div>
 
-                  {/* Right */}
+                  {/* Status pill + chevron */}
                   <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right hidden sm:block">
-                      <p className={cn(
-                        'text-base font-black',
-                        athlete.avg_adherence_pct >= 75 ? 'text-emerald-600'
-                        : athlete.avg_adherence_pct >= 40 ? 'text-amber-500'
-                        : 'text-rose-500',
-                      )}>
-                        {athlete.avg_adherence_pct}%
-                      </p>
-                      <p className="text-[10px] text-slate-400">adherencia</p>
-                    </div>
+                    <span className={cn(
+                      'hidden sm:inline-flex text-[11px] font-semibold border px-2.5 py-1 rounded-full',
+                      statusPill.cls,
+                    )}>
+                      {statusPill.label}
+                    </span>
                     <ChevronRight className={cn(
                       'w-4 h-4 transition-transform duration-150',
                       isSelected ? 'rotate-90 text-emerald-500' : 'text-slate-300',
