@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useState, use, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
@@ -74,15 +74,15 @@ import { ROLE_LABELS, ROLE_HEADERS } from '@/lib/types'
 import { MobileNav } from '@/components/nav/MobileNav'
 
 function useIsMobile() {
-  return useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia('(max-width: 767px)')
-      mq.addEventListener('change', cb)
-      return () => mq.removeEventListener('change', cb)
-    },
-    () => window.matchMedia('(max-width: 767px)').matches,
-    () => false,
-  )
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return isMobile
 }
 
 const AUTHORIZED_ROLES: Role[] = ['gym_admin', 'coach', 'nutritionist', 'receptionist', 'athlete']
