@@ -210,32 +210,28 @@ export default function GymDashboard({ params }: { params: Promise<{ gymId: stri
         {/* Points + ranking block */}
         {!isBasic && (
           <div
-            className="rounded-2xl border border-slate-200 bg-white overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+            className="rounded-2xl bg-emerald-700 overflow-hidden cursor-pointer active:scale-[0.99] p-5 flex items-center justify-between gap-4"
             onClick={() => router.push(`/${gymId}/panel/ranking`)}
             style={{ transition: 'transform 150ms cubic-bezier(0.23,1,0.32,1)' }}
           >
-            <div className="flex items-stretch">
-              {/* Left: points */}
-              <div className="flex-1 p-5">
-                <p className="text-xs text-slate-400 font-medium mb-2">Puntos acumulados</p>
-                <div className="flex items-end gap-2 leading-none">
-                  <span className="text-5xl font-black text-emerald-700 tabular-nums">{(ad.total_points ?? 0).toLocaleString()}</span>
-                  <span className="text-base font-semibold text-emerald-600 mb-1">pts</span>
-                </div>
-                {myRank && (
-                  <p className="text-xs text-slate-500 mt-2.5 flex items-center gap-1.5">
-                    <Medal className="w-3.5 h-3.5 text-amber-400" />
-                    Posición <span className="font-bold text-slate-700">#{myRank}</span>
-                    {totalRanking ? <span className="text-slate-400"> de {totalRanking}</span> : null}
-                    <span className="text-slate-300">·</span>
-                    <span className="text-emerald-600 font-medium">Ver ranking →</span>
-                  </p>
-                )}
+            <div>
+              <p className="text-emerald-300 text-xs font-medium mb-1">Tus puntos</p>
+              <div className="flex items-end gap-2 leading-none">
+                <span className="text-4xl font-black text-white tabular-nums">{(ad.total_points ?? 0).toLocaleString()}</span>
+                <span className="text-sm font-semibold text-emerald-300 mb-0.5">pts</span>
               </div>
-              {/* Right: trophy accent */}
-              <div className="w-16 bg-emerald-50 flex items-center justify-center border-l border-slate-100">
-                <Trophy className="w-7 h-7 text-emerald-400" />
-              </div>
+              {myRank && (
+                <p className="text-emerald-200 text-xs mt-2 flex items-center gap-1.5">
+                  <Medal className="w-3 h-3 text-yellow-300" />
+                  Posición <span className="font-bold text-white">#{myRank}</span>
+                  {totalRanking ? <span className="text-emerald-300"> de {totalRanking}</span> : null}
+                  <span className="text-emerald-500 mx-0.5">·</span>
+                  <span className="text-emerald-200">Ver ranking →</span>
+                </p>
+              )}
+            </div>
+            <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+              <Trophy className="w-7 h-7 text-yellow-300" />
             </div>
           </div>
         )}
