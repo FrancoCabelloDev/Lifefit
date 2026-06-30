@@ -124,67 +124,72 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
             const outOfStock = reward.available_stock === 0
             const requested = alreadyRequested.has(reward.id)
             const isDisabled = !canAfford || outOfStock || requested || redeemMutation.isPending
-
             const weeksNeeded = canAfford ? 0 : Math.ceil((reward.points_cost - totalPoints) / 100)
 
             return (
-              <Card
+              <div
                 key={reward.id}
-                className={`border shadow-sm transition-all overflow-hidden ${!isDisabled ? 'hover:shadow-md hover:-translate-y-0.5' : ''}`}
+                className={`rounded-2xl border bg-white overflow-hidden shadow-sm transition-all duration-200 ${!isDisabled ? 'hover:shadow-md hover:-translate-y-0.5' : ''} border-slate-200`}
               >
-                {reward.image && (
-                  <div className="relative w-full h-40 bg-slate-100">
-                    <img
-                      src={reward.image}
-                      alt={reward.name}
-                      className={`w-full h-full object-cover transition-all duration-300 ${outOfStock ? 'grayscale' : ''}`}
-                    />
-                    {outOfStock && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                        <span className="text-xs font-bold text-white bg-black/60 px-3 py-1.5 rounded-full tracking-wide">
-                          Agotado
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <CardContent className={`p-5 flex flex-col gap-3 ${isDisabled ? 'opacity-60' : ''}`}>
-                  <div className={reward.image ? '' : 'flex items-start gap-3'}>
-                    {!reward.image && (
-                      <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-                        <Gift className="w-6 h-6 text-amber-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 leading-tight">{reward.name}</p>
-                      {reward.description && (
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{reward.description}</p>
+                {/* Image banner */}
+                <div
+                  className="relative w-full bg-slate-100"
+                  style={{ aspectRatio: '16/9' }}
+                >
+                  {reward.image ? (
+                    <>
+                      <img
+                        src={reward.image}
+                        alt={reward.name}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        className={`transition-all duration-300 ${outOfStock ? 'grayscale' : ''}`}
+                      />
+                      {outOfStock && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <span className="text-xs font-bold text-white bg-black/60 px-3 py-1.5 rounded-full tracking-wide">
+                            Agotado
+                          </span>
+                        </div>
                       )}
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Gift className="w-10 h-10 text-slate-300" />
                     </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className={`p-4 flex flex-col gap-3 ${isDisabled && !outOfStock ? 'opacity-70' : ''}`}>
+                  <div>
+                    <p className="font-semibold text-slate-900 leading-snug">{reward.name}</p>
+                    {reward.description && (
+                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">{reward.description}</p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                      <span className="font-black text-slate-900">{reward.points_cost}</span>
-                      <span className="text-xs text-slate-500">pts</span>
+                    <div className="flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                      <span className="text-sm font-black text-slate-900">{reward.points_cost}</span>
+                      <span className="text-xs text-slate-400 ml-0.5">pts</span>
                     </div>
                     {reward.available_stock !== null && (
-                      <div className="flex items-center gap-1 text-xs text-slate-500">
-                        <Package className="w-3.5 h-3.5" />
+                      <div className="flex items-center gap-1 text-xs">
+                        <Package className="w-3 h-3 text-slate-400" />
                         {outOfStock ? (
-                          <span className="text-rose-500 font-semibold">Agotado</span>
+                          <span className="text-rose-500 font-semibold">Sin stock</span>
                         ) : (
-                          `${reward.available_stock} disp.`
+                          <span className="text-slate-400">{reward.available_stock} disp.</span>
                         )}
                       </div>
                     )}
                   </div>
 
                   {!canAfford && !outOfStock && !requested && weeksNeeded > 0 && (
-                    <p className="text-xs text-slate-400">
-                      Te faltan <span className="font-semibold text-slate-600">{reward.points_cost - totalPoints} pts</span>
-                      {' '}· aprox. {weeksNeeded} semana{weeksNeeded !== 1 ? 's' : ''} más
+                    <p className="text-xs text-slate-400 leading-snug">
+                      Faltan <span className="font-semibold text-slate-600">{reward.points_cost - totalPoints} pts</span>
+                      {' '}· aprox. {weeksNeeded} semana{weeksNeeded !== 1 ? 's' : ''}
                     </p>
                   )}
 
@@ -206,7 +211,7 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                     </div>
                   ) : (
                     <button
-                      onClick={() => setConfirmingId(reward.id)}
+                      onClick={() => !isDisabled && setConfirmingId(reward.id)}
                       disabled={isDisabled}
                       className={[
                         'w-full py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.97]',
@@ -220,8 +225,8 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                       {requested ? 'Solicitud enviada' : outOfStock ? 'Sin stock' : !canAfford ? 'Puntos insuficientes' : 'Canjear'}
                     </button>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )
           })}
         </div>
