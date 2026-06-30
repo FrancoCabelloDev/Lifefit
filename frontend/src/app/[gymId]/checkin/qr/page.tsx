@@ -65,7 +65,7 @@ export default function QRCheckinPage({ params }: { params: Promise<{ gymId: str
           <h1 className="text-2xl font-black text-slate-900">Inicia sesión</h1>
           <p className="text-slate-500">Debes iniciar sesión para registrar tu ingreso al gimnasio.</p>
           <button
-            onClick={() => router.push(`/ingresar?next=/${gymId}/checkin/qr`)}
+            onClick={() => router.push(`/${gymId}/ingresar?next=/${gymId}/checkin/qr`)}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl h-14 font-bold text-lg transition-all active:scale-95 shadow-lg shadow-emerald-600/20"
           >
             Iniciar Sesión

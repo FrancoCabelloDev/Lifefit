@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,6 +18,8 @@ interface LoginFormProps {
 
 export default function LoginForm({ gymId }: LoginFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextUrl = searchParams.get('next')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -37,14 +39,12 @@ export default function LoginForm({ gymId }: LoginFormProps) {
       setStoredUser(data.user)
       dispatchAuthEvent()
 
-      if (data.user.role === 'gym_admin') {
-        router.push(`/${gymId}/panel`)
-      } else if (data.user.role === 'athlete' || data.user.role === 'coach') {
-        router.push(`/${gymId}/panel`)
-      } else if (data.user.role === 'nutritionist' || data.user.role === 'receptionist') {
-        router.push(`/${gymId}/panel`)
-      } else {
+      if (nextUrl) {
+        router.push(nextUrl)
+      } else if (data.user.role === 'super_admin') {
         router.push('/panel-saas')
+      } else {
+        router.push(`/${gymId}/panel`)
       }
     } catch (err: any) {
       setError(err?.message || 'Error de conexión con el servidor')
