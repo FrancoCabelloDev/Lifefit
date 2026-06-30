@@ -130,13 +130,20 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
             return (
               <Card
                 key={reward.id}
-                className={`border shadow-sm transition-all ${isDisabled ? 'opacity-70' : 'hover:shadow-md hover:-translate-y-0.5'}`}
+                className={`border shadow-sm transition-all overflow-hidden ${isDisabled ? 'opacity-70' : 'hover:shadow-md hover:-translate-y-0.5'}`}
               >
+                {reward.image && (
+                  <div className="w-full h-40 bg-slate-100">
+                    <img src={reward.image} alt={reward.name} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <CardContent className="p-5 flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 flex items-center justify-center shrink-0">
-                      <Gift className="w-6 h-6 text-amber-500" />
-                    </div>
+                  <div className={reward.image ? '' : 'flex items-start gap-3'}>
+                    {!reward.image && (
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                        <Gift className="w-6 h-6 text-amber-400" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900 leading-tight">{reward.name}</p>
                       {reward.description && (

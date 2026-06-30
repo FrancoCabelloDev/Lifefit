@@ -1,10 +1,10 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Gift, Plus, Loader2, Pencil, Trash2, CheckCircle2, XCircle, Clock,
-  Package, AlertTriangle, Star,
+  Package, Star, ImagePlus, X,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -44,17 +44,20 @@ const STATUS_LABELS: Record<string, { label: string; color: string; icon: React.
 
 function RewardForm({ gymId, reward, onClose }: { gymId: string; reward?: Reward; onClose: () => void }) {
   const queryClient = useQueryClient()
-  const [name, setName] = useState(reward?.name ?? '')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [name, setName]             = useState(reward?.name ?? '')
   const [description, setDescription] = useState(reward?.description ?? '')
   const [pointsCost, setPointsCost] = useState(reward?.points_cost ?? 100)
-  const [stock, setStock] = useState<string>(reward?.stock != null ? String(reward.stock) : '')
-  const [isActive, setIsActive] = useState(reward?.is_active ?? true)
+  const [stock, setStock]           = useState<string>(reward?.stock != null ? String(reward.stock) : '')
+  const [isActive, setIsActive]     = useState(reward?.is_active ?? true)
+  const [imageFile, setImageFile]   = useState<File | null>(null)
+  const [preview, setPreview]       = useState<string | null>(reward?.image ?? null)
 
   const mutation = useMutation({
-    mutationFn: (data: object) =>
+    mutationFn: (form: FormData) =>
       reward
-        ? api.patch(`/api/gamification/${gymId}/rewards/${reward.id}/`, data)
-        : api.post(`/api/gamification/${gymId}/rewards/`, data),
+        ? api.patch(`/api/gamification/${gymId}/rewards/${reward.id}/`, form, { formData: true })
+        : api.post(`/api/gamification/${gymId}/rewards/`, form, { formData: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rewards', gymId] })
       showSuccess(reward ? 'Recompensa actualizada' : 'Recompensa creada')
@@ -63,15 +66,23 @@ function RewardForm({ gymId, reward, onClose }: { gymId: string; reward?: Reward
     onError: (err) => showError(err, 'Error al guardar'),
   })
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    setPreview(URL.createObjectURL(file))
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    mutation.mutate({
-      name,
-      description,
-      points_cost: pointsCost,
-      stock: stock.trim() === '' ? null : parseInt(stock),
-      is_active: isActive,
-    })
+    const form = new FormData()
+    form.append('name', name)
+    form.append('description', description)
+    form.append('points_cost', String(pointsCost))
+    form.append('stock', stock.trim() === '' ? '' : stock)
+    form.append('is_active', String(isActive))
+    if (imageFile) form.append('image', imageFile)
+    mutation.mutate(form)
   }
 
   return (
@@ -83,6 +94,47 @@ function RewardForm({ gymId, reward, onClose }: { gymId: string; reward?: Reward
           </h2>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+
+          {/* Image upload */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Imagen del producto</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            {preview ? (
+              <div className="relative w-full h-36 rounded-xl overflow-hidden border border-slate-200 group">
+                <img src={preview} alt="preview" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => { setPreview(null); setImageFile(null) }}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/20 transition-opacity"
+                >
+                  <span className="text-xs font-semibold text-white bg-black/50 px-3 py-1.5 rounded-lg">Cambiar imagen</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-28 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/30 flex flex-col items-center justify-center gap-2 transition-all group"
+              >
+                <ImagePlus className="w-6 h-6 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+                <span className="text-xs text-slate-400 group-hover:text-emerald-600 transition-colors">Subir imagen del producto</span>
+              </button>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Nombre</label>
             <input
@@ -228,7 +280,15 @@ export default function PuntosRecompensasPage({ params }: { params: Promise<{ gy
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {rewards.map(reward => (
-              <Card key={reward.id} className={`border shadow-sm transition-all ${reward.is_active ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}>
+              <Card key={reward.id} className={`border shadow-sm transition-all overflow-hidden ${reward.is_active ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}>
+                {reward.image ? (
+                  <div className="relative w-full h-36 bg-slate-100">
+                    <img src={reward.image} alt={reward.name} className="w-full h-full object-cover" />
+                    {!reward.is_active && (
+                      <span className="absolute top-2 right-2 text-[10px] font-bold text-slate-500 bg-white/90 px-2 py-0.5 rounded-full">Inactiva</span>
+                    )}
+                  </div>
+                ) : null}
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex-1 min-w-0">
@@ -237,7 +297,7 @@ export default function PuntosRecompensasPage({ params }: { params: Promise<{ gy
                         <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{reward.description}</p>
                       )}
                     </div>
-                    {!reward.is_active && (
+                    {!reward.is_active && !reward.image && (
                       <span className="shrink-0 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Inactiva</span>
                     )}
                   </div>
