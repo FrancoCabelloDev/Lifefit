@@ -585,6 +585,28 @@ def coach_adherence(request):
         if last_any:
             days_inactive = (today - timezone.localtime(last_any).date()).days
 
+        # Semana actual pendiente de aprobación
+        from gamification.models import UserPoints
+        current_week_start = today - timedelta(days=today.weekday())
+        current_week_end   = current_week_start + timedelta(days=6)
+        week_slots_count   = WeeklyRoutinePlan.objects.filter(athlete=athlete).count()
+        week_sessions      = WorkoutSession.objects.filter(
+            user=athlete,
+            status=WorkoutSession.Status.COMPLETED,
+            performed_at__date__gte=current_week_start,
+            performed_at__date__lte=current_week_end,
+        ).count()
+        already_approved_this_week = UserPoints.objects.filter(
+            user=athlete,
+            source="workout_week",
+            week_start=current_week_start,
+        ).exists()
+        pending_approval = (
+            week_slots_count > 0
+            and week_sessions >= week_slots_count
+            and not already_approved_this_week
+        )
+
         result.append({
             "athlete_id": str(athlete.id),
             "athlete_name": f"{athlete.first_name} {athlete.last_name}".strip() or athlete.email,
@@ -594,6 +616,8 @@ def coach_adherence(request):
             "avg_adherence_pct": avg_adherence,
             "days_inactive": days_inactive,
             "alert": days_inactive is None or days_inactive >= 7,
+            "pending_approval": pending_approval,
+            "current_week_start": current_week_start.isoformat(),
         })
 
     result.sort(key=lambda x: (not x["alert"], -x["avg_adherence_pct"]))

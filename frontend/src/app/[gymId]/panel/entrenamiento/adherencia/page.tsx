@@ -26,14 +26,16 @@ interface RoutineAdherence {
 }
 
 interface AthleteAdherence {
-  athlete_id:         string
-  athlete_name:       string
-  athlete_email:      string
-  routines:           RoutineAdherence[]
-  total_sessions_30d: number
-  avg_adherence_pct:  number
-  days_inactive:      number | null
-  alert:              boolean
+  athlete_id:          string
+  athlete_name:        string
+  athlete_email:       string
+  routines:            RoutineAdherence[]
+  total_sessions_30d:  number
+  avg_adherence_pct:   number
+  days_inactive:       number | null
+  alert:               boolean
+  pending_approval:    boolean
+  current_week_start:  string
 }
 
 interface ExerciseLog {
@@ -738,6 +740,11 @@ export default function AdherenciaPage({ params }: { params: Promise<{ gymId: st
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-slate-800">{athlete.athlete_name}</p>
                       {athlete.alert && <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />}
+                      {athlete.pending_approval && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          <Zap className="w-2.5 h-2.5" /> Aprobar semana
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <InactivityLabel days={athlete.days_inactive} />
