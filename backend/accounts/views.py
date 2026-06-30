@@ -176,7 +176,7 @@ class GymMemberViewSet(viewsets.ModelViewSet):
             'gymSlug': gym.slug,
             'gymName': gym.name
         })
-        invite_link = f"{frontend_url}/unirse?{params}"
+        invite_link = f"{frontend_url}/unirse/activar?{params}"
 
         try:
             from core.tasks import send_welcome_athlete_async, send_welcome_staff_async
