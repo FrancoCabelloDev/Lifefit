@@ -642,6 +642,7 @@ interface AthleteToday {
   athlete_id:   string
   athlete_name: string
   checked_in:   boolean
+  checkin_time: string | null
 }
 
 interface TodayData {
@@ -649,6 +650,14 @@ interface TodayData {
   athletes: AthleteToday[]
   present:  number
   total:    number
+}
+
+function timeAgo(isoString: string): string {
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 60000)
+  if (diff < 1)  return 'ahora mismo'
+  if (diff < 60) return `hace ${diff} min`
+  const h = Math.floor(diff / 60)
+  return `hace ${h}h`
 }
 
 function TodayCheckins() {
@@ -684,7 +693,6 @@ function TodayCheckins() {
           <span className="text-sm font-semibold text-slate-800">En el gym hoy</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Progress bar */}
           <div className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]"
@@ -699,28 +707,43 @@ function TodayCheckins() {
         </div>
       </div>
 
-      {/* Athlete chips */}
-      <div className="p-3 flex flex-wrap gap-2">
+      {/* Athlete list */}
+      <div className="divide-y divide-slate-50">
         {data.athletes.map((a, i) => (
           <div
             key={a.athlete_id}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium',
-              'transition-all duration-150',
+              'flex items-center gap-3 px-4 py-2.5',
               'animate-[fadeSlideIn_200ms_ease-out_both]',
-              a.checked_in
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-slate-50 border-slate-200 text-slate-400',
             )}
-            style={{ animationDelay: `${i * 35}ms` }}
+            style={{ animationDelay: `${i * 30}ms` }}
           >
+            {/* Status dot */}
             <div className={cn(
-              'w-1.5 h-1.5 rounded-full shrink-0',
-              a.checked_in ? 'bg-emerald-500' : 'bg-slate-300',
+              'w-2 h-2 rounded-full shrink-0 transition-colors',
+              a.checked_in ? 'bg-emerald-500' : 'bg-slate-200',
             )} />
-            {a.athlete_name.split(' ')[0]}
-            {a.checked_in && (
-              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+
+            {/* Name */}
+            <span className={cn(
+              'flex-1 text-sm font-medium',
+              a.checked_in ? 'text-slate-800' : 'text-slate-400',
+            )}>
+              {a.athlete_name}
+            </span>
+
+            {/* Time info */}
+            {a.checked_in && a.checkin_time ? (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs text-slate-400">
+                  {format(new Date(a.checkin_time), 'HH:mm')}
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                  {timeAgo(a.checkin_time)}
+                </span>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-300 shrink-0">No llegó</span>
             )}
           </div>
         ))}

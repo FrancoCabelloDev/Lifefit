@@ -651,26 +651,31 @@ class CheckInViewSet(viewsets.ModelViewSet):
                 gym_id=user.gym_id, role=User.Role.ATHLETE
             ).only("id", "first_name", "last_name", "email")
 
-        # Check-ins de hoy en un set para lookup O(1)
-        checked_in_ids = set(
+        # Check-ins de hoy: último por atleta con su timestamp
+        checkins_today = (
             CheckIn.objects.filter(
                 gym_id=user.gym_id,
                 timestamp__date=today,
                 user__in=athletes,
-            ).values_list("user_id", flat=True)
+            )
+            .order_by("user_id", "-timestamp")
+            .distinct("user_id")
+            .values("user_id", "timestamp")
         )
+        checkin_map = {c["user_id"]: c["timestamp"] for c in checkins_today}
 
         result = [
             {
-                "athlete_id":   str(a.id),
-                "athlete_name": a.get_full_name() or a.email,
-                "checked_in":   a.id in checked_in_ids,
+                "athlete_id":      str(a.id),
+                "athlete_name":    a.get_full_name() or a.email,
+                "checked_in":      a.id in checkin_map,
+                "checkin_time":    checkin_map[a.id].isoformat() if a.id in checkin_map else None,
             }
             for a in athletes
         ]
 
-        # Primero los que ya llegaron, luego por nombre
-        result.sort(key=lambda x: (not x["checked_in"], x["athlete_name"]))
+        # Primero los que ya llegaron (más reciente primero), luego por nombre
+        result.sort(key=lambda x: (not x["checked_in"], x["checkin_time"] or "", x["athlete_name"]))
 
         return Response({
             "date":     today.isoformat(),
