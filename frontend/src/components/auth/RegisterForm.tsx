@@ -29,7 +29,7 @@ export default function RegisterForm({ gymId }: RegisterFormProps) {
   const [isLoadingPlans, setIsLoadingPlans] = useState(true)
   
   const [plans, setPlans] = useState<GymMembershipPlan[]>([])
-  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
   const formattedGymName = gymId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 
