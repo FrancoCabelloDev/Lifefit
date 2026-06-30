@@ -144,6 +144,10 @@ export async function downloadFile(endpoint: string, filename: string): Promise<
 export function resolveMediaUrl(url: string | null | undefined): string | null {
   if (!url) return null
   if (url.startsWith("http://") || url.startsWith("https://")) return url
+  if (url.startsWith("image/upload/") || url.startsWith("/image/upload/")) {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "dhxgkei6z"
+    return `https://res.cloudinary.com/${cloudName}/${url.replace(/^\//, "")}`
+  }
   const base = API_BASE.replace(/\/$/, "")
   return `${base}/${url.replace(/^\//, "")}`
 }
