@@ -130,14 +130,25 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
             return (
               <Card
                 key={reward.id}
-                className={`border shadow-sm transition-all overflow-hidden ${isDisabled ? 'opacity-70' : 'hover:shadow-md hover:-translate-y-0.5'}`}
+                className={`border shadow-sm transition-all overflow-hidden ${!isDisabled ? 'hover:shadow-md hover:-translate-y-0.5' : ''}`}
               >
                 {reward.image && (
-                  <div className="w-full h-40 bg-slate-100">
-                    <img src={reward.image} alt={reward.name} className="w-full h-full object-cover" />
+                  <div className="relative w-full h-40 bg-slate-100">
+                    <img
+                      src={reward.image}
+                      alt={reward.name}
+                      className={`w-full h-full object-cover transition-all duration-300 ${outOfStock ? 'grayscale' : ''}`}
+                    />
+                    {outOfStock && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <span className="text-xs font-bold text-white bg-black/60 px-3 py-1.5 rounded-full tracking-wide">
+                          Agotado
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
-                <CardContent className="p-5 flex flex-col gap-3">
+                <CardContent className={`p-5 flex flex-col gap-3 ${isDisabled ? 'opacity-60' : ''}`}>
                   <div className={reward.image ? '' : 'flex items-start gap-3'}>
                     {!reward.image && (
                       <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
