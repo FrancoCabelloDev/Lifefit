@@ -85,11 +85,7 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
       const gym = data.results?.[0] || (Array.isArray(data) ? data[0] : null)
       if (gym) {
         setGymData(gym)
-        const timestamp = new Date().getTime()
-        const logoUrl = gym.logo
-          ? (gym.logo.startsWith('http') ? gym.logo : `${API_BASE}${gym.logo}`)
-          : null
-        setPreviewUrl(logoUrl ? `${logoUrl}?t=${timestamp}` : null)
+        setPreviewUrl(gym.logo ?? null)
       }
     } catch (err) {
       console.error('Error fetching gym data:', err)
@@ -143,7 +139,7 @@ export default function ConfigPage({ params }: { params: Promise<{ gymId: string
 
   const clearSelection = () => {
     setSelectedFile(null)
-    setPreviewUrl(gymData?.logo || null)
+    setPreviewUrl(gymData?.logo ?? null)
   }
 
   const handleFormSubmit = (e: React.FormEvent) => {

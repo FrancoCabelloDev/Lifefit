@@ -1,15 +1,64 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Gift, Star, Package, Loader2, CheckCircle2, XCircle, Clock,
+  Gift, Star, Package, Loader2, CheckCircle2, XCircle, Clock, X, ZoomIn,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { showError, showSuccess } from '@/lib/toast'
 import { useSubscriptionTier } from '@/lib/hooks'
 import { useRoleGuard } from '@/hooks/useRoleGuard'
+
+function ImagePreviewModal({ reward, onClose }: { reward: { name: string; image: string; description?: string }; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', handler)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-w-lg w-full"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
+        >
+          <X className="w-4 h-4" /> Cerrar
+        </button>
+
+        {/* Image */}
+        <div className="rounded-2xl overflow-hidden bg-black shadow-2xl">
+          <img
+            src={reward.image}
+            alt={reward.name}
+            className="w-full max-h-[70vh] object-contain"
+          />
+        </div>
+
+        {/* Caption */}
+        <div className="mt-3 text-center">
+          <p className="text-white font-semibold text-sm">{reward.name}</p>
+          {reward.description && (
+            <p className="text-white/60 text-xs mt-0.5 line-clamp-2">{reward.description}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface Reward {
   id: string
@@ -41,6 +90,8 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
   const { gymId } = use(params)
   useRoleGuard(gymId, ['athlete'])
   const queryClient = useQueryClient()
+
+  const [previewReward, setPreviewReward] = useState<Reward | null>(null)
 
   const statsQuery = useQuery({
     queryKey: ['my-stats'],
@@ -133,7 +184,7 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
               >
                 {/* Image banner */}
                 <div
-                  className="relative w-full bg-slate-100"
+                  className="relative w-full bg-slate-100 group"
                   style={{ aspectRatio: '16/9' }}
                 >
                   {reward.image ? (
@@ -144,6 +195,18 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                         className={`transition-all duration-300 ${outOfStock ? 'grayscale' : ''}`}
                       />
+                      {/* Zoom overlay on hover */}
+                      {!outOfStock && (
+                        <button
+                          onClick={() => setPreviewReward(reward)}
+                          className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-all duration-200"
+                          aria-label="Ver imagen completa"
+                        >
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1.5 bg-white/90 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow">
+                            <ZoomIn className="w-3.5 h-3.5" /> Ver producto
+                          </span>
+                        </button>
+                      )}
                       {outOfStock && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                           <span className="text-xs font-bold text-white bg-black/60 px-3 py-1.5 rounded-full tracking-wide">
@@ -263,6 +326,14 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
             )
           })}
         </div>
+      )}
+
+      {/* Image preview modal */}
+      {previewReward && previewReward.image && (
+        <ImagePreviewModal
+          reward={{ name: previewReward.name, image: previewReward.image, description: previewReward.description }}
+          onClose={() => setPreviewReward(null)}
+        />
       )}
     </div>
   )

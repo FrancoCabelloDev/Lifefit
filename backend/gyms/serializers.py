@@ -33,6 +33,16 @@ class BranchSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+def _cloudinary_url(field_value):
+    """Return full Cloudinary URL from a CloudinaryField value, or None."""
+    if not field_value:
+        return None
+    try:
+        return field_value.url
+    except Exception:
+        return None
+
+
 class GymSerializer(serializers.ModelSerializer):
     branches = BranchSerializer(many=True, read_only=True)
     active_plan = serializers.SerializerMethodField()
@@ -61,6 +71,11 @@ class GymSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "branches", "active_plan"]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["logo"] = _cloudinary_url(instance.logo)
+        return rep
 
     def get_active_plan(self, obj):
         from subscriptions.models import Subscription
@@ -103,6 +118,11 @@ class PublicGymSerializer(serializers.ModelSerializer):
             "min_price",
             "plans",
         ]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["logo"] = _cloudinary_url(instance.logo)
+        return rep
         read_only_fields = fields
 
     def get_active_members_count(self, obj):
