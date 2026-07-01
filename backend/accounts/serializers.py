@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from gyms.serializers import GymSubscriptionSerializer
@@ -153,12 +154,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if gym_slug:
             # Gym-specific login: super_admin is not allowed
             if user.role == user.Role.SUPER_ADMIN:
-                raise serializers.ValidationError(
+                raise AuthenticationFailed(
                     "Los administradores de LifeFit deben ingresar desde el panel de control."
                 )
             # User must belong to the requested gym
             if not user.gym or user.gym.slug != gym_slug:
-                raise serializers.ValidationError(
+                raise AuthenticationFailed(
                     "No tienes acceso a este gimnasio."
                 )
 
