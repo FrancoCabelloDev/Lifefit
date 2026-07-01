@@ -130,9 +130,13 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
   const rewards = rewardsQuery.data ?? []
   const redemptions = redemptionsQuery.data ?? []
 
-  const alreadyRequested = new Set(
-    redemptions.filter(r => r.status !== 'rejected').map(r => r.reward)
+  const pendingRedemptions = new Set(
+    redemptions.filter(r => r.status === 'pending').map(r => r.reward)
   )
+  const approvedRedemptions = new Set(
+    redemptions.filter(r => r.status === 'approved').map(r => r.reward)
+  )
+  const alreadyRequested = new Set([...pendingRedemptions, ...approvedRedemptions])
 
   const isLoading = rewardsQuery.isLoading || statsQuery.isLoading
 
@@ -174,7 +178,9 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
           {rewards.map(reward => {
             const canAfford = totalPoints >= reward.points_cost
             const outOfStock = reward.available_stock === 0
-            const requested = alreadyRequested.has(reward.id)
+            const isPending = pendingRedemptions.has(reward.id)
+            const isApproved = approvedRedemptions.has(reward.id)
+            const requested = isPending || isApproved
             const isDisabled = !canAfford || outOfStock || requested || redeemMutation.isPending
             const weeksNeeded = canAfford ? 0 : Math.ceil((reward.points_cost - totalPoints) / 100)
 
@@ -285,20 +291,31 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                         disabled={isDisabled}
                         className={[
                           'w-full py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5',
-                          requested
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-not-allowed'
-                            : canAfford && !outOfStock
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/20'
-                              : 'bg-slate-100 text-slate-400 cursor-not-allowed',
+                          isApproved
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed'
+                            : isPending
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-not-allowed'
+                              : canAfford && !outOfStock
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/20'
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed',
                         ].join(' ')}
                       >
-                        {requested ? (
-                          <><Clock className="w-3.5 h-3.5" /> Pendiente de entrega</>
-                        ) : outOfStock ? 'Sin stock' : !canAfford ? 'Puntos insuficientes' : 'Canjear'}
+                        {isApproved
+                          ? <><CheckCircle2 className="w-3.5 h-3.5" /> Aprobado</>
+                          : isPending
+                            ? <><Clock className="w-3.5 h-3.5" /> Pendiente de entrega</>
+                            : outOfStock ? 'Sin stock'
+                            : !canAfford ? 'Puntos insuficientes'
+                            : 'Canjear'}
                       </button>
-                      {requested && (
+                      {isPending && (
                         <p className="text-[11px] text-slate-400 text-center leading-snug">
                           El admin coordinará contigo la recogida del producto.
+                        </p>
+                      )}
+                      {isApproved && (
+                        <p className="text-[11px] text-emerald-600 text-center leading-snug font-medium">
+                          Revisa tus canjes para ver las instrucciones de recogida.
                         </p>
                       )}
                     </>
