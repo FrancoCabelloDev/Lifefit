@@ -104,6 +104,8 @@ def award_daily_points(user, target_date: date) -> dict | None:
     UserPoints.objects.create(
         user=user,
         points=base_pts,
+        pending_points=base_pts,
+        status=UserPoints.Status.APPROVED,
         source=source_key,
         description=f"Nutrición {target_date.isoformat()}: {compliance_pct}%",
     )
