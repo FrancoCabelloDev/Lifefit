@@ -388,12 +388,14 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
     e.preventDefault()
     setIsSubmitting(true)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { points_reward, ...coachPayload } = formData
       if (editingRoutine) {
-        await api.patch(`/api/workouts/routines/${editingRoutine.id}/`, { ...formData })
+        await api.patch(`/api/workouts/routines/${editingRoutine.id}/`, coachPayload)
         showSuccess('Rutina actualizada')
         setIsModalOpen(false); resetForm(); fetchRoutines()
       } else {
-        const created: any = await api.post('/api/workouts/routines/', { ...formData })
+        const created: any = await api.post('/api/workouts/routines/', coachPayload)
         setCreatedRoutineId(created.id); setStep('exercises'); fetchExercises()
       }
     } catch (e: any) {
@@ -659,10 +661,6 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-600">Duración (min)</Label>
                     <Input type="number" min={1} className="rounded-xl h-10 border-slate-200 text-sm" value={formData.duration_minutes} onChange={e => setFormData(f => ({ ...f, duration_minutes: parseInt(e.target.value) || 0 }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-slate-600">Puntos de recompensa</Label>
-                    <Input type="number" min={0} className="rounded-xl h-10 border-slate-200 text-sm" value={formData.points_reward} onChange={e => setFormData(f => ({ ...f, points_reward: parseInt(e.target.value) || 0 }))} />
                   </div>
                 </div>
                 <button
