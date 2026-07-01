@@ -102,18 +102,21 @@ def compute_auto_progress(participation: "ChallengeParticipation") -> int:
 # Otorgar puntos
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _award_points(user_id: int, points: int, source: str = "challenge") -> None:
-    """Registra puntos ganados por completar un reto."""
+def _award_points(user_id: int, points: int, source: str = "challenge", challenge=None) -> None:
+    """Registra puntos ganados por completar un reto. Nace aprobado (se cuenta de inmediato)."""
     try:
-        from gamification.models import PointsLog
-        PointsLog.objects.create(
+        from gamification.models import UserPoints
+        UserPoints.objects.create(
             user_id=user_id,
             points=points,
+            pending_points=points,
+            status=UserPoints.Status.APPROVED,
             source=source,
-            description="Reto completado",
+            description="Reto completado" if challenge is None else f"Reto completado: {challenge.name}",
+            related_challenge=challenge,
         )
     except Exception:
-        logger.warning("No se pudo crear PointsLog para user %s, source=%s", user_id, source, exc_info=True)
+        logger.warning("No se pudo crear UserPoints para user %s, source=%s", user_id, source, exc_info=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +175,7 @@ def _mark_completed(participation: "ChallengeParticipation", verified_by_id=None
 
         locked.save(update_fields=update_fields)
 
-    _award_points(participation.user_id, points)
+    _award_points(participation.user_id, points, challenge=participation.challenge)
 
     # Notificar al atleta que completó el reto
     _notify(
@@ -454,14 +457,14 @@ def declare_challenge_winner(
             locked.points_earned = challenge.reward_points
             locked.verified_by_id = declared_by_id
             locked.verified_at = timezone.now()
-            _award_points(locked.user_id, challenge.reward_points, source="challenge")
+            _award_points(locked.user_id, challenge.reward_points, source="challenge", challenge=challenge)
 
         locked.is_winner = True
         locked.save(update_fields=["status", "points_earned", "is_winner", "verified_by", "verified_at"])
 
     # Bonus points por ganar
     if bonus_points > 0:
-        _award_points(locked.user_id, bonus_points, source="challenge_winner")
+        _award_points(locked.user_id, bonus_points, source="challenge_winner", challenge=challenge)
 
     winner_name = f"{locked.user.first_name} {locked.user.last_name}".strip() or locked.user.email
     total_pts = challenge.reward_points + bonus_points
