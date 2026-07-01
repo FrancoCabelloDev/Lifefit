@@ -283,7 +283,23 @@ class NutritionPlanViewSet(viewsets.ModelViewSet):
             end_date=date.today() + timedelta(days=plan.duration_days),
             status='active'
         )
-        
+
+        try:
+            from gyms.views import create_notification
+            from gyms.models import Notification
+            gym = plan.gym or getattr(request.user, "gym", None)
+            create_notification(
+                recipient=target_user,
+                notification_type=Notification.Type.PLAN_ASSIGNED,
+                title="Nuevo plan nutricional",
+                message=f"Tu nutricionista te asignó el plan '{plan.name}'.",
+                actor=request.user,
+                gym=gym,
+                link=f"/{gym.slug}/panel/mi-nutricion" if gym else "",
+            )
+        except Exception:
+            logger.warning("assign_to_user: notificación fallida", exc_info=True)
+
         return Response({
             "detail": f"Plan asignado exitosamente a {target_user.email}",
             "assignment_id": str(assignment.id)
@@ -735,7 +751,24 @@ class UserNutritionPlanViewSet(viewsets.ModelViewSet):
         kwargs = {"status": target_status}
         if user.role != User.Role.SUPER_ADMIN:
             kwargs["assigned_by"] = user
-        serializer.save(**kwargs)
+        instance = serializer.save(**kwargs)
+
+        if instance.user_id != user.id:
+            try:
+                from gyms.views import create_notification
+                from gyms.models import Notification
+                gym = instance.plan.gym or getattr(user, "gym", None)
+                create_notification(
+                    recipient=instance.user,
+                    notification_type=Notification.Type.PLAN_ASSIGNED,
+                    title="Nuevo plan nutricional",
+                    message=f"Tu nutricionista te asignó el plan '{instance.plan.name}'.",
+                    actor=user,
+                    gym=gym,
+                    link=f"/{gym.slug}/panel/mi-nutricion" if gym else "",
+                )
+            except Exception:
+                logger.warning("perform_create (UserNutritionPlan): notificación fallida", exc_info=True)
 
     def perform_update(self, serializer):
         user = self.request.user
