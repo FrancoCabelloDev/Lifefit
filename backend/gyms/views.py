@@ -3152,7 +3152,8 @@ def gym_dashboard_stats(request):
         gym_id=gym_id,
         status="active",
         end_date__gte=today,
-    ).select_related("athlete", "plan")[:5]
+        end_date__lte=today + timedelta(days=10),
+    ).select_related("athlete", "plan").order_by("end_date")[:5]
 
     expiring_list = []
     for s in expiring_subscriptions:
