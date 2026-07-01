@@ -864,15 +864,30 @@ function ChallengeModal({ token, challenge, userGymId, onClose, onSave }: Challe
   const [error, setError]   = useState('')
 
   useEffect(() => {
+    let currentUser: StaffMember | null = null
     const stored = localStorage.getItem('lifefit_user')
     if (stored) {
       try {
         const user = JSON.parse(stored)
+        currentUser = user
         if (!challenge) setForm(prev => ({ ...prev, responsible: user.id || '' }))
       } catch {}
     }
     api.get<any>('/api/auth/gym-members/')
-      .then(d => setStaff(Array.isArray(d) ? d : d?.results ?? []))
+      .then(d => {
+        const members: StaffMember[] = Array.isArray(d) ? d : d?.results ?? []
+        // Solo coach/nutricionista/admin pueden ser encargados de un reto
+        // (son quienes verifican evidencia y declaran ganadores).
+        const manageable = members.filter(m =>
+          ['gym_admin', 'coach', 'nutritionist'].includes(m.role)
+        )
+        // gym-members excluye al usuario logueado, así que lo agregamos
+        // aparte para que pueda seguir siendo encargado de sus propios retos.
+        if (currentUser && !manageable.some(m => m.id === currentUser!.id)) {
+          manageable.unshift(currentUser)
+        }
+        setStaff(manageable)
+      })
       .catch(() => {})
   }, [challenge])
 
