@@ -2,6 +2,19 @@ import { getToken, getRefreshToken, setTokens, clearAuth, dispatchAuthEvent } fr
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 
+// Evita que múltiples peticiones en paralelo (todas con sesión vencida)
+// disparen redirects que se pisen entre sí.
+let sessionExpiredRedirectInFlight = false
+
+function redirectToLogin(): void {
+  if (typeof window === "undefined" || sessionExpiredRedirectInFlight) return
+  sessionExpiredRedirectInFlight = true
+  // El slug del gimnasio se toma de la URL actual (estable, no depende de
+  // localStorage que ya pudo haber sido limpiado por otra petición en curso).
+  const gymMatch = window.location.pathname.match(/^\/([^/]+)\/panel(\/|$)/)
+  window.location.href = gymMatch ? `/${gymMatch[1]}/ingresar` : "/ingresar"
+}
+
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 type RequestOptions = {
@@ -90,9 +103,7 @@ export async function request<T>(endpoint: string, opts: RequestOptions = {}): P
     } else {
       clearAuth()
       dispatchAuthEvent()
-      if (typeof window !== "undefined") {
-        window.location.href = "/ingresar"
-      }
+      redirectToLogin()
       throw new ApiError("Sesión expirada", 401)
     }
   }
