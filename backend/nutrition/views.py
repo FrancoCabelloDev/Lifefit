@@ -392,6 +392,14 @@ class UserMealLogViewSet(viewsets.ModelViewSet):
         except MealTemplate.DoesNotExist:
             return Response({"detail": "Comida no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
+        if meal_template.weekday:
+            meal_order = MealTemplate.WEEKDAY_ORDER.get(meal_template.weekday)
+            if meal_order is not None and meal_order > date.today().weekday():
+                return Response(
+                    {"detail": "No puedes registrar una comida de un día futuro."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         user_assignment = UserNutritionPlan.objects.filter(
             user=request.user, plan=meal_template.plan, status="completed"
         ).first()

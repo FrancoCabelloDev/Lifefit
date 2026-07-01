@@ -409,6 +409,7 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
 
   const dayMeals: any[] = mealsByDay[effectiveDay] ?? []
   const selectedLabel   = WEEKDAYS.find(d => d.value === effectiveDay)?.label ?? effectiveDay
+  const isFutureDay      = WEEKDAY_ORDER[effectiveDay] > todayOrder
 
   const completedToday = logs.filter(l => l.status === 'completed').length
   const totalLoggable  = dayMeals.length
@@ -803,7 +804,10 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
             {effectiveDay === todayWeekday && (
               <span className="ml-2 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Hoy</span>
             )}
-            {totalLoggable > 0 && (
+            {isFutureDay && (
+              <span className="ml-2 text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Próximamente</span>
+            )}
+            {!isFutureDay && totalLoggable > 0 && (
               <span className="ml-2 text-[11px] font-medium text-slate-400">
                 {completedToday}/{totalLoggable} registradas
               </span>
@@ -816,7 +820,7 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
               <p className="text-sm text-slate-400">Sin comidas para {selectedLabel}</p>
             </div>
           ) : (
-            <MealLogger meals={dayMeals} date={today} onRefresh={handleRefresh} logs={logs} />
+            <MealLogger meals={dayMeals} date={today} onRefresh={handleRefresh} logs={logs} readOnly={isFutureDay} />
           )}
         </div>
 

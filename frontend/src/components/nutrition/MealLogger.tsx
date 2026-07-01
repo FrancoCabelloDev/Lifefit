@@ -25,6 +25,7 @@ interface MealLoggerProps {
   date: string
   onRefresh: () => void
   logs: MealLogEntry[]
+  readOnly?: boolean
 }
 
 const MEAL_TIMES: Record<string, string> = {
@@ -43,7 +44,7 @@ const STATUS_STYLES = {
   alternative: { accent: 'border-l-blue-400',    badge: 'bg-blue-50 text-blue-700',        label: 'Comí otra cosa' },
 } as const
 
-export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerProps) {
+export default function MealLogger({ meals, date, onRefresh, logs, readOnly = false }: MealLoggerProps) {
   const [updating, setUpdating]     = useState<string | null>(null)
   const [uploading, setUploading]   = useState<string | null>(null)
   const [altText, setAltText]       = useState<Record<string, string>>({})
@@ -107,7 +108,7 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
         const isExpanded       = expanded[meal.id] ?? false
         const foodItems: any[] = (meal as any).food_items ?? []
         const totalCal         = foodItems.reduce((s: number, fi: any) => s + parseFloat(fi.calories ?? 0), 0)
-        const canUploadPhoto   = status === 'completed' && !!log?.id
+        const canUploadPhoto   = !readOnly && status === 'completed' && !!log?.id
         const approvalStatus   = log?.nutritionist_approved
 
         return (
@@ -195,7 +196,9 @@ export default function MealLogger({ meals, date, onRefresh, logs }: MealLoggerP
 
               {/* ── Action buttons ── */}
               <div className="flex flex-wrap gap-2 mt-4">
-                {isUpdating ? (
+                {readOnly ? (
+                  <span className="text-xs text-slate-400 italic">Podrás registrar esta comida cuando llegue el día.</span>
+                ) : isUpdating ? (
                   <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                 ) : (
                   <>
