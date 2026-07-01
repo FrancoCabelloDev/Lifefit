@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react'
 import {
-  Loader2, Dumbbell, Clock, Award, Plus, Trash2,
+  Loader2, Dumbbell, Clock, Plus, Trash2,
   CheckCircle2, Flame, ChevronDown, Info, ChevronRight,
 } from 'lucide-react'
 import { startOfWeek, addDays, format } from 'date-fns'
@@ -388,11 +388,6 @@ function WorkoutCard({
             <span className="text-xs text-slate-400">
               {exercises.length} ejercicios
             </span>
-            {routine.points_reward > 0 && (
-              <span className="text-xs text-amber-600 flex items-center gap-1">
-                <Award className="w-3 h-3" /> {routine.points_reward} pts
-              </span>
-            )}
           </div>
         </div>
 

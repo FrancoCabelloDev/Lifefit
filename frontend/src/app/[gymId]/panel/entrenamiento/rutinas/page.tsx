@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import {
   Dumbbell, Plus, Search, Loader2, Edit, Trash2,
-  Clock, Award, List, Layers, ChevronDown, ChevronUp,
+  Clock, List, Layers, ChevronDown, ChevronUp,
   X, GripVertical, CheckCircle2, Settings2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -537,7 +537,6 @@ export default function RoutinesPage({ params }: { params: Promise<{ gymId: stri
                   {/* Meta row */}
                   <div className="flex items-center gap-4 text-xs text-slate-500">
                     <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{routine.duration_minutes} min</span>
-                    <span className="flex items-center gap-1"><Award className="w-3.5 h-3.5" />{routine.points_reward} pts</span>
                     <span className="flex items-center gap-1"><List className="w-3.5 h-3.5" />{exerciseCount} ej.</span>
                   </div>
 

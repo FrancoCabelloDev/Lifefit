@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Loader2, Plus, Trash2, CalendarDays, Dumbbell,
-  Clock, Zap, Target,
+  Clock, Target,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -77,11 +77,6 @@ function SlotCard({ slot, onDelete }: { slot: WeeklySlot; onDelete: (id: string)
         {exCount > 0 && (
           <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-full">
             <Dumbbell className="w-2.5 h-2.5" /> {exCount} ej.
-          </span>
-        )}
-        {r?.points_reward > 0 && (
-          <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
-            <Zap className="w-2.5 h-2.5" /> {r.points_reward}
           </span>
         )}
       </div>
@@ -357,9 +352,6 @@ export default function WeeklyPlanTab({ gymId, athleteId }: { gymId: string; ath
                         {levelLabels[r.level]}
                       </span>
                       <span className="text-xs text-slate-400">{r.duration_minutes} min</span>
-                      {r.points_reward > 0 && (
-                        <span className="text-xs text-amber-600">+{r.points_reward} pts</span>
-                      )}
                     </div>
                   </div>
                 </div>
