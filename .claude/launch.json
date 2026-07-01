@@ -8,6 +8,14 @@
       "runtimeArgs": ["next", "dev", "-p", "3000"],
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "backend",
+      "cwd": "C:/Lifefit/backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["manage.py", "runserver", "8000"],
+      "port": 8000,
+      "autoPort": false
     }
   ]
 }

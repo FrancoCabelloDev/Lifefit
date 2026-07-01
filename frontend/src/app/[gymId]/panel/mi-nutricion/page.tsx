@@ -436,14 +436,6 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
     ? new Date(assignment.start_date).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })
     : undefined
 
-  // Día X de Y basado en start_date del plan activo
-  const planDuration = (plan?.duration_days ?? 7) || 7
-  const dayInWeek = assignment?.start_date
-    ? Math.min(
-        Math.max(Math.floor((Date.now() - new Date(assignment.start_date).getTime()) / 86400000) + 1, 1),
-        planDuration,
-      )
-    : null
 
   // Cumplimiento semanal (comidas de días pasados loggeadas)
   const loggedMealIds = new Set(allWeekLogs.map((l: any) => l.meal_template))
@@ -457,6 +449,13 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
 
   const missingCount  = dueMealIds.filter(id => !loggedMealIds.has(id)).length
   const canRequestReview = dueMealIds.length > 0 && missingCount === 0 && !reviewRequestedAt
+
+  // Días completos: de los días configurados en el plan, cuántos tienen
+  // todas sus comidas registradas (sin importar si ya vencieron o no).
+  const completedDaysCount = addedWeekdays.filter(d => {
+    const dayMealIds = (mealsByDay[d.value] ?? []).map((m: any) => m.id as string)
+    return dayMealIds.length > 0 && dayMealIds.every(id => loggedMealIds.has(id))
+  }).length
 
   const reviewButtonTooltip = reviewRequestedAt
     ? `Enviado el ${new Date(reviewRequestedAt).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`
@@ -727,17 +726,17 @@ export default function MiNutricionPage({ params }: { params: Promise<{ gymId: s
           </div>
         </div>
 
-        {/* Día X de Y + cumplimiento semanal */}
+        {/* Días completos + cumplimiento semanal */}
         <div className="grid grid-cols-2 gap-3">
-          {/* Día en la semana */}
-          {dayInWeek !== null && (
+          {/* Días completos del plan */}
+          {addedWeekdays.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Día</span>
-                <span className="text-xs font-bold text-slate-700">{dayInWeek} / {plan.duration_days ?? 7}</span>
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Días</span>
+                <span className="text-xs font-bold text-slate-700">{completedDaysCount} / {addedWeekdays.length}</span>
               </div>
               <Progress
-                value={Math.round((dayInWeek / (plan.duration_days ?? 7)) * 100)}
+                value={Math.round((completedDaysCount / addedWeekdays.length) * 100)}
                 className="h-1.5 bg-slate-100 [&>div]:bg-slate-400 [&>div]:transition-all [&>div]:duration-500"
               />
             </div>
