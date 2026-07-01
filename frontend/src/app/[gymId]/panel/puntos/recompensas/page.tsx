@@ -4,7 +4,7 @@ import { use, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Gift, Plus, Loader2, Pencil, Trash2, CheckCircle2, XCircle, Clock,
-  Package, Star, ImagePlus, X,
+  Package, Star, ImagePlus, X, Send, MapPin,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +32,7 @@ interface Redemption {
   athlete_name: string
   status: 'pending' | 'approved' | 'rejected'
   notes: string
+  pickup_info: string
   reviewed_at: string | null
   created_at: string
 }
@@ -195,6 +196,8 @@ export default function PuntosRecompensasPage({ params }: { params: Promise<{ gy
   const [tab, setTab] = useState<'catalog' | 'requests'>('requests')
   const [showForm, setShowForm] = useState(false)
   const [editingReward, setEditingReward] = useState<Reward | undefined>()
+  const [pickupInputId, setPickupInputId] = useState<string | null>(null)
+  const [pickupText, setPickupText] = useState('')
 
   const rewardsQuery = useQuery({
     queryKey: ['rewards', gymId],
@@ -220,6 +223,18 @@ export default function PuntosRecompensasPage({ params }: { params: Promise<{ gy
       showSuccess('Solicitud revisada')
     },
     onError: (err) => showError(err, 'Error al revisar'),
+  })
+
+  const pickupMutation = useMutation({
+    mutationFn: ({ id, pickup_info }: { id: string; pickup_info: string }) =>
+      api.patch(`/api/gamification/${gymId}/redemptions/${id}/pickup/`, { pickup_info }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['redemptions', gymId] })
+      showSuccess('Mensaje de recogida enviado al atleta')
+      setPickupInputId(null)
+      setPickupText('')
+    },
+    onError: (err) => showError(err, 'Error al enviar mensaje'),
   })
 
   const rewards = rewardsQuery.data ?? []
@@ -365,44 +380,102 @@ export default function PuntosRecompensasPage({ params }: { params: Promise<{ gy
               const s = STATUS_LABELS[r.status]
               const StatusIcon = s.icon
               return (
-                <Card key={r.id} className="border-slate-200 shadow-sm">
-                  <CardContent className="p-5 flex items-center gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-slate-900 text-sm">{r.athlete_name}</p>
-                        <span className="text-slate-400 text-xs">→</span>
-                        <p className="text-sm text-slate-700">{r.reward_name}</p>
+                <Card key={r.id} className={`shadow-sm transition-all ${r.status === 'approved' ? 'border-emerald-200' : 'border-slate-200'}`}>
+                  <CardContent className="p-5">
+                    {/* Header row */}
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-slate-900 text-sm">{r.athlete_name}</p>
+                          <span className="text-slate-300 text-xs">→</span>
+                          <p className="text-sm text-slate-700">{r.reward_name}</p>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${s.color}`}>
+                            <StatusIcon className="w-3 h-3" />
+                            {s.label}
+                          </span>
+                          <span className="flex items-center gap-1 text-xs text-slate-500">
+                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                            {r.reward_points_cost} pts
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            {new Date(r.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${s.color}`}>
-                          <StatusIcon className="w-3 h-3" />
-                          {s.label}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-slate-500">
-                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                          {r.reward_points_cost} pts
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {new Date(r.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </span>
-                      </div>
+                      {r.status === 'pending' && (
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            onClick={() => reviewMutation.mutate({ id: r.id, status: 'approved' })}
+                            disabled={reviewMutation.isPending}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-lg hover:bg-emerald-100 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar
+                          </button>
+                          <button
+                            onClick={() => reviewMutation.mutate({ id: r.id, status: 'rejected' })}
+                            disabled={reviewMutation.isPending}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg hover:bg-rose-100 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            <XCircle className="w-3.5 h-3.5" /> Rechazar
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {r.status === 'pending' && (
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => reviewMutation.mutate({ id: r.id, status: 'approved' })}
-                          disabled={reviewMutation.isPending}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-lg hover:bg-emerald-100 active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar
-                        </button>
-                        <button
-                          onClick={() => reviewMutation.mutate({ id: r.id, status: 'rejected' })}
-                          disabled={reviewMutation.isPending}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg hover:bg-rose-100 active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          <XCircle className="w-3.5 h-3.5" /> Rechazar
-                        </button>
+
+                    {/* Pickup info section — only for approved */}
+                    {r.status === 'approved' && (
+                      <div className="mt-4 pt-4 border-t border-emerald-100">
+                        {r.pickup_info ? (
+                          <div className="flex items-start gap-2 bg-emerald-50 rounded-xl p-3">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-emerald-700 mb-0.5">Instrucciones de recogida enviadas</p>
+                              <p className="text-xs text-emerald-600 leading-relaxed">{r.pickup_info}</p>
+                            </div>
+                            <button
+                              onClick={() => { setPickupInputId(r.id); setPickupText(r.pickup_info) }}
+                              className="text-[10px] text-emerald-500 hover:text-emerald-700 font-medium shrink-0"
+                            >
+                              Editar
+                            </button>
+                          </div>
+                        ) : pickupInputId === r.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={pickupText}
+                              onChange={e => setPickupText(e.target.value)}
+                              placeholder="Ej: Puedes pasar de lunes a viernes entre 8am y 7pm. Preguntar por el encargado en recepción."
+                              rows={2}
+                              className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+                            />
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={() => { setPickupInputId(null); setPickupText('') }}
+                                className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => pickupMutation.mutate({ id: r.id, pickup_info: pickupText })}
+                                disabled={!pickupText.trim() || pickupMutation.isPending}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-all active:scale-95"
+                              >
+                                {pickupMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                                Enviar al atleta
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setPickupInputId(r.id); setPickupText('') }}
+                            className="w-full flex items-center justify-center gap-2 py-2 border border-dashed border-emerald-300 rounded-xl text-xs font-semibold text-emerald-600 hover:bg-emerald-50 transition-all active:scale-[0.98]"
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                            Enviar instrucciones de recogida
+                          </button>
+                        )}
                       </div>
                     )}
                   </CardContent>

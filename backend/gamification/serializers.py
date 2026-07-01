@@ -77,6 +77,7 @@ class RewardRedemptionSerializer(serializers.ModelSerializer):
             "athlete_name",
             "status",
             "notes",
+            "pickup_info",
             "reviewed_by",
             "reviewed_at",
             "created_at",

@@ -300,3 +300,31 @@ class RewardRedemptionViewSet(viewsets.ModelViewSet):
             )
 
         return Response(RewardRedemptionSerializer(redemption).data)
+
+    @action(detail=True, methods=["patch"], url_path="pickup")
+    def send_pickup_info(self, request, gym_slug=None, pk=None):
+        """Admin sends pickup instructions to the athlete after approval."""
+        if request.user.role not in ("gym_admin", "super_admin"):
+            return Response({"detail": "No autorizado."}, status=403)
+
+        redemption = self.get_object()
+        if redemption.status != RewardRedemption.Status.APPROVED:
+            return Response({"detail": "Solo se puede enviar info de recogida en canjes aprobados."}, status=400)
+
+        pickup_info = request.data.get("pickup_info", "").strip()
+        if not pickup_info:
+            return Response({"detail": "El mensaje de recogida no puede estar vacío."}, status=400)
+
+        redemption.pickup_info = pickup_info
+        redemption.save(update_fields=["pickup_info", "updated_at"])
+
+        create_notification(
+            recipient=redemption.athlete,
+            notification_type=Notification.Type.SYSTEM,
+            title=f"Info de recogida: {redemption.reward.name}",
+            message=pickup_info,
+            actor=request.user,
+            gym=redemption.reward.gym,
+        )
+
+        return Response(RewardRedemptionSerializer(redemption).data)

@@ -3,7 +3,7 @@
 import { use, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Gift, Star, Package, Loader2, CheckCircle2, XCircle, Clock, X, ZoomIn,
+  Gift, Star, Package, Loader2, CheckCircle2, XCircle, Clock, X, ZoomIn, MapPin,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/lib/api'
@@ -77,6 +77,7 @@ interface Redemption {
   reward_name: string
   reward_points_cost: number
   status: 'pending' | 'approved' | 'rejected'
+  pickup_info: string
   created_at: string
 }
 
@@ -338,9 +339,18 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                       </span>
                     </div>
                   </div>
-                  {r.status === 'approved' && (
+                  {r.status === 'approved' && r.pickup_info && (
+                    <div className="flex items-start gap-2 mt-3 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[11px] font-semibold text-emerald-700 mb-0.5">Instrucciones de recogida</p>
+                        <p className="text-xs text-emerald-700 leading-relaxed">{r.pickup_info}</p>
+                      </div>
+                    </div>
+                  )}
+                  {r.status === 'approved' && !r.pickup_info && (
                     <p className="text-xs text-emerald-700 mt-2 font-medium">
-                      Coordina la recogida en recepción con el staff del gimnasio.
+                      Aprobado — el gimnasio te enviará pronto las instrucciones de recogida.
                     </p>
                   )}
                   {r.status === 'pending' && (
