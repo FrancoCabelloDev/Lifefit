@@ -257,36 +257,51 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                   )}
 
                   {confirmingId === reward.id ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setConfirmingId(null)}
-                        className="flex-1 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all active:scale-[0.98]"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={() => { redeemMutation.mutate(reward.id); setConfirmingId(null) }}
-                        disabled={redeemMutation.isPending}
-                        className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
-                      >
-                        {redeemMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar'}
-                      </button>
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500 text-center leading-snug">
+                        El administrador revisará tu solicitud y coordinará la entrega contigo.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setConfirmingId(null)}
+                          className="flex-1 py-2 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all active:scale-[0.98]"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => { redeemMutation.mutate(reward.id); setConfirmingId(null) }}
+                          disabled={redeemMutation.isPending}
+                          className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+                        >
+                          {redeemMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar canje'}
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => !isDisabled && setConfirmingId(reward.id)}
-                      disabled={isDisabled}
-                      className={[
-                        'w-full py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.97]',
-                        requested
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          : canAfford && !outOfStock
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/20'
-                            : 'bg-slate-100 text-slate-400 cursor-not-allowed',
-                      ].join(' ')}
-                    >
-                      {requested ? 'Solicitud enviada' : outOfStock ? 'Sin stock' : !canAfford ? 'Puntos insuficientes' : 'Canjear'}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => !isDisabled && setConfirmingId(reward.id)}
+                        disabled={isDisabled}
+                        className={[
+                          'w-full py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.97] flex items-center justify-center gap-1.5',
+                          requested
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-not-allowed'
+                            : canAfford && !outOfStock
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/20'
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed',
+                        ].join(' ')}
+                      >
+                        {requested ? (
+                          <><Clock className="w-3.5 h-3.5" /> Pendiente de entrega</>
+                        ) : outOfStock ? 'Sin stock' : !canAfford ? 'Puntos insuficientes' : 'Canjear'}
+                      </button>
+                      {requested && (
+                        <p className="text-[11px] text-slate-400 text-center leading-snug">
+                          El admin coordinará contigo la recogida del producto.
+                        </p>
+                      )}
+                    </>
+                  }
                   )}
                 </div>
               </div>
@@ -303,24 +318,36 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
             const s = STATUS_UI[r.status]
             const StatusIcon = s.icon
             return (
-              <Card key={r.id} className="border-slate-200 shadow-sm">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">{r.reward_name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {new Date(r.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })}
+              <Card key={r.id} className={`shadow-sm ${r.status === 'approved' ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">{r.reward_name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {new Date(r.created_at).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="flex items-center gap-1 text-xs text-slate-500">
+                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                        {r.reward_points_cost}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${s.color}`}>
+                        <StatusIcon className="w-3 h-3" />
+                        {s.label}
+                      </span>
+                    </div>
+                  </div>
+                  {r.status === 'approved' && (
+                    <p className="text-xs text-emerald-700 mt-2 font-medium">
+                      Coordina la recogida en recepción con el staff del gimnasio.
                     </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="flex items-center gap-1 text-xs text-slate-500">
-                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      {r.reward_points_cost}
-                    </span>
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${s.color}`}>
-                      <StatusIcon className="w-3 h-3" />
-                      {s.label}
-                    </span>
-                  </div>
+                  )}
+                  {r.status === 'pending' && (
+                    <p className="text-xs text-amber-600 mt-2">
+                      En revisión — recibirás una notificación cuando sea procesado.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )

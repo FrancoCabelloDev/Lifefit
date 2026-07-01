@@ -11,7 +11,8 @@ from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
 
-from gyms.models import Gym
+from gyms.models import Gym, Notification
+from gyms.views import create_notification
 from .models import GymPointsConfig, Reward, RewardRedemption, UserPoints
 from .serializers import (
     AthleteStatsSerializer,
@@ -259,6 +260,8 @@ class RewardRedemptionViewSet(viewsets.ModelViewSet):
         redemption.reviewed_at = timezone.now()
         redemption.save(update_fields=["status", "notes", "reviewed_by", "reviewed_at", "updated_at"])
 
+        reward_name = redemption.reward.name
+
         if new_status == RewardRedemption.Status.APPROVED:
             cost = redemption.reward.points_cost
             # Deduct points atomically — born approved so they count immediately
@@ -270,7 +273,30 @@ class RewardRedemptionViewSet(viewsets.ModelViewSet):
                 reviewed_by=request.user,
                 reviewed_at=timezone.now(),
                 source="reward_redemption",
-                description=f"Canje: {redemption.reward.name}",
+                description=f"Canje: {reward_name}",
+            )
+            create_notification(
+                recipient=redemption.athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="¡Canje aprobado!",
+                message=(
+                    f"Tu solicitud de «{reward_name}» fue aprobada. "
+                    f"Coordina la recogida en recepción con el staff del gimnasio."
+                ),
+                actor=request.user,
+                gym=redemption.reward.gym,
+            )
+        else:
+            notes_text = f" Motivo: {redemption.notes}" if redemption.notes else ""
+            create_notification(
+                recipient=redemption.athlete,
+                notification_type=Notification.Type.SYSTEM,
+                title="Solicitud de canje no procesada",
+                message=(
+                    f"Tu solicitud de «{reward_name}» no pudo ser procesada en este momento.{notes_text}"
+                ),
+                actor=request.user,
+                gym=redemption.reward.gym,
             )
 
         return Response(RewardRedemptionSerializer(redemption).data)
