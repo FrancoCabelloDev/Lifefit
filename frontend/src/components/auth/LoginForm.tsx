@@ -33,7 +33,7 @@ export default function LoginForm({ gymId }: LoginFormProps) {
     setError('')
 
     try {
-      const data = await api.post<LoginResponse>("/api/auth/login/", { email, password })
+      const data = await api.post<LoginResponse>("/api/auth/login/", { email, password, gym_slug: gymId })
 
       setTokens(data.access, data.refresh)
       setStoredUser(data.user)

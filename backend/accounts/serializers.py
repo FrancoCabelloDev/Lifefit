@@ -136,6 +136,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    gym_slug = serializers.CharField(required=False, allow_blank=True, default="")
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
@@ -144,7 +146,22 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
+        gym_slug = attrs.pop("gym_slug", "").strip()
         data = super().validate(attrs)
+        user = self.user
+
+        if gym_slug:
+            # Gym-specific login: super_admin is not allowed
+            if user.role == user.Role.SUPER_ADMIN:
+                raise serializers.ValidationError(
+                    "Los administradores de LifeFit deben ingresar desde el panel de control."
+                )
+            # User must belong to the requested gym
+            if not user.gym or user.gym.slug != gym_slug:
+                raise serializers.ValidationError(
+                    "No tienes acceso a este gimnasio."
+                )
+
         data["user"] = UserSerializer(self.user).data
         return data
 
