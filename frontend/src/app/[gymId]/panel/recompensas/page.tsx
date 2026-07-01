@@ -319,7 +319,6 @@ export default function RecompensasPage({ params }: { params: Promise<{ gymId: s
                         </p>
                       )}
                     </>
-                  )
                   )}
                 </div>
               </div>
