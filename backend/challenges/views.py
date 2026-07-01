@@ -58,12 +58,20 @@ class ChallengeViewSet(viewsets.ModelViewSet):
                 return queryset.filter(global_or_user_gym_filter(user))
             return queryset.filter(gym__isnull=True)
         if user.role == User.Role.ATHLETE:
-            # Atletas ven retos activos dirigidos a todos o específicamente a atletas
+            from datetime import date as date_type
+            from django.db.models import Q
+
+            # Atletas ven retos activos dirigidos a todos o específicamente a atletas.
+            # Se excluyen retos ya vencidos (end_date pasado), salvo que el atleta ya
+            # esté participando (para no perder visibilidad de su evidencia/estado),
+            # ya que el status no se sincroniza automáticamente con la fecha de fin.
             return queryset.filter(
                 global_or_user_gym_filter(user),
                 status=Challenge.Status.ACTIVE,
                 target_role__in=[Challenge.TargetRole.ALL, Challenge.TargetRole.ATHLETE],
-            )
+            ).filter(
+                Q(end_date__gte=date_type.today()) | Q(participants__user=user)
+            ).distinct()
         return queryset.filter(gym__isnull=True, status=Challenge.Status.ACTIVE)
 
     def perform_create(self, serializer):
